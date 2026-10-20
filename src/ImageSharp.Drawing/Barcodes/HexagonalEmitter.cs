@@ -23,10 +23,14 @@ internal static class HexagonalEmitter
     private const double DarkHexagonReduction = 0.12;
 
     /// <summary>
-    /// The row and column of the module the finder is centred on, section 4.11.4: "16Y above the center of modules in the bottom-most row of the symbol, and
-    /// 14W to the right from the center of the left-most module of the row".
+    /// The row of the module the finder is centred on, section 4.11.4: "16Y above the center of modules in the bottom-most row of the symbol, and 14W to the
+    /// right from the center of the left-most module of the row".
     /// </summary>
     private const int FinderRow = 16;
+
+    /// <summary>
+    /// The column of the module the finder is centred on, section 4.11.4. See <see cref="FinderRow"/>.
+    /// </summary>
     private const int FinderColumn = 14;
 
     /// <summary>
@@ -41,7 +45,7 @@ internal static class HexagonalEmitter
     /// <param name="symbol">The encoded hexagonal symbol.</param>
     /// <param name="options">The sizing and painting options.</param>
     /// <param name="origin">The top left corner of the barcode, in pixels.</param>
-    /// <param name="symbolOrigin">The top left corner of the first module of the symbol, in pixels, before it rounds onto the pixel grid.</param>
+    /// <param name="symbolOrigin">The top left corner of the first module of the symbol, in pixels. The hexagons do not round onto the pixel grid.</param>
     /// <returns>The measured layout of the symbol.</returns>
     public static BarcodeMetrics Measure(ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin, out PointF symbolOrigin)
     {
@@ -92,11 +96,6 @@ internal static class HexagonalEmitter
     private readonly ref struct HexagonLayout
     {
         /// <summary>
-        /// The origin of the barcode, in pixels.
-        /// </summary>
-        private readonly PointF origin;
-
-        /// <summary>
         /// The left edge of the symbol, in pixels.
         /// </summary>
         private readonly double left;
@@ -122,11 +121,6 @@ internal static class HexagonalEmitter
         private readonly double y;
 
         /// <summary>
-        /// The barcode at the origin, in pixels.
-        /// </summary>
-        private readonly RectangleF advance;
-
-        /// <summary>
         /// Initializes a new instance of the <see cref="HexagonLayout"/> struct.
         /// </summary>
         /// <param name="symbol">The encoded hexagonal symbol.</param>
@@ -134,7 +128,6 @@ internal static class HexagonalEmitter
         /// <param name="origin">The top left corner of the barcode, in pixels.</param>
         public HexagonLayout(ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin)
         {
-            this.origin = origin;
             double pixelsPerMillimetre = options.Dpi / BarcodeOptions.MillimetresPerInch;
             double x = symbol.XDimension * pixelsPerMillimetre;
             this.x = x;
@@ -147,7 +140,7 @@ internal static class HexagonalEmitter
             float ends = options.IncludeQuietZones ? symbol.TopQuietZone + symbol.BottomQuietZone : 0;
             this.left = origin.X + (options.IncludeQuietZones ? symbol.LeadingQuietZone * x : 0);
             this.top = origin.Y + (options.IncludeQuietZones ? symbol.TopQuietZone * x : 0);
-            this.advance = new RectangleF(origin.X, origin.Y, (float)((symbol.WidthInModules + sides) * x), (float)((symbol.HeightInModules + ends) * x));
+            RectangleF advance = new(origin.X, origin.Y, (float)((symbol.WidthInModules + sides) * x), (float)((symbol.HeightInModules + ends) * x));
 
             // A dark hexagon keeps the shape of its module at the reduced width and height.
             double reduction = DarkHexagonReduction * pixelsPerMillimetre;
@@ -192,9 +185,9 @@ internal static class HexagonalEmitter
             RectangleF finder = new(this.FinderCentre.X - radius, this.FinderCentre.Y - radius, 2 * radius, 2 * radius);
             RectangleF bounds = RectangleF.Union(this.HexagonInk, finder);
             this.Metrics = new BarcodeMetrics(
-                new RectangleF(0, 0, this.advance.Width, this.advance.Height),
+                new RectangleF(0, 0, advance.Width, advance.Height),
                 bounds,
-                RectangleF.Union(this.advance, bounds));
+                RectangleF.Union(advance, bounds));
         }
 
         /// <summary>

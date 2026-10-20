@@ -12,6 +12,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// </summary>
 public class FacingIdentificationMarkSymbologyTests
 {
+    /// <summary>
+    /// The bar and space widths of each of the five patterns A to E match the reference values.
+    /// </summary>
+    /// <param name="text">The pattern letter.</param>
+    /// <param name="reference">The reference run widths, separated by commas.</param>
     [Theory]
     [InlineData("A", "1,1,1,5,1,5,1,1,1")]
     [InlineData("B", "1,3,1,1,1,3,1,1,1,3,1")]
@@ -34,6 +39,7 @@ public class FacingIdentificationMarkSymbologyTests
     public void SpansSeventeenModules(string text)
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
+
         SymbolEncoder.Encode(new FacingIdentificationMarkSymbology(), text, options, static (ref symbol) =>
         {
             Assert.Equal(17F, symbol.WidthInModules);
@@ -44,6 +50,10 @@ public class FacingIdentificationMarkSymbologyTests
         });
     }
 
+    /// <summary>
+    /// The encoder rejects any text other than one of the capital letters A to E.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("")]
     [InlineData("F")]

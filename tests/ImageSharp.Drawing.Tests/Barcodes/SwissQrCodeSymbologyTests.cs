@@ -8,10 +8,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// <summary>
 /// Encoder tests for <see cref="SwissQrCodeSymbology"/> against the Swiss Implementation Guidelines for the QR-bill version 2.4. The valid data is the six
 /// examples of Annex A, Tables 17 to 22, with the names as the payment parts print them. Each expected grid is the module grid of an independent reference
-/// implementation at level M with Kanji mode off. That implementation scores the data masks with placeholders in the format information modules, and section
-/// 6.8.2.1 of ISO/IEC 18004 evaluates "the complete symbol", so where that changes the mask the expected grid is the reference grid with its data modules
-/// masked by the pattern chosen over the complete symbol, and the format information of that pattern. Each rejected input changes one line of an example so
-/// that it breaks one rule of the guidelines.
+/// implementation at level M with Kanji mode off. That implementation scores the data masks with placeholders in the format information modules. Section
+/// 6.8.2.1 of ISO/IEC 18004 evaluates "the complete symbol". Where that changes the mask, the expected grid is the reference grid with two changes: the data
+/// modules use the mask that the complete symbol selects, and the format information is the format information of that mask. Each rejected input changes one
+/// line of an example so that the line breaks one rule of the guidelines.
 /// </summary>
 public class SwissQrCodeSymbologyTests
 {
@@ -651,6 +651,13 @@ public class SwissQrCodeSymbologyTests
         { nameof(Example2), 33, new string('A', 101) },
     };
 
+    /// <summary>
+    /// The symbol of each example has the size and the module grid of the reference grid.
+    /// </summary>
+    /// <param name="example">The example of Annex A.</param>
+    /// <param name="separator">The line separator.</param>
+    /// <param name="size">The expected number of module rows and module columns.</param>
+    /// <param name="expected">The expected module grid.</param>
     [Theory]
     [MemberData(nameof(MatchesReferenceGridData))]
     public void MatchesReferenceGrid(string example, string separator, int size, string expected)
@@ -670,28 +677,32 @@ public class SwissQrCodeSymbologyTests
     public void Is46MillimetresWide(string example)
     {
         BarcodeOptions options = new() { Dpi = 254F, IncludeQuietZones = false };
+
         RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(new SwissQrCodeSymbology(), options, PointF.Empty, Payload(example, "\n"));
+
         Assert.Equal(new SizeF(460F, 460F), bounds.Size);
     }
 
     /// <summary>
-    /// Section 6.4.1: the quiet zone of ISO 18004, four modules.
+    /// Section 6.4.1: the symbol has the quiet zone of ISO 18004, four modules.
     /// </summary>
     [Fact]
     public void QuietZoneIsFourModules()
     {
         string text = Payload(nameof(Example3), "\n");
+
         Assert.Equal(4F, SymbolEncoder.Read(new SwissQrCodeSymbology(), text, new BarcodeOptions(), static (ref symbol) => symbol.LeadingQuietZone));
     }
 
     /// <summary>
     /// Section 6.4: "The measurements of the Swiss QR Code for printing must always be 46 x 46 mm (without surrounding quiet space) regardless of the Swiss QR
-    /// Code version", so the modules divide 46 mm and an X dimension of the caller is rejected.
+    /// Code version". The modules divide 46 mm, and the symbology rejects an X dimension from the caller.
     /// </summary>
     [Fact]
     public void IsAlwaysFortySixMillimetresWide()
     {
         string text = Payload(nameof(Example3), "\n");
+
         SymbolEncoder.Encode(new SwissQrCodeSymbology(), text, new BarcodeOptions(), static (ref symbol) =>
             Assert.Equal(46.0, symbol.XDimension * symbol.Columns, 1e-9));
 
@@ -699,7 +710,7 @@ public class SwissQrCodeSymbologyTests
     }
 
     /// <summary>
-    /// Each line follows its definition in Table 8 and the rules of chapters 2 and 4.
+    /// Each line follows its definition in Table 8 and the rules of chapters 2 and 4. The symbology rejects a line that breaks its definition.
     /// </summary>
     /// <param name="example">The example of Annex A.</param>
     /// <param name="line">The number of the line in Table 8.</param>
@@ -711,7 +722,7 @@ public class SwissQrCodeSymbologyTests
 
     /// <summary>
     /// Section 4.1.4: the lines up to the trailer must be present, the billing information and the alternative procedures are the only further lines, and the
-    /// lines are separated by CR LF or by LF, the same one throughout.
+    /// lines are separated by CR LF or by LF, the same one throughout. The symbology rejects data that breaks one of these rules.
     /// </summary>
     [Fact]
     public void RejectsLinesOutsideTheStructure()
@@ -723,7 +734,8 @@ public class SwissQrCodeSymbologyTests
     }
 
     /// <summary>
-    /// Section 4.1.1 permits U+0020 to U+007E, U+00A0 to U+017F, U+0218 to U+021B and U+20AC, and section 6.2 permits at most 997 characters.
+    /// Section 4.1.1 permits U+0020 to U+007E, U+00A0 to U+017F, U+0218 to U+021B and U+20AC, and section 6.2 permits at most 997 characters. The symbology
+    /// rejects a tab, a Greek letter, an emoji and 998 characters.
     /// </summary>
     [Fact]
     public void RejectsCharactersOutsideSectionFourOneOneAndLongData()
@@ -737,7 +749,7 @@ public class SwissQrCodeSymbologyTests
     /// <summary>
     /// Data the guidelines permit beyond the examples: no billing information or alternative procedure lines, the amount 0.00 with a notification text of
     /// section 4.4, an amount below 1.00 and the largest amount, a Creditor Reference in small letters, which the banks read without regard to case, and a
-    /// Creditor Reference in EUR.
+    /// Creditor Reference in EUR. The symbology encodes each of them.
     /// </summary>
     [Fact]
     public void AcceptsDataTheGuidelinesPermit()
@@ -746,6 +758,7 @@ public class SwissQrCodeSymbologyTests
         notification[18] = "0.00";
         notification[29] = "DO NOT USE FOR PAYMENT";
         Encode(string.Join('\n', notification));
+
         notification[29] = "NICHT ZUR ZAHLUNG VERWENDEN";
         Encode(string.Join('\n', notification));
 
@@ -809,6 +822,7 @@ public class SwissQrCodeSymbologyTests
     {
         string[] copy = (string[])lines.Clone();
         copy[number - 1] = value;
+
         return string.Join('\n', copy);
     }
 

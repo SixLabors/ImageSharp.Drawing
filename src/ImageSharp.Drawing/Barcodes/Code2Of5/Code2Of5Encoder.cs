@@ -221,11 +221,12 @@ internal static class Code2Of5Encoder
         }
 
         int widthInModules = BarcodeSymbol.RunWidth(runs);
+
         float nominalBarHeight = MathF.Max(widthInModules * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
         float barHeight = options.ResolveBarHeight(xDimension, nominalBarHeight);
         heights.Fill(barHeight);
 
-        if (options.Font is not null && readable.Length > 0)
+        if (options.Font is not null)
         {
             symbol.ReserveText(1, readable.Length);
             symbol.AddText(readable, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);

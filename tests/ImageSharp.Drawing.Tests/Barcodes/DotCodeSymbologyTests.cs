@@ -343,7 +343,10 @@ public class DotCodeSymbologyTests
             false,
             0,
             0,
-            "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. ",
+            "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. " +
+            "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. " +
+            "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. " +
+            "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. ",
             149,
             100,
             "8a28a28800aaa822a88aa022882880aa0a2008|" +
@@ -522,7 +525,10 @@ public class DotCodeSymbologyTests
             false,
             0,
             0,
-            "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789",
+            "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789" +
+            "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789" +
+            "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789" +
+            "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789",
             90,
             61,
             "a22028a828a22a028a0a228|" +
@@ -647,6 +653,16 @@ public class DotCodeSymbologyTests
         },
     };
 
+    /// <summary>
+    /// The size and the dot grid of each symbol match the reference implementation.
+    /// </summary>
+    /// <param name="gs1">Whether the text is GS1 data.</param>
+    /// <param name="columns">The columns asked for, or 0 for automatic.</param>
+    /// <param name="rows">The rows asked for, or 0 for automatic.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="width">The columns of the symbol.</param>
+    /// <param name="height">The rows of the symbol.</param>
+    /// <param name="expected">The reference dot grid.</param>
     [Theory]
     [MemberData(nameof(MatchesReferenceGridData))]
     public void MatchesReferenceGrid(bool gs1, int columns, int rows, string text, int width, int height, string expected)

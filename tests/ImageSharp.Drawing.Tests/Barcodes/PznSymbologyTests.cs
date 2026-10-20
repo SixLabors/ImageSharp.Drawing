@@ -12,6 +12,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// </summary>
 public class PznSymbologyTests
 {
+    /// <summary>
+    /// A PZN8 symbol matches the reference runs, with the check digit calculated or supplied.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expected">The reference run string.</param>
     [Theory]
     [InlineData("2758089", "1311313111131111313111331111311113113131311331111131131131111113313111311311311111331131111133113111131131311")]
     [InlineData("27580899", "1311313111131111313111331111311113113131311331111131131131111113313111311311311111331131111133113111131131311")]
@@ -19,6 +24,11 @@ public class PznSymbologyTests
     public void MatchesReferenceRuns(string text, string expected)
         => Assert.Equal(expected, Encode(new Pzn8Symbology(), text));
 
+    /// <summary>
+    /// A PZN7 symbol matches the reference runs, with the check digit calculated or supplied.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expected">The reference run string.</param>
     [Theory]
     [InlineData("123456", "131131311113111131313113111131113311113131331111111113311131311331111111333111111133111131131131311")]
     [InlineData("1234562", "131131311113111131313113111131113311113131331111111113311131311331111111333111111133111131131131311")]
@@ -45,6 +55,9 @@ public class PznSymbologyTests
     public void AcceptsTheCheckDigitOfTheWorkedPpnExample()
         => Assert.Equal(Encode(new Pzn8Symbology(), "0375286"), Encode(new Pzn8Symbology(), "03752864"));
 
+    /// <summary>
+    /// A supplied check digit that is not the check digit of the data throws.
+    /// </summary>
     [Fact]
     public void RejectsWrongCheckDigit()
         => Assert.Throws<ArgumentException>(() => Encode(new Pzn8Symbology(), "27580891"));
@@ -57,12 +70,14 @@ public class PznSymbologyTests
     public void RejectsADigitSequenceThatLeavesTen()
     {
         ArgumentException exception = Assert.Throws<ArgumentException>(() => Encode(new Pzn8Symbology(), "0000003"));
+
         Assert.Contains("remainder of 10", exception.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// A PZN8 carries seven digits and a check digit, and a PZN7 six and a check digit, so anything else is rejected, as is a non-digit.
+    /// A PZN8 carries seven digits and an optional check digit. The symbology rejects other lengths and non-digits.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("275808")]
     [InlineData("275808999")]

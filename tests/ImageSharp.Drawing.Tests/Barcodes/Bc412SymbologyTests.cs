@@ -28,6 +28,11 @@ public class Bc412SymbologyTests
         },
     };
 
+    /// <summary>
+    /// The bar and space widths of each symbol match the reference implementation. The cases use every character of the character set.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="reference">The reference run widths.</param>
     [Theory]
     [MemberData(nameof(MatchesReferenceRunsData))]
     public void MatchesReferenceRuns(string text, string reference)
@@ -43,6 +48,7 @@ public class Bc412SymbologyTests
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
         string[] texts = SymbolEncoder.Read(new Bc412Symbology(), "BC412AB", options, SymbolEncoder.Texts);
+
         Assert.Equal("BRC412AB", Assert.Single(texts));
     }
 
@@ -74,6 +80,11 @@ public class Bc412SymbologyTests
         Assert.Equal((12 * (text.Length + 1)) + 6, widthInModules);
     }
 
+    /// <summary>
+    /// The encoder rejects text with fewer than 7 or more than 18 data characters. It also rejects a character other than a digit or a capital letter
+    /// other than O.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("")]
     [InlineData("BC412A")]

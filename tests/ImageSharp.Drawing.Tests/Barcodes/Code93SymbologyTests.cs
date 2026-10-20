@@ -12,6 +12,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// </summary>
 public class Code93SymbologyTests
 {
+    /// <summary>
+    /// The bar and space widths, with both check characters, match the reference implementation.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expected">The reference run string.</param>
     [Theory]
     [InlineData("CODE93", "1111412113111211222211122212111411111114111311212221111111411")]
     [InlineData("ABC-123", "1111412111132112122113111211311112131113121114111111231113211111411")]
@@ -54,11 +59,7 @@ public class Code93SymbologyTests
     [InlineData("A")]
     public void SpansNineModulesPerCharacter(string text)
     {
-        int widthInModules = 0;
-        foreach (int run in Encode(text))
-        {
-            widthInModules += run;
-        }
+        int widthInModules = SymbolEncoder.Read(new Code93Symbology(), text, new BarcodeOptions(), SymbolEncoder.RunSum);
 
         Assert.Equal((9 * (text.Length + 4)) + 1, widthInModules);
     }

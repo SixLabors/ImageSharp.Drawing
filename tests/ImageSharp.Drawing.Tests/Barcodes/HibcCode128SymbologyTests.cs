@@ -31,14 +31,18 @@ public class HibcCode128SymbologyTests
         },
     };
 
+    /// <summary>
+    /// The symbol runs match the reference runs.
+    /// </summary>
+    /// <param name="text">The data.</param>
+    /// <param name="expected">The run widths of the reference symbol.</param>
     [Theory]
     [MemberData(nameof(MatchesReferenceRunsData))]
     public void MatchesReferenceRuns(string text, string expected)
         => Assert.Equal(expected, Encode(new HibcCode128Symbology(), text));
 
     /// <summary>
-    /// A caller who has already calculated the check character supplies it, and the symbol carries it once, so the runs match those of the same data with the
-    /// check character left off.
+    /// A caller can supply the check character. The symbol carries it once, so the runs match those of the same data without the check character.
     /// </summary>
     [Fact]
     public void ValidatesASuppliedCheckCharacter()
@@ -48,16 +52,21 @@ public class HibcCode128SymbologyTests
         Assert.Equal(Encode(new HibcCode128Symbology(), "A123BJC5D6E71"), Encode(symbology, "A123BJC5D6E71G"));
     }
 
+    /// <summary>
+    /// A supplied check character that is not the modulo 43 check character of the data throws.
+    /// </summary>
     [Fact]
     public void RejectsWrongCheckCharacter()
     {
         HibcCode128Symbology symbology = new(true);
+
         Assert.Throws<ArgumentException>(() => Encode(symbology, "A123BJC5D6E71H"));
     }
 
     /// <summary>
-    /// HIBC carries the Code 39 character set, so anything outside it is rejected, as is empty data and data beyond the length the symbology allows.
+    /// HIBC uses the Code 39 character set. The symbology rejects empty data and characters outside that set.
     /// </summary>
+    /// <param name="text">The data.</param>
     [Theory]
     [InlineData("")]
     [InlineData("a123")]

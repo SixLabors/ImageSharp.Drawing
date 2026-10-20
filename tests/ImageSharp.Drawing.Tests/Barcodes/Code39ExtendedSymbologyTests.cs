@@ -27,14 +27,18 @@ public class Code39ExtendedSymbologyTests
         },
     };
 
+    /// <summary>
+    /// The bar and space widths match the reference implementation for small letters, pairs that start with each shift character and a control character.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expected">The reference run string.</param>
     [Theory]
     [MemberData(nameof(MatchesReferenceRunsData))]
     public void MatchesReferenceRuns(string text, string expected)
         => Assert.Equal(expected, Encode(new Code39ExtendedSymbology(), text));
 
     /// <summary>
-    /// Table A.2 maps every one of the 128 ASCII values, so encoding the whole set and reading it back through an independent decoder in full ASCII mode
-    /// returns what went in. That checks the table against something other than the implementation it was transcribed for.
+    /// Table A.2 maps every one of the 128 ASCII values, so the encoder encodes each value as a text of one character.
     /// </summary>
     [Fact]
     public void SubstitutesEveryAsciiValue()
@@ -49,6 +53,8 @@ public class Code39ExtendedSymbologyTests
     /// Annex A.2 prints an interpretation "of the data characters", which here are the ASCII characters the caller gave rather than the symbol characters they
     /// were substituted into, so a character that took a pair still prints once and one with no printed form prints as a space.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expected">The printed line.</param>
     [Theory]
     [InlineData("abc", "*abc*")]
     [InlineData("A1", "*A1*")]
@@ -62,8 +68,10 @@ public class Code39ExtendedSymbologyTests
     }
 
     /// <summary>
-    /// A.3.1 covers ISO 646 IRV, so anything above ASCII 127 has no encodation, and empty data carries nothing.
+    /// A.3.1 covers ISO 646 IRV, so anything above ASCII 127 has no encodation, and empty data carries nothing. The second case is the no-break space
+    /// U+00A0, not the ASCII space.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("café")]
     [InlineData(" ")]

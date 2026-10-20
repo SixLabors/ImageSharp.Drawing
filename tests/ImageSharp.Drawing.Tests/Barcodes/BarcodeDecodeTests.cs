@@ -41,6 +41,10 @@ public class BarcodeDecodeTests
         306F, 324F, 342F, 360F, 378F, 396F, 414F, 432F, 450F, 468F, 486F, 504F,
     ];
 
+    /// <summary>
+    /// An EAN-13 symbol decodes to its thirteen digits.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("5901234123457")]
     [InlineData("4006381333931")]
@@ -48,6 +52,9 @@ public class BarcodeDecodeTests
     public void Ean13_RoundTrips(string text)
         => AssertDecodes(new Ean13Symbology(), text, BarcodeFormat.EAN13, text);
 
+    /// <summary>
+    /// An EAN-8 symbol decodes to its eight digits.
+    /// </summary>
     [Fact]
     public void Ean8_RoundTrips()
         => AssertDecodes(new Ean8Symbology(), "96385074", BarcodeFormat.EAN8, "96385074");
@@ -72,22 +79,38 @@ public class BarcodeDecodeTests
     public void UpcE_RoundTrips(string text, string expected)
         => AssertDecodes(new UpcESymbology(), text, BarcodeFormat.UPCE, expected);
 
+    /// <summary>
+    /// An ISBN symbol is an EAN-13 symbol. It decodes to the thirteen digits of the ISBN without the hyphens.
+    /// </summary>
     [Fact]
     public void Isbn_RoundTrips()
         => AssertDecodes(new IsbnSymbology(), "978-0-306-40615-7", BarcodeFormat.EAN13, "9780306406157");
 
+    /// <summary>
+    /// An ISMN symbol is an EAN-13 symbol. It decodes to the thirteen digits of the ISMN without the hyphens.
+    /// </summary>
     [Fact]
     public void Ismn_RoundTrips()
         => AssertDecodes(new IsmnSymbology(), "979-0-2600-0043-8", BarcodeFormat.EAN13, "9790260000438");
 
+    /// <summary>
+    /// An ISSN symbol is an EAN-13 symbol. It decodes to 977, the seven data digits of the ISSN, the sequence variant 00 and the EAN-13 check digit.
+    /// </summary>
     [Fact]
     public void Issn_RoundTrips()
         => AssertDecodes(new IssnSymbology(), "0317-8471", BarcodeFormat.EAN13, "9770317847001");
 
+    /// <summary>
+    /// An M&amp;S symbol is an EAN-8 symbol. A seven digit number decodes with its leading zero.
+    /// </summary>
     [Fact]
     public void Mands_RoundTrips()
         => AssertDecodes(new MandsSymbology(), "0642118", BarcodeFormat.EAN8, "00642118");
 
+    /// <summary>
+    /// A Code 128 symbol decodes to its data.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("CODE128")]
     [InlineData("ABC-123")]
@@ -324,13 +347,14 @@ public class BarcodeDecodeTests
         => AssertDecodes(new TelepenNumericSymbology(), "1234", BarcodeFormat.TelepenNumeric, "1234");
 
     /// <summary>
-    /// The decoder must also read the symbol with the human readable interpretation present, proving the text does not intrude into the bars or quiet zones.
+    /// An EAN-13 symbol with its human readable interpretation decodes to its digits. The text does not go into the bars or the quiet zones.
     /// </summary>
     [Fact]
     public void Ean13_RoundTrips_WithText()
     {
         BarcodeOptions options = CreateOptions();
         options.Font = BarcodeFonts.OcrB.CreateFont(21.5F);
+
         AssertDecodes(new Ean13Symbology(), "5901234123457", BarcodeFormat.EAN13, "5901234123457", options);
     }
 
@@ -407,7 +431,9 @@ public class BarcodeDecodeTests
         BarcodeOptions options = CreateOptions();
         RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(symbology, options, origin, linear, component);
         using Image<L8> image = new((int)MathF.Ceiling(bounds.Right) + 20, (int)MathF.Ceiling(bounds.Bottom) + 20, new L8(255));
+
         image.Mutate(x => x.Paint(canvas => canvas.DrawBarcode(symbology, options, origin, linear, component)));
+
         byte[] pixels = new byte[image.Width * image.Height];
         image.CopyPixelDataTo(pixels);
 
@@ -482,6 +508,9 @@ public class BarcodeDecodeTests
     public void DataMatrix_RoundTrips(string text)
         => AssertDecodes(new DataMatrixSymbology(), text, BarcodeFormat.DataMatrix, text);
 
+    /// <summary>
+    /// A rectangular Data Matrix symbol decodes to its text.
+    /// </summary>
     [Fact]
     public void DataMatrixRectangular_RoundTrips()
         => AssertDecodes(new DataMatrixRectangularSymbology(), "This is Data Matrix!", BarcodeFormat.DataMatrix, "This is Data Matrix!");
@@ -498,12 +527,13 @@ public class BarcodeDecodeTests
             "This is Data Matrix rectangular extension");
 
     /// <summary>
-    /// The 144 x 144 symbol, the largest, with ten interleaved Reed-Solomon blocks.
+    /// The largest Data Matrix symbol, 144 x 144 with ten interleaved Reed-Solomon blocks, decodes to its 3116 digits.
     /// </summary>
     [Fact]
     public void DataMatrix_LargestSymbolRoundTrips()
     {
         string text = string.Concat(Enumerable.Repeat("0123456789", 311)) + "012345";
+
         AssertDecodes(new DataMatrixSymbology(), text, BarcodeFormat.DataMatrix, text);
     }
 
@@ -520,6 +550,10 @@ public class BarcodeDecodeTests
             "]d2",
             "0109521234543213" + "10ABC123\u001d" + "21XYZ789");
 
+    /// <summary>
+    /// A HIBC Data Matrix symbol decodes to the flag character, the data and the check character. The delimiters are only in the human readable
+    /// interpretation.
+    /// </summary>
     [Fact]
     public void HibcDataMatrix_RoundTrips()
         => AssertDecodes(new HibcDataMatrixSymbology(), "A123BJC5D6E71", BarcodeFormat.DataMatrix, "+A123BJC5D6E71G");
@@ -548,7 +582,7 @@ public class BarcodeDecodeTests
             "https://id.gs1.org/01/09521234543213/22/ABC%2D123?99=XYZ-987");
 
     /// <summary>
-    /// QR Code at each error correction level, in Numeric, Alphanumeric and Byte mode segments.
+    /// A QR Code symbol decodes to its text at each error correction level, with Numeric, Alphanumeric and Byte mode segments.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     /// <param name="level">The error correction level.</param>
@@ -562,19 +596,20 @@ public class BarcodeDecodeTests
         => AssertDecodes(new QrCodeSymbology(level), text, BarcodeFormat.QRCode, text);
 
     /// <summary>
-    /// Section 6.3.4: Byte mode carries ISO/IEC 8859-1.
+    /// Section 6.3.4 of ISO/IEC 18004: Byte mode carries ISO/IEC 8859-1. A QR Code symbol of ISO/IEC 8859-1 letters decodes to those letters.
     /// </summary>
     [Fact]
     public void QrCode_Iso88591RoundTrips()
         => AssertDecodes(new QrCodeSymbology(), "éèêëàâäöüß", BarcodeFormat.QRCode, "éèêëàâäöüß");
 
     /// <summary>
-    /// Table 7: a version 40-L symbol holds 7089 digits in 25 interleaved Reed-Solomon blocks.
+    /// Table 7 of ISO/IEC 18004: a version 40-L symbol holds 7089 digits in 25 interleaved Reed-Solomon blocks. That symbol decodes to its digits.
     /// </summary>
     [Fact]
     public void QrCode_LargestSymbolRoundTrips()
     {
         string text = string.Concat(Enumerable.Repeat("0123456789", 708)) + "012345678";
+
         AssertDecodes(new QrCodeSymbology(QrErrorCorrectionLevel.L), text, BarcodeFormat.QRCode, text);
     }
 
@@ -630,14 +665,23 @@ public class BarcodeDecodeTests
             BarcodeFormat.QRCode,
             "HTTPS://ID.GS1.ORG/01/09521234543213/22/ABC%2D123?99=XYZ-987");
 
+    /// <summary>
+    /// A HIBC QR Code symbol decodes to the flag character, the data and the check character. The delimiters are only in the human readable interpretation.
+    /// </summary>
     [Fact]
     public void HibcQrCode_RoundTrips()
         => AssertDecodes(new HibcQrCodeSymbology(), "A123BJC5D6E71", BarcodeFormat.QRCode, "+A123BJC5D6E71G");
 
+    /// <summary>
+    /// A Micro QR Code symbol decodes to its text.
+    /// </summary>
     [Fact]
     public void MicroQrCode_RoundTrips()
         => AssertDecodes(new MicroQrCodeSymbology(), "Micro QR!", BarcodeFormat.MicroQRCode, "Micro QR!");
 
+    /// <summary>
+    /// A rectangular Micro QR Code symbol decodes to its text.
+    /// </summary>
     [Fact]
     public void RectangularMicroQrCode_RoundTrips()
         => AssertDecodes(new RectangularMicroQrCodeSymbology(), "https://sixlabors.com/", BarcodeFormat.RMQRCode, "https://sixlabors.com/");
@@ -759,6 +803,7 @@ public class BarcodeDecodeTests
     public void TwoDimensionalSymbologies_RoundTripAtEveryModuleWidth(string kind)
     {
         const string text = "HELLO WORLD 12345";
+
         (BarcodeSymbology symbology, BarcodeFormat format) = kind switch
         {
             "Pdf417" => ((BarcodeSymbology)new Pdf417Symbology(), BarcodeFormat.PDF417),
@@ -770,13 +815,14 @@ public class BarcodeDecodeTests
     }
 
     /// <summary>
-    /// A MaxiCode symbol decodes at every resolution from 72 to 504 dots per inch in steps of 18. Its hexagonal modules cannot stand on whole pixels, and the
-    /// symbol keeps the nominal size of ISO/IEC 16023.
+    /// A MaxiCode symbol decodes at every resolution from 72 to 504 dots per inch in steps of 18. Its hexagonal modules do not align with whole pixels, and
+    /// the symbol keeps the nominal size of ISO/IEC 16023.
     /// </summary>
     [Fact]
     public void MaxiCode_RoundTripsAtEveryResolution()
     {
         const string text = "THIS IS A 93 CHARACTER CODE SET A MESSAGE THAT FILLS A MODE 4, UNAPPENDED, MAXICODE SYMBOL...";
+
         AssertDecodesAtResolutions(new MaxiCodeSymbology(), text, BarcodeFormat.MaxiCode, text, FixedSizeResolutions, null, null);
     }
 
@@ -805,6 +851,7 @@ public class BarcodeDecodeTests
         foreach (float dpi in resolutions)
         {
             BarcodeOptions options = new() { Dpi = dpi, XDimension = xDimension };
+
             if (Record.Exception(() => AssertDecodes(symbology, text, format, identifier, expected, options)) is not null)
             {
                 failures.Add(dpi);
@@ -814,12 +861,35 @@ public class BarcodeDecodeTests
         Assert.True(failures.Count == 0, $"No decode at {string.Join(", ", failures)} dpi.");
     }
 
+    /// <summary>
+    /// Draws a symbol at the default options and checks that it decodes to the transmitted data. The test does not check the symbology identifier.
+    /// </summary>
+    /// <param name="symbology">The symbology.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="format">The format the decoder reads.</param>
+    /// <param name="expected">The transmitted data.</param>
     private static void AssertDecodes(BarcodeSymbology symbology, string text, BarcodeFormat format, string expected)
         => AssertDecodes(symbology, text, format, null, expected, CreateOptions());
 
+    /// <summary>
+    /// Draws a symbol with the options and checks that it decodes to the transmitted data. The test does not check the symbology identifier.
+    /// </summary>
+    /// <param name="symbology">The symbology.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="format">The format the decoder reads.</param>
+    /// <param name="expected">The transmitted data.</param>
+    /// <param name="options">The options to draw with.</param>
     private static void AssertDecodes(BarcodeSymbology symbology, string text, BarcodeFormat format, string expected, BarcodeOptions options)
         => AssertDecodes(symbology, text, format, null, expected, options);
 
+    /// <summary>
+    /// Draws a symbol at the default options and checks that it decodes to the symbology identifier and the transmitted data.
+    /// </summary>
+    /// <param name="symbology">The symbology.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="format">The format the decoder reads.</param>
+    /// <param name="identifier">The symbology identifier the decoder reports.</param>
+    /// <param name="expected">The transmitted data.</param>
     private static void AssertDecodes(BarcodeSymbology symbology, string text, BarcodeFormat format, string identifier, string expected)
         => AssertDecodes(symbology, text, format, identifier, expected, CreateOptions());
 
@@ -882,6 +952,7 @@ public class BarcodeDecodeTests
         ZXingNet.BarcodeReaderGeneric reader = new();
         reader.Options.PossibleFormats = [format];
         reader.Options.TryHarder = true;
+
         ZXingNet.Result result = reader.Decode(new ZXingNet.RGBLuminanceSource(pixels, width, height, ZXingNet.RGBLuminanceSource.BitmapFormat.Gray8));
 
         Assert.True(result is not null, "No decode.");
@@ -890,8 +961,8 @@ public class BarcodeDecodeTests
     }
 
     /// <summary>
-    /// Draws a symbol on white with a margin on every side, measured rather than assumed, so a symbology whose symbol is wider than the next is not silently
-    /// clipped. The image is 8-bit grey, the luminance the decoders read, so they take the pixels without a conversion.
+    /// Draws a symbol on white with a margin on every side. The image size comes from the measured bounds, so the image does not clip a wide symbol. The image
+    /// is 8-bit grey, the luminance the decoders read, so they take the pixels without a conversion.
     /// </summary>
     /// <param name="symbology">The symbology.</param>
     /// <param name="text">The text to encode.</param>
@@ -911,6 +982,7 @@ public class BarcodeDecodeTests
         image.CopyPixelDataTo(pixels);
         width = image.Width;
         height = image.Height;
+
         return pixels;
     }
 

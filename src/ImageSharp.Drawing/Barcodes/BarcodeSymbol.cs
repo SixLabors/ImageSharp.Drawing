@@ -16,11 +16,13 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// </summary>
 /// <remarks>
 /// An encoder writes the symbol once: it begins a linear, stacked or matrix symbol with the sizes that its validated input gives, fills the spans that the
-/// begin methods return, adds the text and ends the symbol. The symbol keeps its values in two buffers rented from the shared <see cref="byte"/> pool: the
-/// layout buffer, which <see cref="BeginLinear"/>, <see cref="BeginStacked"/> or <see cref="BeginMatrix(int, int, int, double)"/> rents for the rows, runs and
-/// bars or for the modules, and the text buffer, which <see cref="ReserveText"/> rents for the text placements and their characters. Each rent happens once,
-/// before the encoder's loops, with the exact size its validated input gives, and <see cref="Dispose"/> returns both. A rented range is cleared, so every value
-/// the encoder does not write is zero. The caller declares the symbol as a local and passes it by reference.
+/// begin methods return, adds the text and ends the symbol. The symbol keeps its values in three buffers rented from the shared <see cref="byte"/> pool. The
+/// layout buffer holds the rows, runs and bars or the modules. <see cref="BeginLinear"/>, <see cref="BeginStacked"/> or
+/// <see cref="BeginMatrix(int, int, int, double)"/> rents it, and <see cref="InsertRow"/> replaces it with a larger buffer. The text buffer holds the text
+/// placements and their characters, and <see cref="ReserveText"/> rents it. The overlay buffer holds the edges of the overlay graphic, and
+/// <see cref="AddOverlay"/> rents it. Each rent happens before the encoder's loops, with the exact size that its validated input gives. <see cref="Dispose"/>
+/// returns all three buffers. A rented range is cleared, so every value that the encoder does not write is zero. The caller declares the symbol as a local
+/// and passes it by reference.
 /// </remarks>
 internal struct BarcodeSymbol : IDisposable
 {

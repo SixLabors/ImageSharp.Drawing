@@ -4,12 +4,11 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The Industrial 2 of 5 symbology, also called Code 25, which Identicon Corporation and Computer Identics Corporation introduced in 1971. No published
-/// standard defines it. It carries the digits 0 to 9, each in five bars of which two are wide, and the spaces carry no data. A symbol carries a start pattern,
-/// the digits, an optional check digit and a stop pattern.
+/// The Industrial 2 of 5 symbology, also called Code 25. No published standard defines it. It carries the digits 0 to 9, each in five bars of which two are
+/// wide, and the spaces carry no data. A symbol carries a start pattern, the digits, an optional check digit and a stop pattern.
 /// <para>
-/// The check digit is the modulo 10 calculation of Appendix C of AIM USS-I 2/5, which both reference implementations apply. The printed line shows the digits
-/// the symbol carries and, by default, the check digit.
+/// The check digit is the modulo 10 calculation of Appendix C of AIM USS-I 2/5. The printed line shows the digits the symbol carries and, by default, the
+/// check digit.
 /// </para>
 /// </summary>
 public sealed class Industrial2Of5Symbology : BarcodeSymbology

@@ -15,7 +15,7 @@ internal static class DataBarWidths
     /// <param name="widths">The buffer that receives the widths, one for each element.</param>
     /// <param name="value">The value, from zero to one less than the number of combinations.</param>
     /// <param name="modules">The number of modules the elements span.</param>
-    /// <param name="maxWidth">The widest an element may be, in modules.</param>
+    /// <param name="maxWidth">The widest an element can be, in modules.</param>
     /// <param name="noNarrow">Whether combinations without a one module element are excluded.</param>
     public static void Calculate(Span<int> widths, int value, int modules, int maxWidth, bool noNarrow)
     {

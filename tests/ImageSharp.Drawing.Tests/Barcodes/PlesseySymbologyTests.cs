@@ -11,8 +11,16 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// </summary>
 public class PlesseySymbologyTests
 {
+    /// <summary>
+    /// The reference runs of 01234ABCD with its calculated check characters.
+    /// </summary>
     private const string Sample = "323214321414141432141414143214143232141414143214143214323232143214143232321432323214323214143232541412323";
 
+    /// <summary>
+    /// The symbol runs match the reference runs.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="reference">The reference run string.</param>
     [Theory]
     [InlineData("01234ABCD", Sample)]
     [InlineData("0", "32321432141414141414141414141414541412323")]
@@ -44,7 +52,8 @@ public class PlesseySymbologyTests
     }
 
     /// <summary>
-    /// Supplied check characters are validated against the data and carried once, so the symbol is the one the calculated check characters produce.
+    /// The encoder validates supplied check characters against the data and carries them once, so the symbol is the one the calculated check characters
+    /// produce. Wrong check characters throw, and so does input with no data before the check characters.
     /// </summary>
     [Fact]
     public void ValidatesSuppliedCheckCharacters()
@@ -52,6 +61,7 @@ public class PlesseySymbologyTests
         string validated = SymbolEncoder.Read(new PlesseySymbology(true), "01234ABCDDC", new BarcodeOptions(), SymbolEncoder.RunString);
 
         Assert.Equal(Sample, validated);
+
         Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new PlesseySymbology(true), "01234ABCDCD", new BarcodeOptions()));
         Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new PlesseySymbology(true), "DC", new BarcodeOptions()));
     }
@@ -88,6 +98,11 @@ public class PlesseySymbologyTests
     public void SpansTwentyModulesPerCharacter(string text)
         => Assert.Equal((20 * text.Length) + 85, SymbolEncoder.Read(new PlesseySymbology(), text, new BarcodeOptions(), SymbolEncoder.RunSum));
 
+    /// <summary>
+    /// Plessey carries the hexadecimal digits 0 to 9 and A to F only. The symbology rejects empty input, another letter, a lowercase letter, a space and
+    /// full width digits.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("")]
     [InlineData("12G4")]

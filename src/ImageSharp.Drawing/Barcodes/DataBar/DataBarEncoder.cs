@@ -171,7 +171,6 @@ internal static class DataBarEncoder
         BarcodeOptions options,
         ref BarcodeSymbol symbol)
     {
-        // The element widths start with the guard space, so a zero width bar leads the runs and the widths follow it.
         double xDimension = options.ResolveXDimension(MinimumXDimension, NominalXDimension, MaximumXDimension);
         if (options.IsBarHeightUnder(minimumHeight * xDimension))
         {
@@ -182,6 +181,7 @@ internal static class DataBarEncoder
                 $"The symbol is at least {minimumHeight}X high, {minimum:0.##} mm at its X dimension; the bar height is {options.BarHeight:0.##} mm.");
         }
 
+        // The element widths start with the guard space, so a zero width bar leads the runs and the widths follow it.
         Span<int> runs = symbol.BeginLinear(ElementCount + 1, xDimension, out Span<float> heights, out _);
         _ = EncodeWidths(gtin, linked, runs[1..]);
 

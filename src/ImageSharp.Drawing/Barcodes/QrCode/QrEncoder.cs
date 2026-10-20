@@ -739,11 +739,11 @@ internal static class QrEncoder
                 WriteBits(codewords, p, padIndex++ % 2 == 0 ? 0b11101100 : 0b00010001, 8);
             }
 
-            AppendErrorCorrection(size.Blocks(level), dataCount, errorCount, codewords);
+            int blocks = size.Blocks(level);
+            AppendErrorCorrection(blocks, dataCount, errorCount, codewords);
 
             // Section 6.6: the data codewords of the blocks in turn, then their error correction codewords in turn. The short last data codeword of an M1 or M3
             // symbol keeps its 4 high bits, so the stream stays continuous.
-            int blocks = size.Blocks(level);
             int shortData = dataCount / blocks;
             int longBlocks = dataCount % blocks;
             int shortBlocks = blocks - longBlocks;
@@ -890,8 +890,6 @@ internal static class QrEncoder
                 WriteFormatLayers(size, level, layers);
             }
 
-            // Section 5.3.7 of ISO/IEC 18004: the quiet zone is 4X around a QR Code symbol and 2X around a Micro QR Code symbol. It is 2X around a Rectangular
-            // Micro QR Code symbol too.
             int mask = size.Format switch
             {
                 QrFormat.Full => ChooseMask(layers, columns),
@@ -899,6 +897,8 @@ internal static class QrEncoder
                 _ => RectangularMask,
             };
 
+            // Section 5.3.7 of ISO/IEC 18004: the quiet zone is 4X around a QR Code symbol and 2X around a Micro QR Code symbol. It is 2X around a Rectangular
+            // Micro QR Code symbol too.
             Span<bool> modules = symbol.BeginMatrix(columns, rows, size.Format == QrFormat.Full ? 4 : 2, xDimension);
             for (int i = 0; i < cells; i++)
             {
@@ -1400,27 +1400,27 @@ internal static class QrEncoder
     }
 
     /// <summary>
-    /// One QR Code or Micro QR Code symbol size.
+    /// One QR Code, Micro QR Code or Rectangular Micro QR Code symbol size.
     /// </summary>
     private readonly struct SymbolSize
     {
         /// <summary>
-        /// The error correction codewords for levels L, M, Q and H, -1 where the level does not exist.
+        /// The error correction codewords at level L, or -1 where the level does not exist.
         /// </summary>
         private readonly short errorL;
 
         /// <summary>
-        /// The error correction codewords at level M.
+        /// The error correction codewords at level M, or -1 where the level does not exist.
         /// </summary>
         private readonly short errorM;
 
         /// <summary>
-        /// The error correction codewords at level Q.
+        /// The error correction codewords at level Q, or -1 where the level does not exist.
         /// </summary>
         private readonly short errorQ;
 
         /// <summary>
-        /// The error correction codewords at level H.
+        /// The error correction codewords at level H, or -1 where the level does not exist.
         /// </summary>
         private readonly short errorH;
 

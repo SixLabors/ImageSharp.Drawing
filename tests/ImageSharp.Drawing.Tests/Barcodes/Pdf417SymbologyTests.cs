@@ -14,7 +14,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 public class Pdf417SymbologyTests
 {
     /// <summary>
-    /// Section 5.8.2 of ISO/IEC 15438 requires the row height "Y &gt;= 3X", so a bar height under 3X is rejected. At a 0.3 mm module 3X is 0.9 mm.
+    /// Section 5.8.2 of ISO/IEC 15438 requires the row height "Y &gt;= 3X". At a 0.3 mm module 3X is 0.9 mm. A bar height of 3X encodes, and a bar height
+    /// under 3X throws.
     /// </summary>
     [Fact]
     public void Pdf417_RejectsARowUnderThreeModules()
@@ -64,6 +65,7 @@ public class Pdf417SymbologyTests
     {
         int[] codewords = [5, 453, 178, 121, 239, 0, 0, 0, 0];
         Pdf417Codewords.AppendErrorCorrection(codewords, 4, new int[5]);
+
         Assert.Equal([5, 453, 178, 121, 239, 452, 327, 657, 619], codewords);
     }
 
@@ -146,8 +148,11 @@ public class Pdf417SymbologyTests
             for (int codeword = 0; codeword < Pdf417Patterns.CodewordCount; codeword++)
             {
                 string sequence = Sequence(Pdf417Patterns.Modules[(cluster * Pdf417Patterns.CodewordCount) + codeword]);
+
                 Assert.Equal(8, sequence.Length);
+
                 int[] widths = [.. sequence.Select(c => c - '0')];
+
                 Assert.All(widths, width => Assert.InRange(width, 1, 6));
                 Assert.Equal(17, widths.Sum());
                 Assert.Equal(cluster * 3, (widths[0] - widths[2] + widths[4] - widths[6] + 9) % 9);
@@ -397,6 +402,13 @@ public class Pdf417SymbologyTests
         },
     };
 
+    /// <summary>
+    /// Each row of the symbol matches the reference row.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="columns">The number of data columns, or 0 for the default.</param>
+    /// <param name="errorCorrectionLevel">The error correction level, or -1 for the default.</param>
+    /// <param name="expected">The run widths of each reference row, separated by "|".</param>
     [Theory]
     [MemberData(nameof(Pdf417_MatchesReferenceRowsData))]
     public void Pdf417_MatchesReferenceRows(string text, int columns, int errorCorrectionLevel, string expected)
@@ -644,6 +656,13 @@ public class Pdf417SymbologyTests
         },
     };
 
+    /// <summary>
+    /// Each row of the Compact PDF417 symbol matches the reference row.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="columns">The number of data columns, or 0 for the default.</param>
+    /// <param name="errorCorrectionLevel">The error correction level, or -1 for the default.</param>
+    /// <param name="expected">The run widths of each reference row, separated by "|".</param>
     [Theory]
     [MemberData(nameof(CompactPdf417_MatchesReferenceRowsData))]
     public void CompactPdf417_MatchesReferenceRows(string text, int columns, int errorCorrectionLevel, string expected)
@@ -660,6 +679,7 @@ public class Pdf417SymbologyTests
             foreach (BarcodeRow row in symbol.Rows)
             {
                 int[] runs = SymbolEncoder.RowRuns(ref symbol, row);
+
                 Assert.Equal((17 * 4) + 69, runs.Sum());
                 Assert.Equal("81111113", string.Concat(runs.Take(8)));
                 Assert.Equal("711311121", string.Concat(runs.TakeLast(9)));
@@ -682,6 +702,7 @@ public class Pdf417SymbologyTests
             foreach (BarcodeRow row in symbol.Rows)
             {
                 int[] runs = SymbolEncoder.RowRuns(ref symbol, row);
+
                 Assert.Equal((17 * 4) + 35, runs.Sum());
                 Assert.Equal(1, runs[^1]);
             }
@@ -695,6 +716,7 @@ public class Pdf417SymbologyTests
     {
         BarcodeOptions options = new() { BarHeight = 5F * BarcodeSymbology.DefaultXDimension };
         ApproximateFloatComparer comparer = new(1e-4F);
+
         SymbolEncoder.Encode(new Pdf417Symbology(), "PDF417", options, (ref symbol) =>
         {
             Assert.All(symbol.BarHeights.ToArray(), height => Assert.Equal(5F, height, comparer));
@@ -709,6 +731,9 @@ public class Pdf417SymbologyTests
     public void Pdf417_RejectsCharactersAboveTheByteRange()
         => Assert.Throws<ArgumentException>(() => Encode(new Pdf417Symbology(), "PDF\u0100"));
 
+    /// <summary>
+    /// Empty data throws.
+    /// </summary>
     [Fact]
     public void Pdf417_RejectsEmptyData()
         => Assert.ThrowsAny<ArgumentException>(() => Encode(new Pdf417Symbology(), string.Empty));
@@ -740,6 +765,7 @@ public class Pdf417SymbologyTests
     private static int[] Codewords(string text)
     {
         ValueListBuilder<int> codewords = new(16);
+
         try
         {
             Pdf417Codewords.Encode(text, ref codewords);
@@ -751,14 +777,21 @@ public class Pdf417SymbologyTests
         }
     }
 
+    /// <summary>
+    /// Returns the bar and space widths of a symbol character, starting with a bar.
+    /// </summary>
+    /// <param name="modules">The 17 modules of the symbol character, the first module in bit 16 and 1 for a dark module.</param>
+    /// <returns>The widths in modules, one digit for each bar and space.</returns>
     private static string Sequence(int modules)
     {
         System.Text.StringBuilder builder = new();
         int bit = 16;
+
         while (bit >= 0)
         {
             int dark = (modules >> bit) & 1;
             int width = 0;
+
             while (bit >= 0 && ((modules >> bit) & 1) == dark)
             {
                 width++;
@@ -771,6 +804,13 @@ public class Pdf417SymbologyTests
         return builder.ToString();
     }
 
+    /// <summary>
+    /// Creates the symbology of a reference case.
+    /// </summary>
+    /// <param name="columns">The number of data columns, or 0 for the default.</param>
+    /// <param name="errorCorrectionLevel">The error correction level, or -1 for the default.</param>
+    /// <param name="compact">Whether the symbology is Compact PDF417.</param>
+    /// <returns>The symbology.</returns>
     private static BarcodeSymbology Create(int columns, int errorCorrectionLevel, bool compact)
     {
         if (compact)
@@ -803,7 +843,9 @@ public class Pdf417SymbologyTests
         => SymbolEncoder.Encode(symbology, text, new BarcodeOptions(), (ref symbol) =>
         {
             string[] rows = expected.Split('|');
+
             Assert.Equal(rows.Length, symbol.Rows.Length);
+
             for (int i = 0; i < rows.Length; i++)
             {
                 Assert.Equal(rows[i], SymbolEncoder.RunString(ref symbol, symbol.Rows[i]));

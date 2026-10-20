@@ -12,6 +12,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// </summary>
 public class Code2Of5SymbologyTests
 {
+    /// <summary>
+    /// The bar and space widths of each symbology match the reference implementation for every digit.
+    /// </summary>
+    /// <param name="symbologyType">The symbology under test.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="reference">The reference run string.</param>
     [Theory]
     [InlineData(typeof(Industrial2Of5Symbology), "1234", "313111311111113111311111313131111111111131113131113")]
     [InlineData(
@@ -49,7 +55,8 @@ public class Code2Of5SymbologyTests
         => Assert.Equal(reference, Encode(symbologyType, CheckCharacterMode.Compute, true, "1234"));
 
     /// <summary>
-    /// A supplied check digit is validated against the data and carried once, so the symbol is the one the calculated check digit produces.
+    /// The encoder validates a supplied check digit against the data and carries it once. The symbol is then the one that the calculated check digit
+    /// produces. The encoder rejects a wrong check digit and a check digit without data.
     /// </summary>
     /// <param name="symbologyType">The symbology under test.</param>
     [Theory]
@@ -73,7 +80,7 @@ public class Code2Of5SymbologyTests
     /// <summary>
     /// The printed line shows the digits the symbol carries. The check digit prints by default, and a caller can keep it off the printed line.
     /// </summary>
-    /// <param name="checkDigit"> Whether the symbol carries the check digit, and whether the encoder calculates it or validates it. </param>
+    /// <param name="checkDigit">Whether the symbol carries the check digit, and whether the encoder calculates it or validates it.</param>
     /// <param name="printCheckDigit">Whether the check digit is part of the printed line.</param>
     /// <param name="text">The text to encode.</param>
     /// <param name="expected">The printed line.</param>
@@ -90,6 +97,10 @@ public class Code2Of5SymbologyTests
         Assert.Equal(expected, Assert.Single(texts));
     }
 
+    /// <summary>
+    /// The encoder rejects any character that is not an ASCII digit.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("12A4")]
     [InlineData("12 34")]
@@ -107,7 +118,15 @@ public class Code2Of5SymbologyTests
     /// <returns>The run widths of the symbol.</returns>
     private static string Encode(Type symbologyType, CheckCharacterMode checkDigit, bool printCheckDigit, string text)
     {
-        BarcodeSymbology symbology = (BarcodeSymbology)Activator.CreateInstance(symbologyType, checkDigit, printCheckDigit)!;
+        BarcodeSymbology symbology = symbologyType.Name switch
+        {
+            nameof(Industrial2Of5Symbology) => new Industrial2Of5Symbology(checkDigit, printCheckDigit),
+            nameof(Iata2Of5Symbology) => new Iata2Of5Symbology(checkDigit, printCheckDigit),
+            nameof(Matrix2Of5Symbology) => new Matrix2Of5Symbology(checkDigit, printCheckDigit),
+            nameof(Coop2Of5Symbology) => new Coop2Of5Symbology(checkDigit, printCheckDigit),
+            _ => new Datalogic2Of5Symbology(checkDigit, printCheckDigit),
+        };
+
         return SymbolEncoder.Read(symbology, text, new BarcodeOptions(), SymbolEncoder.RunString);
     }
 }

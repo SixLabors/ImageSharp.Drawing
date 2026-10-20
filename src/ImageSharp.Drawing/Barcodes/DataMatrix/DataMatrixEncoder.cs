@@ -245,7 +245,7 @@ internal static class DataMatrixEncoder
                 }
             }
 
-            // The sizes the data may take, in table order: the index of each and its data codeword capacity. The encoder needs the capacities, because its end
+            // The sizes the data can take, in table order: the index of each and its data codeword capacity. The encoder needs the capacities, because its end
             // rules depend on how many codewords are left in the symbol the data ends in. A fixed size leaves one capacity. The table has SizeCount sizes, so
             // 64 places hold them all.
             InlineArray64<int> allowedStorage = default;
@@ -467,7 +467,7 @@ internal static class DataMatrixEncoder
             do
             {
                 // The four corner shapes, each as the row and the column of its eight modules. Each one applies only at the position and the matrix width it is
-                // listed with, where the standard shape would not fit whole.
+                // listed with, where the standard shape does not fit whole.
                 if (row == rows && column == 0)
                 {
                     this.PlaceCorner(
@@ -592,8 +592,8 @@ internal static class DataMatrixEncoder
         /// <summary>
         /// Places one bit of a codeword. A position outside the matrix wraps to the opposite edge, with the offset that keeps the shape whole.
         /// </summary>
-        /// <param name="row">The row, which may be outside the matrix.</param>
-        /// <param name="column">The column, which may be outside the matrix.</param>
+        /// <param name="row">The row, which can be outside the matrix.</param>
+        /// <param name="column">The column, which can be outside the matrix.</param>
         /// <param name="codeword">The codeword.</param>
         /// <param name="bit">The bit, 0 for the most significant.</param>
         private void PlaceBit(int row, int column, int codeword, int bit)

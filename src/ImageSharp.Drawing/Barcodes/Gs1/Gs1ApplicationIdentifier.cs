@@ -15,9 +15,9 @@ internal sealed class Gs1ApplicationIdentifier
     /// <param name="first">The first Application Identifier of the range.</param>
     /// <param name="last">The last Application Identifier of the range, the same as <paramref name="first"/> for one.</param>
     /// <param name="predefinedLength">Whether the element string has a predefined length and takes no separator.</param>
-    /// <param name="dataAttribute">Whether the Application Identifier may be a data attribute of a GS1 Digital Link URI.</param>
+    /// <param name="dataAttribute">Whether the Application Identifier can be a data attribute of a GS1 Digital Link URI.</param>
     /// <param name="components">The components of the data, in order.</param>
-    /// <param name="exclusions">The Application Identifier patterns that may not appear with this one.</param>
+    /// <param name="exclusions">The Application Identifier patterns that must not appear with this one.</param>
     /// <param name="keyQualifiers">The qualifier sequences of a GS1 Digital Link primary key, or <see langword="null"/> when it is not one.</param>
     public Gs1ApplicationIdentifier(
         string first,
@@ -60,7 +60,7 @@ internal sealed class Gs1ApplicationIdentifier
     public bool PredefinedLength { get; }
 
     /// <summary>
-    /// Gets a value indicating whether the Application Identifier may be a data attribute in the query string of a GS1 Digital Link URI.
+    /// Gets a value indicating whether the Application Identifier can be a data attribute in the query string of a GS1 Digital Link URI.
     /// </summary>
     public bool DataAttribute { get; }
 
@@ -70,7 +70,7 @@ internal sealed class Gs1ApplicationIdentifier
     public Gs1Component[] Components { get; }
 
     /// <summary>
-    /// Gets the Application Identifier patterns that may not appear in the same data as this one.
+    /// Gets the Application Identifier patterns that must not appear in the same data as this one.
     /// </summary>
     public string[] Exclusions { get; }
 

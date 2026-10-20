@@ -121,8 +121,6 @@ internal static class DataBarLimitedEncoder
 
         value += digits;
 
-        // The element widths start with the guard space, so a zero width bar leads the runs, and the symbol ends on the five module space, so a zero width bar
-        // closes them. Both zero width bars are the zeros the symbol storage starts with.
         double xDimension = options.ResolveXDimension(DataBarEncoder.MinimumXDimension, NominalXDimension, DataBarEncoder.MaximumXDimension);
         if (options.IsBarHeightUnder(Height * xDimension))
         {
@@ -132,6 +130,8 @@ internal static class DataBarLimitedEncoder
                 $"The symbol is at least {Height}X high, {Height * xDimension:0.##} mm at its X dimension; the bar height is {options.BarHeight:0.##} mm.");
         }
 
+        // The element widths start with the guard space, so a zero width bar leads the runs, and the symbol ends on the five module space, so a zero width bar
+        // closes them. Both zero width bars are the zeros the symbol storage starts with.
         Span<int> runs = symbol.BeginLinear(ElementCount + 2, xDimension, out Span<float> heights, out _);
         Span<int> widths = runs.Slice(1, ElementCount);
         widths[0] = 1;

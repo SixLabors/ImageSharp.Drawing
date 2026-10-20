@@ -4,7 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The symbol sizes a Data Matrix symbol may take.
+/// The symbol sizes a Data Matrix symbol can take.
 /// </summary>
 internal enum DataMatrixFormat
 {

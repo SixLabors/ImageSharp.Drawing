@@ -161,7 +161,7 @@ internal static class DataMatrixCodewords
     private const int NoSymbol = int.MaxValue;
 
     /// <summary>
-    /// The number of characters the look-ahead test reads before it may end early, while it still reads data. Annex J of ISO/IEC 16022:2024, step r): "If
+    /// The number of characters the look-ahead test reads before it can end early, while it still reads data. Annex J of ISO/IEC 16022:2024, step r): "If
     /// at least 4 data characters have been processed in this test loop".
     /// </summary>
     private const int MinimumLookAhead = 4;
@@ -206,7 +206,7 @@ internal static class DataMatrixCodewords
     /// Encodes the message into data codewords, without pad codewords.
     /// </summary>
     /// <param name="message">The message values.</param>
-    /// <param name="capacities">The data codeword capacities of the symbols the data may take.</param>
+    /// <param name="capacities">The data codeword capacities of the symbols the data can take.</param>
     /// <param name="c40Prefix">The number of message values at the start of the message that encode in C40 encodation, or 0.</param>
     /// <param name="codewords">The buffer the data codewords are written to, <see cref="MaximumCodewords"/> long.</param>
     /// <param name="scratch">The scratch of the look-ahead tables and the values of a run, <see cref="ScratchLength"/> long.</param>
@@ -224,13 +224,7 @@ internal static class DataMatrixCodewords
         int first = message[0];
         if (first is Fnc1 or Macro05 or Macro06)
         {
-            encoder.AppendCodeword(first switch
-            {
-                Fnc1 => Fnc1Codeword,
-                Macro05 => Macro05Codeword,
-                _ => Macro06Codeword,
-            });
-
+            encoder.AppendAscii(first);
             encoder.Position = 1;
             if (encoder.C40Prefix > 0)
             {
@@ -457,14 +451,9 @@ internal static class DataMatrixCodewords
             value -= 128;
         }
 
-        // The Macro characters exist only in ASCII encodation, so they end C40 and Text encodation.
+        // A Macro character is only the first message value, which Encode writes in ASCII encodation, so no Macro character comes here. The Function 1
+        // Symbol Character is value 27 of the Shift 2 set.
         Span<int> rest = values[count..];
-        if (value is Macro05 or Macro06)
-        {
-            return 0;
-        }
-
-        // The Function 1 Symbol Character is value 27 of the Shift 2 set.
         if (value == Fnc1)
         {
             rest[0] = Shift2;
@@ -555,7 +544,7 @@ internal static class DataMatrixCodewords
         /// Initializes a new instance of the <see cref="Encoder"/> struct and fills the look-ahead tables for the message.
         /// </summary>
         /// <param name="message">The message values.</param>
-        /// <param name="capacities">The data codeword capacities of the symbols the data may take.</param>
+        /// <param name="capacities">The data codeword capacities of the symbols the data can take.</param>
         /// <param name="c40Prefix">The number of message values at the start that encode in C40 encodation, no more than the message length.</param>
         /// <param name="codewords">The buffer the data codewords are written to, <see cref="MaximumCodewords"/> long.</param>
         /// <param name="scratch">The scratch of the look-ahead tables and the values of a run, <see cref="ScratchLength"/> long.</param>
@@ -677,7 +666,7 @@ internal static class DataMatrixCodewords
                 // The scheme can change and the data can end only between whole groups of three values, because a group is the unit that packs into codewords.
                 if (valueCount % 3 == 0)
                 {
-                    // At a group boundary the look-ahead test may choose another scheme. The scheme ends with an unlatch, and a latch follows unless the next
+                    // At a group boundary the look-ahead test can choose another scheme. The scheme ends with an unlatch, and a latch follows unless the next
                     // scheme is ASCII.
                     if (valueCount > 0)
                     {
@@ -696,7 +685,7 @@ internal static class DataMatrixCodewords
                         }
                     }
 
-                    // Near the end of the data the last characters may fill the symbol exactly, so the unlatch is left out and the end of the symbol returns to
+                    // Near the end of the data the last characters can fill the symbol exactly, so the unlatch is left out and the end of the symbol returns to
                     // ASCII encodation.
                     int left = message.Length - position;
                     if (left <= 3 && this.EndTriplets(scheme, values[..valueCount]))
@@ -752,7 +741,7 @@ internal static class DataMatrixCodewords
 
                 if (valueCount % 4 == 0)
                 {
-                    // With two characters or fewer left, the symbol may have room for them in ASCII encodation, which the end of the symbol returns to without
+                    // With two characters or fewer left, the symbol can have room for them in ASCII encodation, which the end of the symbol returns to without
                     // an unlatch.
                     if (message.Length - position <= 2)
                     {
@@ -859,6 +848,39 @@ internal static class DataMatrixCodewords
         }
 
         /// <summary>
+        /// Appends the ASCII codewords of one message value.
+        /// </summary>
+        /// <param name="value">The message value.</param>
+        public void AppendAscii(int value)
+        {
+            // Table 2: the characters 0 to 127 are their value plus 1. A character from 128 to 255 is the Upper Shift followed by the codeword of the character
+            // 128 below it, (value - 128) + 1.
+            switch (value)
+            {
+                case Fnc1:
+                    this.AppendCodeword(Fnc1Codeword);
+                    break;
+
+                case Macro05:
+                    this.AppendCodeword(Macro05Codeword);
+                    break;
+
+                case Macro06:
+                    this.AppendCodeword(Macro06Codeword);
+                    break;
+
+                case < 128:
+                    this.AppendCodeword(value + 1);
+                    break;
+
+                default:
+                    this.AppendCodeword(UpperShift);
+                    this.AppendCodeword(value - 127);
+                    break;
+            }
+        }
+
+        /// <summary>
         /// Encodes the last one to three characters of C40, Text or X12 encodation when they fill the symbol with no unlatch, or when one character is left and
         /// ASCII encodation fits it.
         /// </summary>
@@ -962,39 +984,6 @@ internal static class DataMatrixCodewords
         }
 
         /// <summary>
-        /// Appends the ASCII codewords of one message value.
-        /// </summary>
-        /// <param name="value">The message value.</param>
-        private void AppendAscii(int value)
-        {
-            // Table 2: the characters 0 to 127 are their value plus 1. A character from 128 to 255 is the Upper Shift followed by the codeword of the character
-            // 128 below it, (value - 128) + 1.
-            switch (value)
-            {
-                case Fnc1:
-                    this.AppendCodeword(Fnc1Codeword);
-                    break;
-
-                case Macro05:
-                    this.AppendCodeword(Macro05Codeword);
-                    break;
-
-                case Macro06:
-                    this.AppendCodeword(Macro06Codeword);
-                    break;
-
-                case < 128:
-                    this.AppendCodeword(value + 1);
-                    break;
-
-                default:
-                    this.AppendCodeword(UpperShift);
-                    this.AppendCodeword(value - 127);
-                    break;
-            }
-        }
-
-        /// <summary>
         /// Appends the codewords of whole groups of three C40, Text or X12 values. Each group packs into two codewords as 1600 x C1 + 40 x C2 + C3 + 1.
         /// </summary>
         /// <param name="values">The values, a multiple of three.</param>
@@ -1076,7 +1065,8 @@ internal static class DataMatrixCodewords
 
         /// <summary>
         /// The look-ahead test. Each scheme keeps a count of the codewords it needs for the data read so far, starting with the cost of the latch to it. After
-        /// at least five characters one scheme can win early by a clear codeword, and at the end of the data the smallest whole count wins.
+        /// at least <see cref="MinimumLookAhead"/> characters, one scheme can win early by a clear codeword. At the end of the data the smallest whole count
+        /// wins.
         /// </summary>
         /// <returns>The encodation scheme for the data at the current position.</returns>
         private readonly EncodationScheme LookAhead()
@@ -1088,7 +1078,7 @@ internal static class DataMatrixCodewords
                 return EncodationScheme.C40;
             }
 
-            // Base 256 cannot carry a Function 1 Symbol Character, so where the test would choose Base 256 for one, ASCII takes it instead.
+            // Base 256 cannot carry a Function 1 Symbol Character. When the test chooses Base 256 at one, it returns ASCII instead.
             ReadOnlySpan<int> message = this.message;
             int length = message.Length;
             bool fnc1 = message[position] == Fnc1;
@@ -1260,8 +1250,10 @@ internal static class DataMatrixCodewords
         };
 
         /// <summary>
-        /// The early test of the look-ahead test, from the fourth character: a scheme wins when it is at least one whole codeword cheaper than every other
-        /// scheme. ASCII and Base 256 win with a margin of exactly one codeword; the others need more than one.
+        /// The early test of the look-ahead test, from the fourth character. ASCII wins when it is at least one codeword cheaper than every other scheme.
+        /// Base 256 wins when it is at least one codeword cheaper than ASCII, or more than one codeword cheaper than C40, Text, X12 and EDIFACT. EDIFACT,
+        /// Text and X12 win when they are more than one codeword cheaper than every other scheme. C40 wins when it is more than one codeword cheaper than
+        /// ASCII, Text, EDIFACT and Base 256, and not dearer than X12.
         /// </summary>
         /// <param name="counts">The count of each scheme.</param>
         /// <param name="read">The number of characters read: the counts stand after the character before it.</param>

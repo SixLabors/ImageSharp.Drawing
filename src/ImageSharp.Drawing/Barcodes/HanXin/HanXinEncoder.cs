@@ -96,7 +96,14 @@ internal static class HanXinEncoder
     /// </summary>
     private enum SegmentMode
     {
+        /// <summary>
+        /// Numeric mode: three digits in 10 bits.
+        /// </summary>
         Numeric = 0b0001,
+
+        /// <summary>
+        /// Byte mode: a 13-bit byte count, then 8 bits for each byte.
+        /// </summary>
         Byte = 0b0011,
     }
 

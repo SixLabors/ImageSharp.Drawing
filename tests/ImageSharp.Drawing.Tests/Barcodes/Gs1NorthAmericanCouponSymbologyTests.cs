@@ -86,6 +86,12 @@ public class Gs1NorthAmericanCouponSymbologyTests
         },
     };
 
+    /// <summary>
+    /// The module rows of each symbol, separator rows included, match the reference implementation.
+    /// </summary>
+    /// <param name="text">The element string to encode.</param>
+    /// <param name="segments">The number of segments in a row.</param>
+    /// <param name="expected">The reference module rows from the top, separated by vertical bars.</param>
     [Theory]
     [MemberData(nameof(Gs1NorthAmericanCoupon_MatchesReferenceRowsData))]
     public void Gs1NorthAmericanCoupon_MatchesReferenceRows(string text, int segments, string expected)
@@ -97,12 +103,15 @@ public class Gs1NorthAmericanCouponSymbologyTests
     /// Section 5.5 of the guideline: "The only human readable digits shown from the GS1 DataBar barcode will be the GS1 Company Prefix and Offer Code separated
     /// by a dash." Figure 1 prints them above the symbol, centred, as 0614141-654321. Example 2 gives the offer code 1234 as the six digits 001234.
     /// </summary>
+    /// <param name="text">The element string to encode.</param>
+    /// <param name="expected">The printed line.</param>
     [Theory]
     [InlineData("(8110)1061414165432131501101201211014092110256100126663101231", "0614141-654321")]
     [InlineData("(8110)106141410012342501106501013085093101231", "0614141-001234")]
     public void Gs1NorthAmericanCoupon_TextPrintsThePrefixAndOfferCodeAbove(string text, string expected)
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
+
         SymbolEncoder.Encode(new Gs1NorthAmericanCouponSymbology(), text, options, (ref symbol) =>
         {
             BarcodeTextPlacement placement = Assert.Single(symbol.Text.ToArray());
@@ -122,8 +131,11 @@ public class Gs1NorthAmericanCouponSymbologyTests
     public void Gs1NorthAmericanCoupon_HasEightSegmentRowsOfThirtyFourModules()
     {
         Gs1NorthAmericanCouponSymbology symbology = new();
+
         Assert.Equal(8, symbology.Segments);
+
         BarcodeOptions options = new() { Dpi = SymbolEncoder.MillimetreDpi };
+
         SymbolEncoder.Encode(symbology, "(8110)1061414165432131501101201211014092110256100126663101231", options, static (ref symbol) =>
         {
             Assert.Equal(0.33, symbol.XDimension);
@@ -137,6 +149,7 @@ public class Gs1NorthAmericanCouponSymbologyTests
     /// Table C of the guideline: a leap year allows 29 February, the start date of data field 4 may equal the expiration date of data field 3, and data field 9
     /// carries its four miscellaneous elements. The guideline sets no order for the optional data fields, so data field 1 can follow data field 3.
     /// </summary>
+    /// <param name="text">The element string to encode.</param>
     [Theory]
     [InlineData("(8110)106141410012342501106503120229")]
     [InlineData("(8110)106141410012342501106503101231410123190010")]
@@ -149,6 +162,7 @@ public class Gs1NorthAmericanCouponSymbologyTests
     /// them, every required element present, every indicator and code in its range, valid dates with the start date not after the expiration date, and only
     /// the optional data fields 1, 2, 3, 4, 5, 6 and 9.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("(01)09521234543213")]
     [InlineData("(8110)106141416543213500110000310123196000(21)1")]
@@ -170,6 +184,7 @@ public class Gs1NorthAmericanCouponSymbologyTests
     /// The guideline allows "a minimum of 2 segments per row", and a row holds whole segment pairs up to the 20 segments of section 5.5.2.3.2 of the GS1
     /// General Specifications.
     /// </summary>
+    /// <param name="segments">The number of segments in a row.</param>
     [Theory]
     [InlineData(0)]
     [InlineData(5)]

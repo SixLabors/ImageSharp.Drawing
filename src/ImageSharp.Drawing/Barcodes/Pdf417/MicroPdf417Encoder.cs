@@ -173,20 +173,7 @@ internal static class MicroPdf417Encoder
         float rowHeight,
         float verticalQuietZone,
         ref BarcodeSymbol symbol)
-    {
-        SymbolSize size = FindSize(columns, rows);
-        int k = size.ErrorCorrection;
-        InlineArray256<int> codewordStorage = default;
-        Span<int> codewords = ((Span<int>)codewordStorage)[..(size.Columns * size.Rows)];
-        data.CopyTo(codewords);
-        codewords[data.Length..^k].Fill(Pdf417Codewords.Pad);
-
-        InlineArray256<int> alphaStorage = default;
-        Pdf417Codewords.AppendErrorCorrection(codewords, k, alphaStorage);
-
-        AddressPatterns patterns = new(size.LeftPattern, size.CentrePattern, size.RightPattern, true);
-        BuildRows(codewords, size.Columns, size.Rows, patterns, xDimension, rowHeight, verticalQuietZone, ref symbol);
-    }
+        => BuildMatrix(data, FindSize(columns, rows), xDimension, rowHeight, verticalQuietZone, ref symbol);
 
     /// <summary>
     /// Returns the symbol size of a number of columns and rows. The caller gives a size of <see cref="Sizes"/>.
@@ -230,43 +217,43 @@ internal static class MicroPdf417Encoder
                 : $"The data takes {data.Length} codewords and does not fit in a MicroPDF417 symbol.");
         }
 
+        double xDimension = options.ResolveXDimension(BarcodeSymbology.DefaultXDimension);
+        float rowHeight = options.ResolveBarHeight(xDimension, NominalRowHeight);
+        BuildMatrix(data, new SymbolSize(sizes.Slice(offset, SymbolSize.Length)), xDimension, rowHeight, QuietZone, ref symbol);
+    }
+
+    /// <summary>
+    /// Builds a symbol of one size from its data codewords: the data, the pad codewords, the error correction codewords and then the rows.
+    /// </summary>
+    /// <param name="data">The data codewords, at most the data codewords of the size.</param>
+    /// <param name="size">The symbol size.</param>
+    /// <param name="xDimension">The X dimension in millimetres.</param>
+    /// <param name="rowHeight">The height of a row in modules.</param>
+    /// <param name="verticalQuietZone">The quiet zone above and below the symbol in modules.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    private static void BuildMatrix(
+        ReadOnlySpan<int> data,
+        SymbolSize size,
+        double xDimension,
+        float rowHeight,
+        float verticalQuietZone,
+        ref BarcodeSymbol symbol)
+    {
         // The data codewords, the pad codewords that fill the data region with 900, and the error correction codewords. A MicroPDF417 symbol has no Symbol
         // Length Descriptor. A symbol holds at most MaximumCodewords codewords, so they fit inline.
-        SymbolSize size = new(sizes.Slice(offset, SymbolSize.Length));
         int k = size.ErrorCorrection;
         InlineArray256<int> codewordStorage = default;
         Span<int> codewords = ((Span<int>)codewordStorage)[..(size.Columns * size.Rows)];
         data.CopyTo(codewords);
         codewords[data.Length..^k].Fill(Pdf417Codewords.Pad);
 
-        // The generator coefficients take one more than the error correction codewords, which are fewer than MaximumCodewords, so they fit inline too.
-        InlineArray256<int> alphaStorage = default;
+        // The generator coefficients take one more than the error correction codewords. A size of Sizes has at most 50 error correction codewords, so the
+        // coefficients fit inline.
+        InlineArray64<int> alphaStorage = default;
         Pdf417Codewords.AppendErrorCorrection(codewords, k, alphaStorage);
 
-        BuildRows(codewords, size, options, ref symbol);
-    }
-
-    /// <summary>
-    /// Builds the rows of the symbol: the left row address pattern, the codewords of the row with the centre row address pattern after the first column of
-    /// three or the second of four, the right row address pattern and a single module bar.
-    /// </summary>
-    /// <param name="codewords">The codewords in row order, error correction codewords included.</param>
-    /// <param name="size">The symbol size.</param>
-    /// <param name="options">The options that control layout choices.</param>
-    /// <param name="symbol">The symbol to write.</param>
-    private static void BuildRows(ReadOnlySpan<int> codewords, SymbolSize size, BarcodeOptions options, ref BarcodeSymbol symbol)
-    {
-        double xDimension = options.ResolveXDimension(BarcodeSymbology.DefaultXDimension);
-        float rowHeight = options.ResolveBarHeight(xDimension, NominalRowHeight);
-        BuildRows(
-            codewords,
-            size.Columns,
-            size.Rows,
-            new AddressPatterns(size.LeftPattern, size.CentrePattern, size.RightPattern, true),
-            xDimension,
-            rowHeight,
-            QuietZone,
-            ref symbol);
+        AddressPatterns patterns = new(size.LeftPattern, size.CentrePattern, size.RightPattern, true);
+        BuildRows(codewords, size.Columns, size.Rows, patterns, xDimension, rowHeight, verticalQuietZone, ref symbol);
     }
 
     /// <summary>

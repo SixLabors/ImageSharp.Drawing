@@ -31,7 +31,7 @@ public class IdentcodeSymbologyTests
     /// <summary>
     /// The documentation weights the digits 4 and 9 alternately from the first, so 56310243031 gives 20 + 54 + 12 + 9 + 0 + 18 + 16 + 27 + 0 + 27 + 4 = 187,
     /// and "187 Modulo 10 = 7, Ergänzung zu 10 = 3". The printed line is the grouping the reference implementations agree on for that example. A supplied check
-    /// digit that disagrees is rejected.
+    /// digit that disagrees throws.
     /// </summary>
     [Fact]
     public void CalculatesTheDeutschePostCheckDigit()
@@ -40,11 +40,12 @@ public class IdentcodeSymbologyTests
         string[] texts = SymbolEncoder.Read(new IdentcodeSymbology(), "56310243031", options, SymbolEncoder.Texts);
 
         Assert.Equal("56.310 243.031 3", Assert.Single(texts));
+
         Assert.Throws<ArgumentException>(() => Encode("563102430314"));
     }
 
     /// <summary>
-    /// An Identcode is eleven data digits and an optional check digit, so anything else is rejected, as is a non-digit.
+    /// An Identcode is eleven data digits and an optional check digit. The symbology rejects other lengths and non-digits.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     [Theory]

@@ -790,11 +790,20 @@ public class HanXinSymbologyTests
         },
     };
 
+    /// <summary>
+    /// The symbol has the side of the reference symbol, and its module grid matches the reference grid.
+    /// </summary>
+    /// <param name="level">The error correction level.</param>
+    /// <param name="version">The version, or 0 for the smallest version that holds the data.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="side">The side of the symbol in modules.</param>
+    /// <param name="expected">The reference grid, one row of hexadecimal digits per "|" separated part.</param>
     [Theory]
     [MemberData(nameof(MatchesReferenceGridData))]
     public void MatchesReferenceGrid(HanXinErrorCorrectionLevel level, int version, string text, int side, string expected)
     {
         HanXinSymbology symbology = version == 0 ? new HanXinSymbology(level) : new HanXinSymbology(level, version);
+
         SymbolEncoder.Encode(symbology, text, new BarcodeOptions(), (ref symbol) =>
         {
             Assert.Equal((side, side), (symbol.MatrixRows, symbol.Columns));
@@ -803,7 +812,7 @@ public class HanXinSymbologyTests
     }
 
     /// <summary>
-    /// A fixed version holds a fixed number of data codewords, so data that needs more does not fit it.
+    /// A fixed version holds a fixed number of data codewords. Data that needs more codewords throws.
     /// </summary>
     [Fact]
     public void RejectsDataBeyondTheVersion()
@@ -814,7 +823,7 @@ public class HanXinSymbologyTests
                 new BarcodeOptions()));
 
     /// <summary>
-    /// Han Xin Code carries the 256 byte values, U+0000 to U+00FF.
+    /// Han Xin Code carries the 256 byte values, U+0000 to U+00FF. A character above U+00FF throws.
     /// </summary>
     [Fact]
     public void RejectsCharactersAboveLatin1()

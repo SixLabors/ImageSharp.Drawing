@@ -11,6 +11,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// </summary>
 public class MsiSymbologyTests
 {
+    /// <summary>
+    /// A symbol without check digits matches the reference runs.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="reference">The reference run string.</param>
     [Theory]
     [InlineData("1234567", "2112121221121221121212212112211212122112211221211212212121121")]
     [InlineData("0", "2112121212121")]
@@ -82,6 +87,10 @@ public class MsiSymbologyTests
     public void SpansTwelveModulesPerDigit(string text)
         => Assert.Equal((12 * text.Length) + 7, SymbolEncoder.Read(new MsiSymbology(MsiCheckDigit.None), text, new BarcodeOptions(), SymbolEncoder.RunSum));
 
+    /// <summary>
+    /// MSI carries the digits 0 to 9 only. The symbology rejects empty input, a letter, a space and full width digits.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("")]
     [InlineData("12A4")]

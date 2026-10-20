@@ -84,15 +84,15 @@ public sealed class Sscc18Symbology : BarcodeSymbology
         }
 
         // The symbol carries the identifier and the eighteen digits with no separator, because Table 7-6 gives this element string a predefined length.
+        char checkCharacter = (char)('0' + check);
         InlineArray24<char> encodedStorage = default;
         Span<char> encoded = ((Span<char>)encodedStorage)[..(2 + SsccLength)];
         "00".CopyTo(encoded);
         supplied[..(SsccLength - 1)].CopyTo(encoded[2..]);
-        encoded[^1] = (char)('0' + check);
+        encoded[^1] = checkCharacter;
 
         // The caption is the input as given, with the check digit after it when the input left it out, set off by a space when the input groups its
         // digits with spaces.
-        char checkCharacter = (char)('0' + check);
         ReadOnlySpan<char> suffix = supplied.Length == SsccLength ? [] : text.Contains(' ') ? [' ', checkCharacter] : [checkCharacter];
         Code128Encoder.BuildSymbol(
             encoded,

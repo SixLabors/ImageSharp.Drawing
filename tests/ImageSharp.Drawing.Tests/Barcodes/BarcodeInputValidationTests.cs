@@ -12,9 +12,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 public class BarcodeInputValidationTests
 {
     /// <summary>
-    /// Empty text carries no data, and every symbology whose standard fixes a length or requires data rejects it. Code 128 and Code 16K are left out: their
-    /// standards set no minimum, and an empty symbol is a start character, pad and check characters and a stop character.
+    /// Empty text carries no data. Every symbology whose standard fixes a length or requires data rejects it. The list does not include Code 128 and Code 16K:
+    /// their standards set no minimum, and an empty symbol is a start character, pad and check characters and a stop character.
     /// </summary>
+    /// <param name="symbologyType">The symbology.</param>
     [Theory]
     [InlineData(typeof(Ean13Symbology))]
     [InlineData(typeof(Ean8Symbology))]
@@ -84,18 +85,19 @@ public class BarcodeInputValidationTests
     public void RejectsEmptyText(Type symbologyType)
     {
         BarcodeSymbology symbology = (BarcodeSymbology)Activator.CreateInstance(symbologyType)!;
+
         Assert.ThrowsAny<ArgumentException>(() => SymbolEncoder.Encode(symbology, string.Empty, new BarcodeOptions()));
     }
 
     /// <summary>
-    /// A Code 128 symbol carries at most 500 characters, so longer input is rejected rather than encoded into a symbol no scanner will read.
+    /// A Code 128 symbol carries at most 500 characters. The symbology rejects longer input. It does not encode a symbol that no scanner reads.
     /// </summary>
     [Fact]
     public void Code128_RejectsDataBeyondTheMaximumLength()
         => Assert.ThrowsAny<ArgumentException>(() => SymbolEncoder.Encode(new Code128Symbology(), new string('A', 501), new BarcodeOptions()));
 
     /// <summary>
-    /// A resolution, an X dimension or a bar height of zero or less has no physical size.
+    /// A resolution, an X dimension or a bar height of zero or less has no physical size. The options reject each of these values.
     /// </summary>
     /// <param name="value">The rejected value.</param>
     [Theory]
@@ -104,6 +106,7 @@ public class BarcodeInputValidationTests
     public void Options_RejectSizesNotGreaterThanZero(float value)
     {
         BarcodeOptions options = new();
+
         Assert.Throws<ArgumentOutOfRangeException>(() => options.Dpi = value);
         Assert.Throws<ArgumentOutOfRangeException>(() => options.XDimension = value);
         Assert.Throws<ArgumentOutOfRangeException>(() => options.BarHeight = value);
@@ -147,6 +150,7 @@ public class BarcodeInputValidationTests
             double lowest = Math.Max(1, Math.Ceiling((minimum * pixelsPerMillimetre) - 1e-9));
             double highest = Math.Floor((maximum * pixelsPerMillimetre) + 1e-9);
             double xDimension = SymbolEncoder.Read(symbology, text, new BarcodeOptions { Dpi = dpi }, static (ref symbol) => symbol.XDimension);
+
             if (lowest <= highest)
             {
                 Assert.InRange(xDimension, minimum - 1e-9, maximum + 1e-9);

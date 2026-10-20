@@ -15,7 +15,8 @@ public class CodabarSymbologyTests
     private const string Library = "11331311113113111111133111113311311113111311113113131131";
 
     /// <summary>
-    /// The alternative names T, N, * and E of the start and stop characters encode as A, B, C and D.
+    /// The bar and space widths match the reference implementation for the digits, the symbols and the start and stop characters. The alternative names T, N,
+    /// * and E of the start and stop characters encode as A, B, C and D, so T40156N gives the same symbol as A40156B.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     /// <param name="reference">The reference run string.</param>
@@ -37,6 +38,7 @@ public class CodabarSymbologyTests
     public void CalculatesTheModuloSixteenCheckCharacter()
     {
         string runs = SymbolEncoder.Read(new CodabarSymbology(CheckCharacterMode.Compute), "A40156B", new BarcodeOptions(), SymbolEncoder.RunString);
+
         Assert.Equal("1133131111311311111113311111331131111311131111311131313113131131"[..^1], runs);
     }
 
@@ -126,6 +128,11 @@ public class CodabarSymbologyTests
             new BarcodeOptions { Dpi = SymbolEncoder.MicrometreDpi, XDimension = 0.1 },
             static (ref symbol) => Assert.Equal(0.191, symbol.XDimension, 1e-9));
 
+    /// <summary>
+    /// The encoder rejects text without data between a start character and a stop character. It also rejects a start or stop character inside the data,
+    /// a space, a small letter and a character that is not ASCII.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("")]
     [InlineData("A")]

@@ -294,6 +294,14 @@ public class UltracodeSymbologyTests
         },
     };
 
+    /// <summary>
+    /// The symbol has the size and the module colours of the reference grid for each error correction level and text.
+    /// </summary>
+    /// <param name="level">The error correction level.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="width">The expected number of module columns.</param>
+    /// <param name="height">The expected number of module rows.</param>
+    /// <param name="expected">The expected colour grid.</param>
     [Theory]
     [MemberData(nameof(MatchesReferenceGridData))]
     public void MatchesReferenceGrid(UltracodeErrorCorrectionLevel level, string text, int width, int height, string expected)
@@ -304,7 +312,8 @@ public class UltracodeSymbologyTests
         });
 
     /// <summary>
-    /// The largest symbol holds 282 tiles. At level EC5, 203 characters make 206 message codewords and 77 check codewords, 283 tiles, so they do not fit.
+    /// The largest symbol holds 282 tiles. At level EC5, 203 characters make 206 message codewords and 77 check codewords, 283 tiles. The symbology rejects
+    /// them.
     /// </summary>
     [Fact]
     public void RejectsDataBeyondTheLargestSymbol()
@@ -312,7 +321,7 @@ public class UltracodeSymbologyTests
             () => SymbolEncoder.Encode(new UltracodeSymbology(UltracodeErrorCorrectionLevel.EC5), new string('A', 203), new BarcodeOptions()));
 
     /// <summary>
-    /// Ultracode carries the 256 byte values, U+0000 to U+00FF.
+    /// Ultracode carries the 256 byte values, U+0000 to U+00FF. The symbology rejects a character above U+00FF.
     /// </summary>
     [Fact]
     public void RejectsCharactersAboveLatin1()

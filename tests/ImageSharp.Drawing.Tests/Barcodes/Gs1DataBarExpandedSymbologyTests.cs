@@ -102,6 +102,11 @@ public class Gs1DataBarExpandedSymbologyTests
         },
     };
 
+    /// <summary>
+    /// The modules of each symbol match the reference implementation.
+    /// </summary>
+    /// <param name="text">The element strings to encode.</param>
+    /// <param name="expected">The reference modules, 1 for dark.</param>
     [Theory]
     [MemberData(nameof(Gs1DataBarExpanded_MatchesReferenceModulesData))]
     public void Gs1DataBarExpanded_MatchesReferenceModules(string text, string expected)
@@ -135,6 +140,7 @@ public class Gs1DataBarExpandedSymbologyTests
     public void Gs1DataBarExpanded_TextPrintsTheElementStrings()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
+
         SymbolEncoder.Encode(new Gs1DataBarExpandedSymbology(), "(01)90614141000015(3202)000150", options, static (ref symbol) =>
         {
             BarcodeTextPlacement placement = Assert.Single(symbol.Text.ToArray());
@@ -159,10 +165,12 @@ public class Gs1DataBarExpandedSymbologyTests
     }
 
     /// <summary>
-    /// The compressed methods carry the GTIN of Application Identifier (01) without its check digit, so a wrong check digit is refused. A character outside the
-    /// general purpose field and data longer than 21 data characters are refused too. Section 5.5.2.3.3 of the GS1 General Specifications: "when the data
-    /// includes AI (01), it SHALL be the first element string encoded", so (01) after (10) is refused.
+    /// The compressed methods carry the GTIN of Application Identifier (01) without its check digit, so both forms of the symbol reject a wrong check digit.
+    /// They also reject a character outside the general purpose field, data longer than 21 data characters and text without the element string syntax.
+    /// Section 5.5.2.3.3 of the GS1 General Specifications: "when the data includes AI (01), it SHALL be the first element string encoded", so both forms
+    /// reject (01) after (10).
     /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("(01)90614141000016(3202)000150")]
     [InlineData("(01)09521234543214")]

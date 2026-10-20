@@ -365,6 +365,12 @@ public class MicroPdf417SymbologyTests
         },
     };
 
+    /// <summary>
+    /// Each row of the symbol matches the reference row.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="columns">The number of data columns, or 0 for the smallest size that holds the data.</param>
+    /// <param name="expected">The run widths of each reference row, separated by "|".</param>
     [Theory]
     [MemberData(nameof(MicroPdf417_MatchesReferenceRowsData))]
     public void MicroPdf417_MatchesReferenceRows(string text, int columns, string expected)
@@ -454,6 +460,11 @@ public class MicroPdf417SymbologyTests
         },
     };
 
+    /// <summary>
+    /// Each row of the HIBC symbol at the default column count matches the reference row.
+    /// </summary>
+    /// <param name="text">The data.</param>
+    /// <param name="expected">The run widths of each reference row, separated by "|".</param>
     [Theory]
     [MemberData(nameof(HibcMicroPdf417_MatchesReferenceRowsData))]
     public void HibcMicroPdf417_MatchesReferenceRows(string text, string expected)
@@ -514,6 +525,11 @@ public class MicroPdf417SymbologyTests
         },
     };
 
+    /// <summary>
+    /// Each row of the HIBC symbol at four data columns matches the reference row.
+    /// </summary>
+    /// <param name="text">The data.</param>
+    /// <param name="expected">The run widths of each reference row, separated by "|".</param>
     [Theory]
     [MemberData(nameof(HibcMicroPdf417_FourColumnsMatchReferenceRowsData))]
     public void HibcMicroPdf417_FourColumnsMatchReferenceRows(string text, string expected)
@@ -537,6 +553,7 @@ public class MicroPdf417SymbologyTests
             foreach (BarcodeRow row in symbol.Rows)
             {
                 int[] runs = SymbolEncoder.RowRuns(ref symbol, row);
+
                 Assert.Equal(width, runs.Sum());
                 Assert.Equal(1, runs[^1]);
                 Assert.All(SymbolEncoder.RowBarHeights(ref symbol, row), height => Assert.Equal(2F, height));
@@ -549,7 +566,8 @@ public class MicroPdf417SymbologyTests
         });
 
     /// <summary>
-    /// The largest symbol, four columns of 44 rows with 50 error correction codewords, holds 126 data codewords, and one column of 28 rows holds 20.
+    /// The largest symbol, four columns of 44 rows with 50 error correction codewords, holds 126 data codewords, and one column of 28 rows holds 20. Data
+    /// that no size holds throws.
     /// </summary>
     [Fact]
     public void MicroPdf417_RejectsDataThatNoSizeHolds()
@@ -558,10 +576,16 @@ public class MicroPdf417SymbologyTests
         Assert.Throws<ArgumentException>(() => Encode(new MicroPdf417Symbology(1), new string('A', 60)));
     }
 
+    /// <summary>
+    /// MicroPDF417 carries the byte values U+0000 to U+00FF. A character above U+00FF throws.
+    /// </summary>
     [Fact]
     public void MicroPdf417_RejectsCharactersAboveTheByteRange()
         => Assert.Throws<ArgumentException>(() => Encode(new MicroPdf417Symbology(), "Micro\u0100"));
 
+    /// <summary>
+    /// The constructor rejects a column count outside 1 to 4.
+    /// </summary>
     [Fact]
     public void MicroPdf417_RejectsColumnsOutsideTheirRange()
     {
@@ -587,7 +611,9 @@ public class MicroPdf417SymbologyTests
         => SymbolEncoder.Encode(symbology, text, new BarcodeOptions(), (ref symbol) =>
         {
             string[] rows = expected.Split('|');
+
             Assert.Equal(rows.Length, symbol.Rows.Length);
+
             for (int i = 0; i < rows.Length; i++)
             {
                 Assert.Equal(rows[i], SymbolEncoder.RunString(ref symbol, symbol.Rows[i]));

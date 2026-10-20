@@ -29,8 +29,8 @@ internal static class Gs1CompositeLayout
     private const int MinimumGs1128Characters = 9;
 
     /// <summary>
-    /// Gets the 13 modules of the right finder pattern of value 3 of GS1 DataBar Omnidirectional, Truncated, Stacked and Stacked Omnidirectional, elements 3 to 5
-    /// as they stand in the symbol: a bar of 9 modules, a space of 1 and a bar of 3.
+    /// Gets the 13 modules of the right finder pattern of value 3 of GS1 DataBar Omnidirectional, Truncated, Stacked and Stacked Omnidirectional, elements 3
+    /// to 5 as they stand in the symbol: a bar of 9 modules, a space of 1 and a bar of 3.
     /// </summary>
     private static ReadOnlySpan<byte> FinderValueThree => [1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1];
 
@@ -172,26 +172,17 @@ internal static class Gs1CompositeLayout
     }
 
     /// <summary>
-    /// Writes where the separator of a GS1 DataBar Expanded row treats its finder patterns apart. A row starts with a guard space and bar, and every pair of
-    /// symbol characters holds a finder of 15 modules after its first character of 17, so the finders start at module 19 and every 49 modules after it. Section
-    /// 11.4 treats elements 1 to 3 of the first finder of each two and elements 3 to 5 of the second, which start two modules into it.
+    /// Adds the 1X separator pattern of section 11.4 above the top row of a GS1 DataBar Expanded or GS1 DataBar Expanded Stacked linear component. The
+    /// separator is light over the four modules at each end and treats the finder patterns of the top row apart.
     /// </summary>
-    /// <param name="width">The width of the row in modules.</param>
-    /// <param name="starts">The buffer the first modules are written to.</param>
-    /// <returns>The number of finder patterns.</returns>
-    public static int ExpandedFinderStarts(int width, Span<int> starts)
+    /// <param name="linear">The linear component.</param>
+    public static void AddExpandedSeparator(ref BarcodeSymbol linear)
     {
-        int count = 0;
-        for (int start = 19, k = 0; start + FinderSeparatorModules <= width; start += 49, k++)
-        {
-            int first = (k & 1) == 0 ? start : start + 2;
-            if (first + FinderSeparatorModules <= width)
-            {
-                starts[count++] = first;
-            }
-        }
-
-        return count;
+        BarcodeRow row = linear.Rows[0];
+        InlineArray16<int> finderStorage = default;
+        Span<int> finders = finderStorage;
+        int finderCount = ExpandedFinderStarts(BarcodeSymbol.RunWidth(linear.Runs.Slice(row.RunStart, row.RunCount)), finders);
+        AddSeparator(ref linear, 4, 4, finders[..finderCount], false);
     }
 
     /// <summary>
@@ -298,6 +289,29 @@ internal static class Gs1CompositeLayout
     {
         int pixels = options.ModulePixels(parts[0].XDimension);
         return new PointF(linearOrigin.X + (offset * pixels), linearOrigin.Y - (parts[1].HeightInModules * pixels));
+    }
+
+    /// <summary>
+    /// Writes where the separator of a GS1 DataBar Expanded row treats its finder patterns apart. A row starts with a guard space and bar, and every pair of
+    /// symbol characters holds a finder of 15 modules after its first character of 17, so the finders start at module 19 and every 49 modules after it. Section
+    /// 11.4 treats elements 1 to 3 of the first finder of each two and elements 3 to 5 of the second, which start two modules into it.
+    /// </summary>
+    /// <param name="width">The width of the row in modules.</param>
+    /// <param name="starts">The buffer the first modules are written to.</param>
+    /// <returns>The number of finder patterns.</returns>
+    private static int ExpandedFinderStarts(int width, Span<int> starts)
+    {
+        int count = 0;
+        for (int start = 19, k = 0; start + FinderSeparatorModules <= width; start += 49, k++)
+        {
+            int first = (k & 1) == 0 ? start : start + 2;
+            if (first + FinderSeparatorModules <= width)
+            {
+                starts[count++] = first;
+            }
+        }
+
+        return count;
     }
 
     /// <summary>

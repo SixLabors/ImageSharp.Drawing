@@ -12,6 +12,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// </summary>
 public class Code11SymbologyTests
 {
+    /// <summary>
+    /// The bar and space widths match the reference implementation for every character of the character set.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="reference">The reference run string.</param>
     [Theory]
     [InlineData("123-45", "113311311131131131331111113111113131313111113311")]
     [InlineData("0123456789", "113311111131311131131131331111113131313111133111111331311311311111113311")]
@@ -35,8 +40,8 @@ public class Code11SymbologyTests
             reference[..^1], SymbolEncoder.Read(new Code11Symbology(CheckCharacterMode.Compute), text, new BarcodeOptions(), SymbolEncoder.RunString));
 
     /// <summary>
-    /// Supplied check characters are validated against the data and carried once, so the symbol is the one the calculated check characters produce. Ten
-    /// characters carry one check character and twelve carry two, so eleven cannot carry a valid check and are rejected.
+    /// The encoder validates supplied check characters against the data and carries them once. The symbol is then the one that the calculated check
+    /// characters produce.
     /// </summary>
     /// <param name="text">The data with its check characters.</param>
     /// <param name="data">The data alone.</param>
@@ -51,6 +56,11 @@ public class Code11SymbologyTests
         Assert.Equal(computed, validated);
     }
 
+    /// <summary>
+    /// The encoder rejects a supplied check character that does not match the data. Ten characters carry one check character and twelve carry two, so the
+    /// encoder also rejects eleven characters. A single character cannot carry data and a check character, so the encoder rejects it too.
+    /// </summary>
+    /// <param name="text">The data with its check characters.</param>
     [Theory]
     [InlineData("123-456")]
     [InlineData("012345678904")]
@@ -95,6 +105,10 @@ public class Code11SymbologyTests
     public void SpansSevenOrNineModulesPerCharacter(string text, int expected)
         => Assert.Equal(expected, SymbolEncoder.Read(new Code11Symbology(), text, new BarcodeOptions(), SymbolEncoder.RunSum));
 
+    /// <summary>
+    /// The encoder rejects an empty text and any character other than a digit or the dash.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("")]
     [InlineData("12 34")]

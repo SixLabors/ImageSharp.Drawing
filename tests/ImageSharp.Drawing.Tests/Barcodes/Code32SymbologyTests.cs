@@ -13,6 +13,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// </summary>
 public class Code32SymbologyTests
 {
+    /// <summary>
+    /// The bar and space widths match the reference implementation. Eight digits and the same digits with their check digit give the same symbol.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expected">The reference run string.</param>
     [Theory]
     [InlineData("01234567", "1311313111111331311131311311111131113311113111331111311311311111331131131131311")]
     [InlineData("012345676", "1311313111111331311131311311111131113311113111331111311311311111331131131131311")]
@@ -35,13 +40,17 @@ public class Code32SymbologyTests
         Assert.Equal("A012345676", Assert.Single(texts));
     }
 
+    /// <summary>
+    /// The encoder rejects a supplied check digit that does not match the section 3 calculation. The check digit of 01234567 is 6, not 5.
+    /// </summary>
     [Fact]
     public void RejectsWrongCheckDigit()
         => Assert.Throws<ArgumentException>(() => Encode("012345675"));
 
     /// <summary>
-    /// The AIC code is eight digits and an optional check digit, so anything else is rejected, as is a non-digit.
+    /// The AIC code is eight digits and an optional check digit. The encoder rejects any other length and any character that is not a digit.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("0123456")]
     [InlineData("0123456789")]
@@ -54,6 +63,8 @@ public class Code32SymbologyTests
     /// AIC code carries six zeros. The highest is 099999993, whose base 32 places are 2, 31, 11, 24, 7 and 25. A Code 39 symbol of those characters draws its
     /// wide elements three modules wide, as a Code 32 symbol does at 1 pixel a module.
     /// </summary>
+    /// <param name="text">The AIC code to encode.</param>
+    /// <param name="expected">The six base 32 characters that the symbol carries.</param>
     [Theory]
     [InlineData("00000000", "000000")]
     [InlineData("09999999", "2ZCS7T")]

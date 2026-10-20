@@ -48,6 +48,11 @@ internal static class UltracodeEncoder
     private const int MessageHeader = 3;
 
     /// <summary>
+    /// The tiles outside the message and its check codewords: the tile count, the separator and the check codeword count.
+    /// </summary>
+    private const int StructuralTiles = 3;
+
+    /// <summary>
     /// The modules of a tile, all in one column.
     /// </summary>
     private const int TileHeight = 5;
@@ -63,13 +68,14 @@ internal static class UltracodeEncoder
     private const int RowPitch = TileHeight + 1;
 
     /// <summary>
-    /// The columns left of the first tile column: the black edge, the finder, the data column count code and the vertical timing column, then a light
-    /// column. The right edge adds one more, so a symbol is its tile columns plus six.
+    /// The columns left of the first tile column: the black edge, a timing column, the column of the data column count code, a black column and a light
+    /// column. The right edge adds one more column, so a symbol is its tile columns plus six.
     /// </summary>
     private const int LeftColumns = 5;
 
     /// <summary>
-    /// The column of the first vertical timing pattern; the others stand every <see cref="TimingSpacing"/> columns after it.
+    /// The column that the vertical timing columns count from. They stand every <see cref="TimingSpacing"/> columns after it. The finder draws this column
+    /// black.
     /// </summary>
     private const int FirstTimingColumn = 3;
 
@@ -187,11 +193,11 @@ internal static class UltracodeEncoder
         // The width is the fewest tile columns that hold every tile with the three structural tiles; the tiles left over are pads. The largest symbol holds
         // 282 tiles, so a width up to MaximumColumns always holds them.
         int tileColumns = height.FewestColumns;
-        int pads = (DataColumns(tileColumns) * height.TileRows) - MessageHeader - tileCount;
+        int pads = (DataColumns(tileColumns) * height.TileRows) - StructuralTiles - tileCount;
         while (pads < 0 && tileColumns < MaximumColumns)
         {
             tileColumns++;
-            pads = (DataColumns(tileColumns) * height.TileRows) - MessageHeader - tileCount;
+            pads = (DataColumns(tileColumns) * height.TileRows) - StructuralTiles - tileCount;
         }
 
         // The message is three header codewords and then one codeword a character, so the division reads it from the text and needs no buffer. The check

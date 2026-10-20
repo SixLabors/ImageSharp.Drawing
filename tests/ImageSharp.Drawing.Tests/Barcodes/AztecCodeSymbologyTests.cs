@@ -133,7 +133,10 @@ public class AztecCodeSymbologyTests
         },
         {
             "Auto",
-            "Aztec Code is a matrix code invented by Andrew Longacre, Jr. and Robert Hussey in 1995. Aztec Code is a matrix code invented by Andrew Longacre, Jr. and Robert Hussey in 1995. Aztec Code is a matrix code invented by Andrew Longacre, Jr. and Robert Hussey in 1995. Aztec Code is a matrix code invented by Andrew Longacre, Jr. and Robert Hussey in 1995. ",
+            "Aztec Code is a matrix code invented by Andrew Longacre, Jr. and Robert Hussey in 1995. " +
+            "Aztec Code is a matrix code invented by Andrew Longacre, Jr. and Robert Hussey in 1995. " +
+            "Aztec Code is a matrix code invented by Andrew Longacre, Jr. and Robert Hussey in 1995. " +
+            "Aztec Code is a matrix code invented by Andrew Longacre, Jr. and Robert Hussey in 1995. ",
             23,
             0,
             57,
@@ -335,7 +338,10 @@ public class AztecCodeSymbologyTests
         },
         {
             "Full",
-            "Aztec Code is a matrix code invented by Andrew Longacre, Jr. and Robert Hussey in 1995. Aztec Code is a matrix code invented by Andrew Longacre, Jr. and Robert Hussey in 1995. Aztec Code is a matrix code invented by Andrew Longacre, Jr. and Robert Hussey in 1995. Aztec Code is a matrix code invented by Andrew Longacre, Jr. and Robert Hussey in 1995. ",
+            "Aztec Code is a matrix code invented by Andrew Longacre, Jr. and Robert Hussey in 1995. " +
+            "Aztec Code is a matrix code invented by Andrew Longacre, Jr. and Robert Hussey in 1995. " +
+            "Aztec Code is a matrix code invented by Andrew Longacre, Jr. and Robert Hussey in 1995. " +
+            "Aztec Code is a matrix code invented by Andrew Longacre, Jr. and Robert Hussey in 1995. ",
             10,
             23,
             113,
@@ -537,6 +543,16 @@ public class AztecCodeSymbologyTests
         },
     };
 
+    /// <summary>
+    /// The module grid of each symbol matches the reference implementation. The cases cover the automatic size, a fixed full-range layer count, compact
+    /// symbols and HIBC data.
+    /// </summary>
+    /// <param name="kind">The symbology: Auto, Full, Compact or Hibc.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="percentage">The error correction percentage.</param>
+    /// <param name="layers">The number of layers, or 0 for the smallest symbol that holds the data.</param>
+    /// <param name="side">The side of the symbol in modules.</param>
+    /// <param name="expected">The reference module grid.</param>
     [Theory]
     [MemberData(nameof(MatchesReferenceGridData))]
     public void MatchesReferenceGrid(string kind, string text, int percentage, int layers, int side, string expected)
@@ -606,6 +622,7 @@ public class AztecCodeSymbologyTests
     public void CompactHoldsAtMost64DataCodewords()
     {
         AztecCodeCompactSymbology symbology = new(5);
+
         SymbolEncoder.Encode(symbology, new string('0', 126), new BarcodeOptions(), static (ref symbol) =>
             Assert.Equal(27, symbol.Columns));
 
@@ -772,6 +789,13 @@ public class AztecCodeSymbologyTests
             Assert.Equal(expected, SymbolEncoder.ModuleGrid(ref symbol)));
     }
 
+    /// <summary>
+    /// Creates the Aztec Code symbology of a case of <see cref="MatchesReferenceGridData"/>.
+    /// </summary>
+    /// <param name="kind">The symbology: Auto, Full, Compact or Hibc.</param>
+    /// <param name="percentage">The error correction percentage.</param>
+    /// <param name="layers">The number of layers, or 0 for the smallest symbol that holds the data.</param>
+    /// <returns>The symbology.</returns>
     private static BarcodeSymbology Create(string kind, int percentage, int layers)
         => kind switch
         {

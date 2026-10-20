@@ -9,7 +9,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
 /// Measures or draws an encoded symbol through the emitter of its kind. The drawing endpoints, the measuring endpoints and the composites share this one choice
-/// of emitter. A symbol shapes its text one time: <see cref="Shape"/> writes the lines and the blocks, and the layout of each measure and draw reads them.
+/// of emitter. <see cref="Shape"/> writes one text block and one measured line for each text placement, and the layout of each measure and draw reads them.
 /// </summary>
 internal static class BarcodeEmitter
 {
@@ -81,7 +81,7 @@ internal static class BarcodeEmitter
     }
 
     /// <summary>
-    /// Shapes the text of the symbol one time: one text block and one measured line for each text placement. A hexagonal symbol prints no text.
+    /// Shapes the text of the symbol: one text block and one measured line for each text placement. A hexagonal symbol prints no text.
     /// </summary>
     /// <param name="symbol">The encoded symbol.</param>
     /// <param name="options">The sizing and painting options.</param>

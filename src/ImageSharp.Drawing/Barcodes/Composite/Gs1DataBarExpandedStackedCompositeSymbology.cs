@@ -43,7 +43,7 @@ public sealed class Gs1DataBarExpandedStackedCompositeSymbology : CompositeBarco
     }
 
     /// <summary>
-    /// Gets the number of segments in a full row of the linear component. The last row may hold fewer.
+    /// Gets the number of segments in a full row of the linear component. The last row can hold fewer.
     /// </summary>
     public int Segments { get; }
 
@@ -87,11 +87,7 @@ public sealed class Gs1DataBarExpandedStackedCompositeSymbology : CompositeBarco
         }
 
         // The separator stands above the top row, which reads left to right like a GS1 DataBar Expanded symbol.
-        BarcodeRow row = parts[0].Rows[0];
-        InlineArray16<int> finderStorage = default;
-        Span<int> finders = finderStorage;
-        int finderCount = Gs1CompositeLayout.ExpandedFinderStarts(BarcodeSymbol.RunWidth(parts[0].Runs.Slice(row.RunStart, row.RunCount)), finders);
-        Gs1CompositeLayout.AddSeparator(ref parts[0], 4, 4, finders[..finderCount], false);
+        Gs1CompositeLayout.AddExpandedSeparator(ref parts[0]);
         Gs1CompositeLayout.BuildComponent(second, Gs1CompositeComponent.CcA, Columns, 0, parts[0].XDimension, options, ref parts[1]);
     }
 

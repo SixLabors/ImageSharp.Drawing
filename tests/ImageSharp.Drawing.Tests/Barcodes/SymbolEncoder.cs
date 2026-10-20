@@ -9,7 +9,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
 /// Encodes text into a <see cref="BarcodeSymbol"/> the way the drawing and measuring paths do. The symbol is a local, the symbology encodes into it, the test
-/// reads it, and the symbol then returns any array it rented.
+/// reads it, and then the symbol releases each array it rented.
 /// </summary>
 internal static class SymbolEncoder
 {
@@ -53,7 +53,7 @@ internal static class SymbolEncoder
     public const float MicrometreDpi = 25400F;
 
     /// <summary>
-    /// Encodes the text and returns the storage the symbol rented.
+    /// Encodes the text, then releases the storage the symbol rented.
     /// </summary>
     /// <param name="symbology">The symbology to encode with.</param>
     /// <param name="text">The text to encode.</param>
@@ -62,7 +62,7 @@ internal static class SymbolEncoder
         => Encode(symbology, text, options, static (ref _) => { });
 
     /// <summary>
-    /// Encodes the text, checks the symbol and returns the storage the symbol rented.
+    /// Encodes the text, checks the symbol, then releases the storage the symbol rented.
     /// </summary>
     /// <param name="symbology">The symbology to encode with.</param>
     /// <param name="text">The text to encode.</param>
@@ -83,7 +83,7 @@ internal static class SymbolEncoder
     }
 
     /// <summary>
-    /// Encodes the text, reads a value from the symbol and returns the storage the symbol rented.
+    /// Encodes the text, reads a value from the symbol, then releases the storage the symbol rented.
     /// </summary>
     /// <typeparam name="T">The type of the value.</typeparam>
     /// <param name="symbology">The symbology to encode with.</param>
@@ -113,8 +113,8 @@ internal static class SymbolEncoder
     public static string RunString(ref BarcodeSymbol symbol) => string.Concat(symbol.Runs.ToArray());
 
     /// <summary>
-    /// Returns the run widths of a symbol in whole modules, separated by commas. A run narrower or wider than whole modules by less than half a module, such as
-    /// a bar or space of an EAN/UPC character that Table 5-10 of the GS1 General Specifications corrects by one thirteenth, rounds to its modules.
+    /// Returns the run widths of a symbol in whole modules, separated by commas. A run that differs from whole modules by less than half a module rounds to its
+    /// modules. An example is a bar or space of an EAN/UPC character that Table 5-10 of the GS1 General Specifications corrects by one thirteenth.
     /// </summary>
     /// <param name="symbol">The encoded symbol.</param>
     /// <returns>The run widths in modules.</returns>
@@ -259,8 +259,8 @@ internal static class SymbolEncoder
     }
 
     /// <summary>
-    /// Reads the bar states of a height modulated postal symbol: F for a full bar, A for an ascender, D for a descender and T for a tracker. An ascender reaches
-    /// the top of the bars and a descender reaches their bottom, so the states read the same at every module width.
+    /// Reads the bar states of a height modulated postal symbol: F for a full bar, A for an ascender, D for a descender and T for a tracker. An ascender
+    /// reaches the top of the bars and a descender reaches their bottom, so the states read the same at every module width.
     /// </summary>
     /// <param name="symbol">The encoded symbol.</param>
     /// <returns>The bar states.</returns>

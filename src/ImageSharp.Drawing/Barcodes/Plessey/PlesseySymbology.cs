@@ -27,8 +27,8 @@ public sealed class PlesseySymbology : BarcodeSymbology
     /// <summary>
     /// Initializes a new instance of the <see cref="PlesseySymbology"/> class.
     /// </summary>
-    /// <param name="validateCheckCharacters"> Whether the input ends with the two check characters, which the encoder validates, rather than with data, for
-    /// which the encoder calculates them. </param>
+    /// <param name="validateCheckCharacters">Whether the input ends with the two check characters, which the encoder validates, rather than with data, for
+    /// which the encoder calculates them.</param>
     public PlesseySymbology(bool validateCheckCharacters)
         : this(validateCheckCharacters, false)
     {
@@ -37,9 +37,9 @@ public sealed class PlesseySymbology : BarcodeSymbology
     /// <summary>
     /// Initializes a new instance of the <see cref="PlesseySymbology"/> class.
     /// </summary>
-    /// <param name="validateCheckCharacters"> Whether the input ends with the two check characters, which the encoder validates, rather than with data, for
-    /// which the encoder calculates them. </param>
-    /// <param name="printCheckCharacters"> Whether the two check characters are part of the human readable interpretation. </param>
+    /// <param name="validateCheckCharacters">Whether the input ends with the two check characters, which the encoder validates, rather than with data, for
+    /// which the encoder calculates them.</param>
+    /// <param name="printCheckCharacters">Whether the two check characters are part of the human readable interpretation.</param>
     public PlesseySymbology(bool validateCheckCharacters, bool printCheckCharacters)
     {
         this.ValidateCheckCharacters = validateCheckCharacters;

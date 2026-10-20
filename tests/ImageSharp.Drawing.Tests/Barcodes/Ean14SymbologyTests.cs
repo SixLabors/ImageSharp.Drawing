@@ -15,8 +15,10 @@ public class Ean14SymbologyTests
     private const string Expected = "2112324111312221222212132133111122321311233111232321211221321232212331112";
 
     /// <summary>
-    /// The check digit is optional, and the spaces a caller groups the number with are ignored, so all three forms encode to one symbol.
+    /// The check digit is optional, and the encoder ignores the spaces that a caller groups the number with. All three forms encode to the symbol of the
+    /// reference implementation.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("(01)0952123454321")]
     [InlineData("(01)09521234543213")]
@@ -32,9 +34,10 @@ public class Ean14SymbologyTests
         => Assert.Throws<ArgumentException>(() => Encode("(01)09521234543214"));
 
     /// <summary>
-    /// Section 3.3.2 gives Application Identifier (01) a 14 digit Global Trade Item Number, and the input carries the element string syntax, so anything else
-    /// is rejected.
+    /// Section 3.3.2 gives Application Identifier (01) a 14 digit Global Trade Item Number, and the input carries the element string syntax. The encoder
+    /// rejects text without the (01) identifier, a different identifier, the wrong number of digits and a letter.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("09521234543213")]
     [InlineData("(02)09521234543213")]

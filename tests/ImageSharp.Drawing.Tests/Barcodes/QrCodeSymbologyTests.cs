@@ -9,10 +9,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// Encoder tests for <see cref="QrCodeSymbology"/>, <see cref="MicroQrCodeSymbology"/>, <see cref="D3AqrSymbology"/> and the GS1, GS1 Digital Link and HIBC QR
 /// Code symbologies. Each expected grid is the module grid of an independent reference implementation, taken through its raw encoding API with the error
 /// correction level fixed and Kanji mode off, so the mode segments, the version, the error correction, the module placement, the data mask and the format and
-/// version information all show up here. That implementation scores the data masks with placeholders in the format information modules, and section 6.8.2.1
-/// evaluates "the complete symbol", so where that changes the mask the expected grid is the reference grid with its data modules masked by the pattern chosen
-/// over the complete symbol, and the format information of that pattern. A grid row is the modules from the left as hexadecimal digits, the leftmost module
-/// the most significant bit, padded with light modules to whole digits.
+/// version information all show up here. That implementation scores the data masks with placeholders in the format information modules. Section 6.8.2.1
+/// evaluates "the complete symbol". Where that changes the mask, the expected grid is the reference grid with two changes: the data modules use the mask that
+/// the complete symbol selects, and the format information is the format information of that mask. A grid row is the modules from the left as hexadecimal
+/// digits, the leftmost module the most significant bit, padded with light modules to whole digits.
 /// </summary>
 public class QrCodeSymbologyTests
 {
@@ -1629,6 +1629,15 @@ public class QrCodeSymbologyTests
         },
     };
 
+    /// <summary>
+    /// The QR Code or Micro QR Code symbol of each case has the size and the module grid of the reference grid.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="micro"><see langword="true"/> for a Micro QR Code symbol; otherwise, a QR Code symbol.</param>
+    /// <param name="level">The error correction level.</param>
+    /// <param name="version">The fixed version, or 0 for the smallest version that holds the data.</param>
+    /// <param name="size">The expected number of modules on each side.</param>
+    /// <param name="expected">The expected grid.</param>
     [Theory]
     [MemberData(nameof(QrCode_MatchesReferenceGridData))]
     public void QrCode_MatchesReferenceGrid(string text, bool micro, QrErrorCorrectionLevel level, int version, int size, string expected)
@@ -1655,27 +1664,27 @@ public class QrCodeSymbologyTests
     }
 
     /// <summary>
-    /// Table 7 of ISO/IEC 18004: a version 40-L symbol holds 7089 digits, the most any symbol holds.
+    /// Table 7 of ISO/IEC 18004: a version 40-L symbol holds 7089 digits, the most any symbol holds. The symbology rejects 7090 digits.
     /// </summary>
     [Fact]
     public void QrCode_RejectsDataLargerThanTheLargestSymbol()
         => Assert.Throws<ArgumentOutOfRangeException>(() => Encode(new QrCodeSymbology(QrErrorCorrectionLevel.L), Digits(7090)));
 
     /// <summary>
-    /// Table 7: a version 1-H symbol holds 17 digits, so 18 digits do not fit it.
+    /// Table 7: a version 1-H symbol holds 17 digits. A symbology fixed at that version rejects 18 digits.
     /// </summary>
     [Fact]
     public void QrCode_RejectsDataLargerThanTheFixedVersion()
         => Assert.Throws<ArgumentException>(() => Encode(new QrCodeSymbology(QrErrorCorrectionLevel.H, 1), Digits(18)));
 
     /// <summary>
-    /// Section 6.3.4: Byte mode carries ISO/IEC 8859-1, so a character above U+00FF is rejected.
+    /// Section 6.3.4: Byte mode carries ISO/IEC 8859-1. The symbology rejects a character above U+00FF.
     /// </summary>
     [Fact]
     public void QrCode_RejectsCharactersAboveTheByteRange() => Assert.Throws<ArgumentException>(() => Encode(new QrCodeSymbology(), "Ā"));
 
     /// <summary>
-    /// Sections 6.3.3 and 6.3.4: version M1 holds digits only, and M2 has no Byte mode.
+    /// Sections 6.3.3 and 6.3.4: version M1 holds digits only, and M2 has no Byte mode. The symbology rejects a letter at M1 and a small letter at M2.
     /// </summary>
     [Fact]
     public void MicroQrCode_RejectsModesTheVersionDoesNotHave()
@@ -1685,7 +1694,8 @@ public class QrCodeSymbologyTests
     }
 
     /// <summary>
-    /// Section 6.5.1 and Table 13: Micro QR Code has no level H, M1 has error detection only and only M4 has level Q.
+    /// Section 6.5.1 and Table 13: Micro QR Code has no level H, M1 has error detection only and only M4 has level Q. The symbology rejects level H, level M
+    /// at M1 and level Q at M3.
     /// </summary>
     [Fact]
     public void MicroQrCode_RejectsLevelsTheVersionDoesNotHave()
@@ -2592,7 +2602,7 @@ public class QrCodeSymbologyTests
         });
 
     /// <summary>
-    /// The two arms carry 14 bits, so the category is 0 to 16383.
+    /// The two arms carry 14 bits, so the category is 0 to 16383. The symbology rejects -1 and 16384.
     /// </summary>
     [Fact]
     public void D3Aqr_RejectsCategoriesOutsideFourteenBits()
@@ -3022,9 +3032,15 @@ public class QrCodeSymbologyTests
         });
     }
 
+    /// <summary>
+    /// When the symbology validates the check character, it rejects input whose last character is not the check character of the data.
+    /// </summary>
     [Fact]
     public void HibcQrCode_RejectsAnIncorrectCheckCharacter() => Assert.Throws<ArgumentException>(() => Encode(new HibcQrCodeSymbology(true), "A123BJC5D6E70"));
 
+    /// <summary>
+    /// GS1 QR Code takes element strings with each Application Identifier in parentheses. It rejects digits without the parentheses.
+    /// </summary>
     [Fact]
     public void Gs1QrCode_RejectsDataOutsideElementStringSyntax()
         => Assert.Throws<ArgumentException>(() => Encode(new Gs1QrCodeSymbology(), "0109521234543213"));
@@ -3055,6 +3071,7 @@ public class QrCodeSymbologyTests
     public void Gs1DigitalLinkQrCode_PrintsTheElementStringsOfTheUri()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
+
         string[] texts = SymbolEncoder.Read(
             new Gs1DigitalLinkQrCodeSymbology(),
             "https://id.gs1.org/01/09521234543213/22/ABC%2D123?99=XYZ-987",
@@ -3074,6 +3091,7 @@ public class QrCodeSymbologyTests
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
 
         Assert.Equal("*+A123BJC5D6E71G*", Assert.Single(SymbolEncoder.Read(new HibcQrCodeSymbology(), "A123BJC5D6E71", options, SymbolEncoder.Texts)));
+
         Assert.Equal(
             "*+A123BJC5D6E71/\n$$52ØØ151ØX3C*",
             Assert.Single(SymbolEncoder.Read(new HibcQrCodeSymbology(), "A123BJC5D6E71/$$52001510X3", options, SymbolEncoder.Texts)));

@@ -93,12 +93,18 @@ public class Code49SymbologyTests
         },
     };
 
+    /// <summary>
+    /// The bar and space widths of every data row match the reference implementation. A separator row stands between two data rows.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expected">The reference run widths of each data row, separated by vertical bars.</param>
     [Theory]
     [MemberData(nameof(Code49_MatchesReferenceRowsData))]
     public void Code49_MatchesReferenceRows(string text, string expected)
         => Encode(text, (ref symbol) =>
         {
             string[] rows = expected.Split('|');
+
             Assert.Equal((rows.Length * 2) - 1, symbol.Rows.Length);
             for (int i = 0; i < rows.Length; i++)
             {
@@ -117,6 +123,8 @@ public class Code49SymbologyTests
     /// <summary>
     /// Section 2.2.2 lists the code characters of five digit runs and their remainders.
     /// </summary>
+    /// <param name="text">The digits to encode.</param>
+    /// <param name="expected">The first code characters of the symbol.</param>
     [Theory]
     [InlineData("12345", new[] { 5, 17, 9 })]
     [InlineData("123456", new[] { 5, 17, 9, 6 })]
@@ -126,6 +134,7 @@ public class Code49SymbologyTests
     public void Code49_NumericEncodationFollowsSection222(string text, int[] expected)
     {
         int[] codes = Codes(text);
+
         Assert.Equal(expected, codes[..expected.Length]);
 
         // Table 8: a symbol that starts in numeric encodation has starting mode 2, and section 2.1.3 puts it in Cr7 of a two row symbol as 7(2 - 2) + 2.
@@ -143,6 +152,7 @@ public class Code49SymbologyTests
             for (int i = 0; i < symbol.Rows.Length; i++)
             {
                 BarcodeRow row = symbol.Rows[i];
+
                 Assert.Equal(70, SymbolEncoder.RowRuns(ref symbol, row).Sum());
                 if ((i & 1) == 1)
                 {
@@ -172,6 +182,7 @@ public class Code49SymbologyTests
 
         BarcodeOptions options = new() { BarHeight = 12F * BarcodeSymbology.DefaultXDimension };
         ApproximateFloatComparer comparer = new(1e-4F);
+
         SymbolEncoder.Encode(new Code49Symbology(), "A", options, (ref symbol) =>
         {
             Assert.All(SymbolEncoder.RowBarHeights(ref symbol, symbol.Rows[0]), height => Assert.Equal(12F, height, comparer));
@@ -230,6 +241,7 @@ public class Code49SymbologyTests
     {
         int[] codes = new int[64];
         int count = Code49Encoder.Encode(text, codes);
+
         return codes[..count];
     }
 }

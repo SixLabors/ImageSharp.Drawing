@@ -100,14 +100,17 @@ internal static class Interleaved2Of5Encoder
     /// <param name="symbol">The symbol to write.</param>
     public static void BuildSymbol(ReadOnlySpan<char> digits, ReadOnlySpan<char> readable, BarcodeOptions options, double xDimension, ref BarcodeSymbol symbol)
     {
+        // The quiet zone of section 3.2 of AIM USS-I 2/5 is ten modules, or 2.54 mm when that is wider.
+        float quietZone = MathF.Max(QuietZone, (float)(MinimumQuietZoneMillimetres / xDimension));
+
         // Every digit has the same width, so the symbol length that sets the proportional bar height is known before the runs are written.
-        float symbolLength = WidthInModules(digits.Length) + (2 * UssQuietZone(xDimension));
+        float symbolLength = (digits.Length * ModulesPerDigit) + StartStopModules + (2 * quietZone);
         float nominalBarHeight = MathF.Max(symbolLength * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
         Interleaved2Of5Layout layout = new()
         {
             XDimension = xDimension,
             NominalBarHeight = nominalBarHeight,
-            QuietZone = UssQuietZone(xDimension),
+            QuietZone = quietZone,
             TextClearance = BarcodeTextPlacement.Clearance,
             NarrowElement = 1,
             WideElement = WideElement,
@@ -168,7 +171,7 @@ internal static class Interleaved2Of5Encoder
         heights.Fill(barHeight);
         tops.Fill(bearerBarThickness);
 
-        if (options.Font is not null && readable.Length > 0)
+        if (options.Font is not null)
         {
             float textEdge = bearerBarThickness + barHeight + bearerBarThickness + layout.TextClearance;
             symbol.ReserveText(1, readable.Length);
@@ -177,13 +180,6 @@ internal static class Interleaved2Of5Encoder
 
         symbol.EndLinear(layout.QuietZone, layout.QuietZone, bearerBarThickness, runUnit, false);
     }
-
-    /// <summary>
-    /// Returns the quiet zone of section 3.2 of AIM USS-I 2/5 in modules: ten modules, or 2.54 mm when that is wider.
-    /// </summary>
-    /// <param name="xDimension">The X dimension in millimetres.</param>
-    /// <returns>The quiet zone in modules.</returns>
-    private static float UssQuietZone(double xDimension) => MathF.Max(QuietZone, (float)(MinimumQuietZoneMillimetres / xDimension));
 
     /// <summary>
     /// Calculates the optional check digit of section 2.5 of AIM USS-I 2/5 by the modulo 10 calculation of Appendix C: the digits are weighted 3 and 1
@@ -203,12 +199,4 @@ internal static class Interleaved2Of5Encoder
 
         return (10 - (sum % 10)) % 10;
     }
-
-    /// <summary>
-    /// Returns the width of a symbol in modules, quiet zones excluded. Every digit has two wide and three narrow elements, so the width depends only on the
-    /// digit count.
-    /// </summary>
-    /// <param name="digitCount">The number of digits the symbol carries.</param>
-    /// <returns>The width in modules.</returns>
-    private static int WidthInModules(int digitCount) => (digitCount * ModulesPerDigit) + StartStopModules;
 }

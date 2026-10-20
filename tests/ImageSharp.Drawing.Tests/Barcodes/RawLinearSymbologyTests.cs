@@ -11,13 +11,17 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// </summary>
 public class RawLinearSymbologyTests
 {
+    /// <summary>
+    /// Each digit of the input is the width of one bar or space, starting with a bar. The input has an even number of digits, so a zero width bar follows
+    /// the last space.
+    /// </summary>
     [Fact]
     public void MatchesReferenceRuns()
         => Assert.Equal("3,3,1,1,3,2,1,3,1,3,1,3,4,1,1,1,2,2,1,3,1,3,1,3,1,2,1,3,1,2,0", Encode("331132131313411122131313121312"));
 
     /// <summary>
-    /// An odd number of digits ends on a bar. An even number ends on a space, which stays behind a bar of zero width, so the symbol keeps its width and no
-    /// quiet zone is drawn.
+    /// An odd number of digits ends on a bar. An even number ends on a space, which stays behind a bar of zero width, so the symbol keeps its width. The
+    /// symbol has no quiet zones.
     /// </summary>
     [Fact]
     public void KeepsATrailingSpaceBehindAZeroWidthBar()
@@ -33,13 +37,21 @@ public class RawLinearSymbologyTests
         });
     }
 
+    /// <summary>
+    /// The symbol prints no human readable line, also when the caller sets a font.
+    /// </summary>
     [Fact]
     public void PrintsNoLine()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
+
         Assert.Empty(SymbolEncoder.Read(new RawLinearSymbology(), "123", options, SymbolEncoder.Texts));
     }
 
+    /// <summary>
+    /// The input is the digits 1 to 9 only. The symbology rejects empty input, a zero, a letter and full width digits.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("")]
     [InlineData("102")]

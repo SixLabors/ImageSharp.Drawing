@@ -9,10 +9,10 @@ using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="DataMatrixSymbology"/>, <see cref="DataMatrixRectangularSymbology"/> and <see cref="DataMatrixRectangularExtensionSymbology"/>.
-/// Each expected grid is the module grid of an independent reference implementation, taken through its raw encoding API, so the encodation schemes, the symbol
-/// size, the pad codewords, the error correction and the module placement all show up here. A grid row is the modules from the left as hexadecimal digits, the
-/// leftmost module the most significant bit, padded with light modules to whole digits.
+/// Encoder tests for <see cref="DataMatrixSymbology"/>, <see cref="DataMatrixRectangularSymbology"/>, <see cref="DataMatrixRectangularExtensionSymbology"/>
+/// and the GS1, GS1 Digital Link, HIBC and Mailmark 2D symbologies over them. The tests check the codewords, the symbol sizes, the finder pattern, the quiet
+/// zones, the human readable interpretation and the input rules against ISO/IEC 16022, the GS1 General Specifications, ANSI/HIBC 2.6 and the Mailmark barcode
+/// definition document.
 /// </summary>
 public class DataMatrixSymbologyTests
 {
@@ -59,15 +59,20 @@ public class DataMatrixSymbologyTests
     public void DataMatrix_MacroIsTheFirstCodeword(int macro, int codeword, string data)
     {
         int[] message = [macro, .. data];
+
         int[] codewords = Codewords(message, [62], 0);
+
         Assert.Equal(codeword, codewords[0]);
         Assert.DoesNotContain(codewords, c => c < 0);
     }
 
     /// <summary>
     /// Section 5.6.2 of the GS1 General Specifications: the finder pattern is a solid L one module wide on the left and bottom edges, and the opposite edges
-    /// alternate, with the upper right corner module light. Section 5.6.3.2: a symbol of 32 x 32 or more is divided into data regions by alignment patterns.
+    /// alternate, with the upper right corner module light. Section 5.6.3.2: alignment patterns divide a symbol of 32 x 32 or more into data regions.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="rows">The expected number of module rows.</param>
+    /// <param name="columns">The expected number of module columns.</param>
     [Theory]
     [InlineData("1234", 10, 10)]
     [InlineData("01234567890123456789012345678901234567890123456789", 22, 22)]
@@ -98,6 +103,11 @@ public class DataMatrixSymbologyTests
     /// Tables 5-32 and 5-33 of the GS1 General Specifications: the data codeword capacity of each size. Data of exactly that many codewords takes that size,
     /// and one codeword more takes the next size.
     /// </summary>
+    /// <param name="capacity">The data codeword capacity of the size.</param>
+    /// <param name="rows">The number of module rows of the size.</param>
+    /// <param name="columns">The number of module columns of the size.</param>
+    /// <param name="nextRows">The number of module rows of the next size.</param>
+    /// <param name="nextColumns">The number of module columns of the next size.</param>
     [Theory]
     [InlineData(3, 10, 10, 12, 12)]
     [InlineData(5, 12, 12, 14, 14)]
@@ -112,6 +122,9 @@ public class DataMatrixSymbologyTests
     /// <summary>
     /// Table 5-33 of the GS1 General Specifications: the rectangular sizes hold 5, 10, 16, 22, 32 and 49 data codewords.
     /// </summary>
+    /// <param name="capacity">The data codeword capacity of the size.</param>
+    /// <param name="rows">The number of module rows of the size.</param>
+    /// <param name="columns">The number of module columns of the size.</param>
     [Theory]
     [InlineData(5, 8, 18)]
     [InlineData(10, 8, 32)]
@@ -129,18 +142,32 @@ public class DataMatrixSymbologyTests
     public void DataMatrix_RejectsDataLargerThanTheLargestSymbol()
         => Assert.ThrowsAny<ArgumentException>(() => Encode(new DataMatrixSymbology(), Digits(3117)));
 
+    /// <summary>
+    /// Table 5-32 of the GS1 General Specifications: a 10 x 10 symbol holds 3 data codewords, which is 6 digits. A symbology fixed at that size rejects 8
+    /// digits.
+    /// </summary>
     [Fact]
     public void DataMatrix_RejectsDataLargerThanTheFixedSize()
         => Assert.Throws<ArgumentException>(() => Encode(new DataMatrixSymbology(10, 10), Digits(8)));
 
+    /// <summary>
+    /// ISO/IEC 16022 Table 2 encodes byte values only. The symbology rejects a character above 255.
+    /// </summary>
     [Fact]
     public void DataMatrix_RejectsCharactersAboveTheByteRange()
         => Assert.Throws<ArgumentException>(() => Encode(new DataMatrixSymbology(), "DMĀ"));
 
+    /// <summary>
+    /// Empty text carries no data. The symbology rejects it.
+    /// </summary>
     [Fact]
     public void DataMatrix_RejectsEmptyData()
         => Assert.ThrowsAny<ArgumentException>(() => Encode(new DataMatrixSymbology(), string.Empty));
 
+    /// <summary>
+    /// Each symbology accepts only the sizes of its own table. The square symbology rejects 11 x 11 and 8 x 48. The rectangular extension symbology rejects
+    /// 10 x 10.
+    /// </summary>
     [Fact]
     public void DataMatrix_RejectsSizesOutsideTheTables()
     {
@@ -162,6 +189,9 @@ public class DataMatrixSymbologyTests
             Assert.Equal(1, symbol.BottomQuietZone);
         });
 
+    /// <summary>
+    /// When the symbology validates the check character, it rejects input whose last character is not the check character of the data.
+    /// </summary>
     [Fact]
     public void HibcDataMatrix_RejectsAnIncorrectCheckCharacter()
     {
@@ -169,6 +199,9 @@ public class DataMatrixSymbologyTests
         Assert.Throws<ArgumentException>(() => Encode(new HibcDataMatrixRectangularSymbology(true), "A123BJC5D6E70"));
     }
 
+    /// <summary>
+    /// GS1 DataMatrix takes element strings with each Application Identifier in parentheses. It rejects digits without the parentheses.
+    /// </summary>
     [Fact]
     public void Gs1DataMatrix_RejectsDataOutsideElementStringSyntax()
         => Assert.Throws<ArgumentException>(() => Encode(new Gs1DataMatrixSymbology(), "0109521234543213"));
@@ -197,6 +230,7 @@ public class DataMatrixSymbologyTests
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
         string[] texts = SymbolEncoder.Read(new Gs1DataMatrixSymbology(), "(01)09520123456788(8200)http://www.abc.net", options, SymbolEncoder.Texts);
+
         Assert.Equal("(01)09520123456788", Assert.Single(texts));
     }
 
@@ -240,8 +274,30 @@ public class DataMatrixSymbologyTests
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
         string[] texts = SymbolEncoder.Read(new HibcDataMatrixSymbology(), "A123BJC5D6E71/$$52001510X3", options, SymbolEncoder.Texts);
+
         Assert.Equal("*+A123BJC5D6E71/\n$$52ØØ151ØX3C*", Assert.Single(texts));
     }
+
+    /// <summary>
+    /// Only a "/" inside the data joins primary and secondary data. The modulo 43 check character of "+A99950" is "/": the values 41, 10, 9, 9, 9, 5 and 0
+    /// sum to 83, and 83 modulo 43 is 40. That check character does not break the line.
+    /// </summary>
+    [Fact]
+    public void HibcDataMatrix_PrintsACheckCharacterSlashOnTheDataLine()
+    {
+        BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
+        string[] texts = SymbolEncoder.Read(new HibcDataMatrixSymbology(), "A99950", options, SymbolEncoder.Texts);
+
+        Assert.Equal("*+A9995Ø/*", Assert.Single(texts));
+    }
+
+    /// <summary>
+    /// When the symbology validates the check character, the input is at least one data character and then the check character. The symbology rejects a
+    /// single character.
+    /// </summary>
+    [Fact]
+    public void HibcDataMatrix_RejectsACheckCharacterWithoutData()
+        => Assert.ThrowsAny<ArgumentException>(() => Encode(new HibcDataMatrixSymbology(true), "A"));
 
     /// <summary>
     /// Section 4.14 rule 2a.iii of the GS1 General Specifications: the font is at least 2 mm high. A point is 1/72 inch, so a smaller font prints as the font
@@ -250,10 +306,10 @@ public class DataMatrixSymbologyTests
     [Fact]
     public void Gs1DataMatrix_TextIsAtLeastTwoMillimetresHigh()
     {
+        const string gs1 = "(01)03453120000011(17)191125(10)ABCD1234";
         BarcodeOptions small = new() { Dpi = 300F, Font = BarcodeFonts.OcrB.CreateFont(3F) };
         BarcodeOptions minimum = new() { Dpi = 300F, Font = BarcodeFonts.OcrB.CreateFont(2F * 72F / 25.4F) };
 
-        const string gs1 = "(01)03453120000011(17)191125(10)ABCD1234";
         Assert.Equal(
             BarcodeMeasurer.MeasureRenderableBounds(new Gs1DataMatrixSymbology(), minimum, PointF.Empty, gs1),
             BarcodeMeasurer.MeasureRenderableBounds(new Gs1DataMatrixSymbology(), small, PointF.Empty, gs1));
@@ -287,14 +343,8 @@ public class DataMatrixSymbologyTests
     [Fact]
     public void Mailmark2D_StartsWithTheC40Latch()
     {
-        string text = Mailmark2DFields + "ABC123";
-        int[] message = new int[text.Length];
-        for (int i = 0; i < text.Length; i++)
-        {
-            message[i] = text[i];
-        }
+        int[] codewords = Codewords(Mailmark2DFields + "ABC123", [36], 45);
 
-        int[] codewords = Codewords(message, [36], 45);
         Assert.Equal(230, codewords[0]);
 
         // C40 encodation packs three values as 1600 x C1 + 40 x C2 + C3 + 1, and the basic set gives the capital letters A to Z the values 14 to 39, so "JGB"
@@ -312,6 +362,7 @@ public class DataMatrixSymbologyTests
     public void Mailmark2D_ClearZoneAndModuleSizeFollowSectionTwoFour()
     {
         Mailmark2DSymbology symbology = new(Mailmark2DType.Type7);
+
         SymbolEncoder.Encode(symbology, Mailmark2DFields, new BarcodeOptions { Dpi = SymbolEncoder.MillimetreDpi }, static (ref symbol) =>
         {
             Assert.Equal(0.5, symbol.XDimension);
@@ -374,9 +425,13 @@ public class DataMatrixSymbologyTests
     public void Mailmark2D_AcceptsThePostcodeFormatsOfAppendixA(string destination, string returnToSender)
     {
         string text = "JGB 01210012341234567" + "8" + destination.PadRight(9) + "0" + returnToSender + "      ";
+
         Assert.Equal(24, Size(new Mailmark2DSymbology(Mailmark2DType.Type7), text).Rows);
     }
 
+    /// <summary>
+    /// Each Mailmark 2D type has a fixed size, which fixes the space for customer content. The symbology rejects customer content larger than that space.
+    /// </summary>
     [Fact]
     public void Mailmark2D_RejectsCustomerContentLargerThanTheType()
         => Assert.Throws<ArgumentException>(() => Encode(new Mailmark2DSymbology(Mailmark2DType.Type7), Mailmark2DFields + "ABCDEFGHIJ"));
@@ -413,6 +468,16 @@ public class DataMatrixSymbologyTests
     /// <param name="capacities">The data codeword capacities of the sizes the data may take, smallest first.</param>
     /// <returns>The data codewords.</returns>
     private static int[] Codewords(string text, int[] capacities)
+        => Codewords(text, capacities, 0);
+
+    /// <summary>
+    /// Encodes the characters of the text into data codewords.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="capacities">The data codeword capacities of the sizes the data may take, smallest first.</param>
+    /// <param name="c40Prefix">The number of leading characters that encode in C40 encodation.</param>
+    /// <returns>The data codewords.</returns>
+    private static int[] Codewords(string text, int[] capacities, int c40Prefix)
     {
         int[] message = new int[text.Length];
         for (int i = 0; i < text.Length; i++)
@@ -420,7 +485,7 @@ public class DataMatrixSymbologyTests
             message[i] = text[i];
         }
 
-        return Codewords(message, capacities, 0);
+        return Codewords(message, capacities, c40Prefix);
     }
 
     /// <summary>
@@ -434,9 +499,15 @@ public class DataMatrixSymbologyTests
     {
         int[] codewords = new int[DataMatrixCodewords.MaximumCodewords];
         int count = DataMatrixCodewords.Encode(message, capacities, c40Prefix, codewords, new int[DataMatrixCodewords.ScratchLength(message.Length)]);
+
         return codewords[..count];
     }
 
+    /// <summary>
+    /// Returns a string of digits that repeats 0 to 9. Each pair of digits is one data codeword of ASCII encodation.
+    /// </summary>
+    /// <param name="count">The number of digits.</param>
+    /// <returns>The digits.</returns>
     private static string Digits(int count)
     {
         StringBuilder builder = new(count);

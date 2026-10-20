@@ -54,7 +54,8 @@ public class Gs1DataTests
         => Assert.Throws<ArgumentException>(() => Encode("(01)09521234543213(10)" + batch));
 
     /// <summary>
-    /// An Application Identifier the GS1 General Specifications do not allocate has no format, so it is rejected, and so is data longer than the format allows.
+    /// An Application Identifier that the GS1 General Specifications do not allocate has no format, so the encoder rejects it. The encoder also rejects data
+    /// longer than the format allows.
     /// </summary>
     /// <param name="text">The element strings.</param>
     [Theory]
@@ -65,7 +66,7 @@ public class Gs1DataTests
 
     /// <summary>
     /// Section 4.13.1, Table 4-4: GTIN with the count of units contained (37), Serial Number (21) with the third party controlled serialised extension (235),
-    /// and two GTINs of different values, may not appear together.
+    /// and two GTINs of different values, cannot appear together.
     /// </summary>
     /// <param name="text">The element strings.</param>
     [Theory]
@@ -77,8 +78,8 @@ public class Gs1DataTests
 
     /// <summary>
     /// Section 4.13.2, Table 4-5: a batch or lot number, an expiration date and a serial number each require a GTIN or another key on the same physical
-    /// entity. The note of section 4.13.2: "This does not necessarily mean that the element strings need to appear in the same data carrier", so a symbol
-    /// without the key is accepted.
+    /// entity. The note of section 4.13.2: "This does not necessarily mean that the element strings need to appear in the same data carrier", so the encoder
+    /// accepts a symbol without the key.
     /// </summary>
     /// <param name="text">The element strings.</param>
     [Theory]
@@ -89,7 +90,7 @@ public class Gs1DataTests
         => Assert.Null(Record.Exception(() => Encode(text)));
 
     /// <summary>
-    /// An element string repeated with the same value is one item of data, so it is accepted.
+    /// An element string repeated with the same value is one item of data, so the encoder accepts it.
     /// </summary>
     [Fact]
     public void AcceptsARepeatedElementStringWithOneValue()
@@ -162,6 +163,7 @@ public class Gs1DataTests
         };
 
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(4F) };
+
         SymbolEncoder.Encode(symbology, text, options, static (ref symbol) => Assert.Equal(2F * 72F / 25.4F, symbol.TextMinimumSize, 1e-4F));
     }
 

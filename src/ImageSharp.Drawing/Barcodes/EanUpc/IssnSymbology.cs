@@ -47,8 +47,8 @@ public sealed class IssnSymbology : BarcodeSymbology
             throw new ArgumentException("ISSN requires the form NNNN-NNN with an optional check character.", nameof(text));
         }
 
-        // The hyphen at index 4 is checked above. Every other character is a digit, except that the check character at index 8 may be X. The message decodes
-        // the code point at the first other character, so a surrogate pair reports as the one character it is.
+        // The hyphen at index 4 is checked above. Every other character is a digit. The one exception is the check character at index 8, which can be X. The
+        // message decodes the code point at the first other character, so a surrogate pair reports as the one character it is.
         for (int i = 0; i < issn.Length; i++)
         {
             char character = issn[i];

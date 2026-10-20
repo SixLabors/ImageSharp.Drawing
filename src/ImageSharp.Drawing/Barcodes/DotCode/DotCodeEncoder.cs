@@ -59,56 +59,118 @@ internal static class DotCodeEncoder
     private const double RetryFloor = -99999999;
 
     /// <summary>
-    /// The codewords that have one value in code sets A, B and C.
+    /// The FNC1 codeword. It has this value in code sets A, B and C.
     /// </summary>
     private const int Fnc1Codeword = 107;
+
+    /// <summary>
+    /// The upper shift A codeword. It has this value in code sets A, B and C.
+    /// </summary>
     private const int UpperShiftA = 110;
+
+    /// <summary>
+    /// The upper shift B codeword. It has this value in code sets A, B and C.
+    /// </summary>
     private const int UpperShiftB = 111;
+
+    /// <summary>
+    /// The codeword that latches to binary mode. It has this value in code sets A, B and C.
+    /// </summary>
     private const int BinaryLatch = 112;
 
     /// <summary>
-    /// The codewords of code sets A and B that switch to code set C: a shift for two, three or four digit pairs, and a latch.
+    /// The codeword of code sets A and B that shifts to code set C for two digit pairs. The shifts for three and four digit pairs follow it.
     /// </summary>
     private const int ShiftC2 = 103;
+
+    /// <summary>
+    /// The codeword of code sets A and B that latches to code set C.
+    /// </summary>
     private const int LatchC = 106;
 
     /// <summary>
-    /// The codewords of code set A that switch to code set B: a shift for one to six characters from 96, and a latch.
+    /// The codeword of code set A that shifts to code set B for one character. The shifts for two to six characters follow it.
     /// </summary>
     private const int AShiftB1 = 96;
+
+    /// <summary>
+    /// The codeword of code set A that latches to code set B.
+    /// </summary>
     private const int ALatchB = 102;
 
     /// <summary>
-    /// The codewords of code set B that switch to code set A, and the CR LF pair.
+    /// The codeword of code set B that shifts to code set A.
     /// </summary>
     private const int BShiftA = 101;
+
+    /// <summary>
+    /// The codeword of code set B that latches to code set A.
+    /// </summary>
     private const int BLatchA = 102;
+
+    /// <summary>
+    /// The codeword of code set B for the CR LF pair.
+    /// </summary>
     private const int BCrLf = 96;
 
     /// <summary>
-    /// The codewords of code set C: the 17xxxxxx10 macro, the latch to code set A, a shift for one to four characters of code set B from 102, and the latch to
-    /// code set B.
+    /// The codeword of code set C for the 17xxxxxx10 macro.
     /// </summary>
     private const int CSeventeenTen = 100;
+
+    /// <summary>
+    /// The codeword of code set C that latches to code set A.
+    /// </summary>
     private const int CLatchA = 101;
+
+    /// <summary>
+    /// The codeword of code set C that shifts to code set B for one character. The shifts for two to four characters follow it.
+    /// </summary>
     private const int CShiftB1 = 102;
+
+    /// <summary>
+    /// The codeword of code set C that latches to code set B.
+    /// </summary>
     private const int CLatchB = 106;
 
     /// <summary>
-    /// The codewords of binary mode: a shift for two to seven digit pairs of code set C from 103, and the terminations to code sets A, B and C.
+    /// The codeword of binary mode that shifts to code set C for two digit pairs. The shifts for three to seven digit pairs follow it.
     /// </summary>
     private const int BinaryShiftC2 = 103;
+
+    /// <summary>
+    /// The codeword of binary mode that terminates to code set A.
+    /// </summary>
     private const int BinaryTerminateA = 109;
+
+    /// <summary>
+    /// The codeword of binary mode that terminates to code set B.
+    /// </summary>
     private const int BinaryTerminateB = 110;
+
+    /// <summary>
+    /// The codeword of binary mode that terminates to code set C.
+    /// </summary>
     private const int BinaryTerminateC = 111;
 
     /// <summary>
-    /// The codewords of code set B that a message starting with a macro header carries first: the headers [)&gt;RS05GS, [)&gt;RS06GS and [)&gt;RS12GS, and
-    /// [)&gt;RS followed by any two digits.
+    /// The first codeword of code set B of a message that starts with the macro header [)&gt;RS05GS.
     /// </summary>
     private const int Macro05 = 97;
+
+    /// <summary>
+    /// The first codeword of code set B of a message that starts with the macro header [)&gt;RS06GS.
+    /// </summary>
     private const int Macro06 = 98;
+
+    /// <summary>
+    /// The first codeword of code set B of a message that starts with the macro header [)&gt;RS12GS.
+    /// </summary>
     private const int Macro12 = 99;
+
+    /// <summary>
+    /// The first codeword of code set B of a message that starts with the macro header [)&gt;RS and any two other digits.
+    /// </summary>
     private const int MacroAny = 100;
 
     /// <summary>
@@ -263,7 +325,7 @@ internal static class DotCodeEncoder
         }
         else if (rows == 0)
         {
-            // The rows round up to hold the area, and grow by one when the sides would sum to an even number.
+            // The rows round up to hold the area. When the sides then sum to an even number, the rows grow by one.
             rows = (minimumArea + columns - 1) / columns;
             if (((rows + columns) & 1) == 0)
             {
@@ -335,8 +397,9 @@ internal static class DotCodeEncoder
 
     /// <summary>
     /// Returns the size of the smallest symbol near a width to height ratio that holds an area. The sides start from the exact sides of the area at the ratio,
-    /// rounded down. When their sum is odd, both grow by one if the area does not fit. When it is even, the side further below its exact value grows by one; if
-    /// the area still does not fit, the other side grows instead, and failing that the first side grows by two.
+    /// rounded down. When their sum is odd and the area does not fit, both sides grow by one. When their sum is even, the side further below its exact value
+    /// grows by one. If the area does not fit, that side goes back and the other side grows by one. If the area still does not fit, the first side grows by
+    /// two.
     /// </summary>
     /// <param name="minimumArea">The area to hold, in cells.</param>
     /// <param name="ratio">The width to height ratio.</param>
@@ -772,8 +835,8 @@ internal static class DotCodeEncoder
     }
 
     /// <summary>
-    /// Writes the codewords of a message. The analysis pass reads the message from its end and records, at each position, the runs ahead that each code set
-    /// could take; the encoding pass then walks the message from code set C, the starting set, and at each position emits the codewords its current set
+    /// Writes the codewords of a message. The analysis pass reads the message from its end. At each position, it records the runs ahead that each code set
+    /// can take. The encoding pass then walks the message from code set C, the starting set. At each position, it writes the codewords that its current set
     /// chooses.
     /// </summary>
     private ref struct CodewordWriter
@@ -794,7 +857,7 @@ internal static class DotCodeEncoder
         private readonly Span<int> aheadC;
 
         /// <summary>
-        /// The code set C units from a position that starts with a digit, or 0: the run a shift or latch to code set C would take.
+        /// The code set C units from a position that starts with a digit, or 0. A shift or latch to code set C at the position takes this run.
         /// </summary>
         private readonly Span<int> tryC;
 

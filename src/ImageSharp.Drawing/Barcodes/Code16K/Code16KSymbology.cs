@@ -18,7 +18,5 @@ public sealed class Code16KSymbology : BarcodeSymbology
 
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
-    {
-        Code16KEncoder.BuildSymbol(text, text, options, ref symbol);
-    }
+        => Code16KEncoder.BuildSymbol(text, text, options, ref symbol);
 }

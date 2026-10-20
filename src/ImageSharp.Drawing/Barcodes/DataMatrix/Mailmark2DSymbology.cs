@@ -172,7 +172,7 @@ public sealed class Mailmark2DSymbology : BarcodeSymbology
     /// inward code NAA and the delivery point NA, where A is a capital letter and N a digit.
     /// </summary>
     /// <param name="field">The field.</param>
-    /// <param name="destination"> Whether the field is the destination post code plus DPS, which may hold the outward code alone and holds the delivery point
+    /// <param name="destination"> Whether the field is the destination post code plus DPS, which can hold the outward code alone and holds the delivery point
     /// after the inward code, rather than the return to sender post code. </param>
     /// <returns><see langword="true"/> when the field holds a valid format.</returns>
     private static bool IsPostcode(ReadOnlySpan<char> field, bool destination)

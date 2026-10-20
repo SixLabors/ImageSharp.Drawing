@@ -10,9 +10,10 @@ using SixLabors.ImageSharp.Drawing.Processing;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Converts a matrix or dotted <see cref="BarcodeSymbol"/> into canvas commands. In a matrix symbol each run of adjacent dark modules in a row becomes one
-/// rectangle; in a dotted symbol each dark module becomes one circle. Either way the dark modules render through a single fill of one
-/// <see cref="BarcodePath"/>. Each text placement draws through one text command.
+/// Converts a matrix, dotted or colour <see cref="BarcodeSymbol"/> into canvas commands. In a matrix symbol each run of adjacent dark modules in a row becomes
+/// one rectangle, and the dark modules render through a single fill of one <see cref="BarcodePath"/>. In a dotted symbol each dark module becomes one circle,
+/// and the dots render through a single fill of one <see cref="BarcodePath"/>. In a colour symbol each run of one colour in a row becomes one rectangle, and
+/// each colour renders through one fill of one <see cref="BarcodePath"/>. Each text placement draws through one text command.
 /// </summary>
 internal static class MatrixEmitter
 {
@@ -80,16 +81,13 @@ internal static class MatrixEmitter
         // A matrix symbol has at most one text placement, also when its text has line breaks. The block keeps the options it was prepared with, its font and
         // alignment included.
         BarcodeTextPlacement placement = symbol.Text[0];
-        Font? scaledFont = null;
-        RichTextOptions textOptions = new(BarcodeTextOptionsFactory.Create(font, options.Dpi, symbol.TextWeight))
+        Font placementFont = placement.FontScale == 1F ? font : new Font(font, font.Size * placement.FontScale);
+        RichTextOptions textOptions = BarcodeTextOptionsFactory.Create(placementFont, options.Dpi, symbol.TextWeight);
+        textOptions.TextAlignment = placement.Alignment switch
         {
-            Font = ScaledFont(font, placement.FontScale, ref scaledFont),
-            TextAlignment = placement.Alignment switch
-            {
-                BarcodeTextAlignment.Left => TextAlignment.Start,
-                BarcodeTextAlignment.Right => TextAlignment.End,
-                _ => TextAlignment.Center,
-            },
+            BarcodeTextAlignment.Left => TextAlignment.Start,
+            BarcodeTextAlignment.Right => TextAlignment.End,
+            _ => TextAlignment.Center,
         };
 
         TextBlock block = new(symbol.TextOf(in placement), textOptions);
@@ -460,29 +458,6 @@ internal static class MatrixEmitter
     }
 
     /// <summary>
-    /// Returns the font a placement renders in: the font itself at a scale of 1, or the scaled font, built on first use and again only when the scale changes.
-    /// </summary>
-    /// <param name="font">The font of the human readable interpretation.</param>
-    /// <param name="scale">The scale of the placement.</param>
-    /// <param name="scaledFont">The scaled font of the last scaled placement, or <see langword="null"/>.</param>
-    /// <returns>The font for the placement.</returns>
-    private static Font ScaledFont(Font font, float scale, ref Font? scaledFont)
-    {
-        if (scale == 1F)
-        {
-            return font;
-        }
-
-        float size = font.Size * scale;
-        if (scaledFont is null || scaledFont.Size != size)
-        {
-            scaledFont = new Font(font, size);
-        }
-
-        return scaledFont;
-    }
-
-    /// <summary>
     /// Writes the parts of a run outside a hole: the part above the hole, the part below it, and the parts to its left and right within its height.
     /// </summary>
     /// <param name="run">The run.</param>
@@ -591,8 +566,8 @@ internal static class MatrixEmitter
             // Each edge rounds from its exact position onto the device pixel grid, so the modules stay crisp and rounding cannot drift across the symbol. The
             // positions are products of a whole module count and the module width, calculated in double from the corner of the symbol, and the edge two
             // neighbours share rounds to one pixel for both. The corner itself starts on a whole pixel. When a module is not a whole number of pixels, the
-            // modules alternate between two widths, and a corner between pixels would make that pattern depend on the width of the quiet zone, so the two outer
-            // rings of a finder pattern could round to different widths.
+            // modules alternate between two widths, and a corner between pixels makes that pattern depend on the width of the quiet zone. The two outer rings
+            // of a finder pattern can then round to different widths.
             this.SymbolOrigin = new PointF(symbolOrigin.X + leadingOffset, symbolOrigin.Y + topOffset);
             double symbolLeft = Math.Round(this.SymbolOrigin.X);
             double symbolTop = Math.Round(this.SymbolOrigin.Y);

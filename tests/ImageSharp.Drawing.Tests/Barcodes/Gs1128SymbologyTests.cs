@@ -12,6 +12,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// </summary>
 public class Gs1128SymbologyTests
 {
+    /// <summary>
+    /// The bar and space widths match the reference implementation. The cases cover predefined and variable length element strings and the separator.
+    /// </summary>
+    /// <param name="text">The element strings to encode.</param>
+    /// <param name="expected">The reference run string.</param>
     [Theory]
 
     // One element string with a predefined length from Table 7-6, so no separator is needed.
@@ -59,19 +64,22 @@ public class Gs1128SymbologyTests
     {
         BarcodeOptions options = new() { XDimension = 0.25, Font = BarcodeFonts.OcrB.CreateFont(12F) };
         string[] texts = SymbolEncoder.Read(new Gs1128Symbology(), "(01)09520123456788(8200)http://www.abc.net", options, SymbolEncoder.Texts);
+
         Assert.Equal("(01)09520123456788", Assert.Single(texts));
     }
 
     /// <summary>
-    /// Table 7-6 fixes the total length of the element strings it lists, so a short one is rejected.
+    /// Table 7-6 fixes the total length of the element strings it lists, so the encoder rejects a short one.
     /// </summary>
     [Fact]
     public void RejectsWrongPredefinedLength()
         => Assert.Throws<ArgumentException>(() => Encode("(01)0952123454321"));
 
     /// <summary>
-    /// The input carries the element string syntax of section 4.14, so anything else is rejected.
+    /// The input carries the element string syntax of section 4.14. The encoder rejects text without parentheses, an open Application Identifier, an
+    /// identifier that is too short or not digits, and an identifier without data.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("0109521234543213")]
     [InlineData("(01")]

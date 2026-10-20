@@ -126,8 +126,8 @@ public abstract class CompositeBarcodeSymbology
     }
 
     /// <summary>
-    /// Encodes the text of one part. By default the symbology of the part encodes its text as it would alone. A composite whose standard changes a part when
-    /// it is joined, a linkage flag for example, overrides this to encode that part the joined way.
+    /// Encodes the text of one part. By default the symbology of the part encodes its text the same as for a symbol of its own. A composite whose standard
+    /// changes a part when it is joined, a linkage flag for example, overrides this to encode that part the joined way.
     /// </summary>
     /// <param name="index">The index of the part in <see cref="Symbologies"/>.</param>
     /// <param name="text">The text of the part.</param>

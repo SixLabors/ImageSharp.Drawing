@@ -17,9 +17,24 @@ internal static class MaxiCodeEncoder
     /// </summary>
     public const int MaximumDataLength = 138;
 
+    /// <summary>
+    /// The number of module positions in a row.
+    /// </summary>
     private const int Columns = 30;
+
+    /// <summary>
+    /// The number of rows.
+    /// </summary>
     private const int Rows = 33;
+
+    /// <summary>
+    /// The number of codewords in a symbol, the primary and secondary messages with their check codewords.
+    /// </summary>
     private const int CodewordCount = 144;
+
+    /// <summary>
+    /// The length of a code set the search has not reached at a character.
+    /// </summary>
     private const int Unreached = int.MaxValue;
 
     /// <summary>
@@ -97,10 +112,29 @@ internal static class MaxiCodeEncoder
     /// </summary>
     private enum CodeSet : byte
     {
+        /// <summary>
+        /// Code set A.
+        /// </summary>
         A,
+
+        /// <summary>
+        /// Code set B.
+        /// </summary>
         B,
+
+        /// <summary>
+        /// Code set C.
+        /// </summary>
         C,
+
+        /// <summary>
+        /// Code set D.
+        /// </summary>
         D,
+
+        /// <summary>
+        /// Code set E.
+        /// </summary>
         E,
     }
 
@@ -110,11 +144,34 @@ internal static class MaxiCodeEncoder
     [Flags]
     private enum CodeSets : byte
     {
+        /// <summary>
+        /// No code set.
+        /// </summary>
         None = 0,
+
+        /// <summary>
+        /// Code set A.
+        /// </summary>
         A = 1,
+
+        /// <summary>
+        /// Code set B.
+        /// </summary>
         B = 2,
+
+        /// <summary>
+        /// Code set C.
+        /// </summary>
         C = 4,
+
+        /// <summary>
+        /// Code set D.
+        /// </summary>
         D = 8,
+
+        /// <summary>
+        /// Code set E.
+        /// </summary>
         E = 16,
     }
 
@@ -124,18 +181,69 @@ internal static class MaxiCodeEncoder
     /// </summary>
     private enum Operation : byte
     {
+        /// <summary>
+        /// The numeric shift: nine digits in six codewords.
+        /// </summary>
         NumericShift,
+
+        /// <summary>
+        /// One character of code set A in one codeword.
+        /// </summary>
         CharacterA,
+
+        /// <summary>
+        /// One character of code set B in one codeword.
+        /// </summary>
         CharacterB,
+
+        /// <summary>
+        /// One character of code set C in one codeword.
+        /// </summary>
         CharacterC,
+
+        /// <summary>
+        /// One character of code set D in one codeword.
+        /// </summary>
         CharacterD,
+
+        /// <summary>
+        /// One character of code set E in one codeword.
+        /// </summary>
         CharacterE,
+
+        /// <summary>
+        /// SHIFT A and one character of code set A.
+        /// </summary>
         ShiftA,
+
+        /// <summary>
+        /// 2 SHIFT A and two characters of code set A.
+        /// </summary>
         ShiftA2,
+
+        /// <summary>
+        /// 3 SHIFT A and three characters of code set A.
+        /// </summary>
         ShiftA3,
+
+        /// <summary>
+        /// SHIFT B and one character of code set B.
+        /// </summary>
         ShiftB,
+
+        /// <summary>
+        /// The shift into code set C and one character of code set C.
+        /// </summary>
         ShiftC,
+
+        /// <summary>
+        /// The shift into code set D and one character of code set D.
+        /// </summary>
         ShiftD,
+
+        /// <summary>
+        /// The shift into code set E and one character of code set E.
+        /// </summary>
         ShiftE,
     }
 
@@ -593,8 +701,6 @@ internal static class MaxiCodeEncoder
         Span<int> bestLength = ((Span<int>)bestLengthStorage)[..(RingLength * CodeSetCount)];
         InlineArray128<CodeSet> bestOriginStorage = default;
         Span<CodeSet> bestOrigin = ((Span<CodeSet>)bestOriginStorage)[..(RingLength * CodeSetCount)];
-        bestLength.Clear();
-        bestOrigin.Clear();
 
         // The operation and the earlier code set that reach each character in each code set, for the walk back. The data is at most MaximumDataLength
         // characters.
@@ -701,7 +807,7 @@ internal static class MaxiCodeEncoder
     /// the shifts into C, D and E in every other code set, and the numeric shift everywhere.
     /// </summary>
     /// <param name="op">The operation.</param>
-    /// <param name="state">The code set.</param>
+    /// <param name="state">The code set, which is A or a code set the data needs.</param>
     /// <param name="needed">The code sets beyond A that the data needs.</param>
     /// <returns><see langword="true"/> when the operation is open.</returns>
     private static bool Applies(Operation op, CodeSet state, CodeSets needed)
@@ -709,10 +815,10 @@ internal static class MaxiCodeEncoder
         {
             Operation.NumericShift => true,
             Operation.CharacterA => state == CodeSet.A,
-            Operation.CharacterB => needed.HasFlag(CodeSets.B) && state == CodeSet.B,
-            Operation.CharacterC => needed.HasFlag(CodeSets.C) && state == CodeSet.C,
-            Operation.CharacterD => needed.HasFlag(CodeSets.D) && state == CodeSet.D,
-            Operation.CharacterE => needed.HasFlag(CodeSets.E) && state == CodeSet.E,
+            Operation.CharacterB => state == CodeSet.B,
+            Operation.CharacterC => state == CodeSet.C,
+            Operation.CharacterD => state == CodeSet.D,
+            Operation.CharacterE => state == CodeSet.E,
             Operation.ShiftA or Operation.ShiftA2 or Operation.ShiftA3 => state == CodeSet.B,
             Operation.ShiftB => needed.HasFlag(CodeSets.B) && state == CodeSet.A,
             Operation.ShiftC => needed.HasFlag(CodeSets.C) && state != CodeSet.C,

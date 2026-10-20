@@ -12,6 +12,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// </summary>
 public class FlattermarkenSymbologyTests
 {
+    /// <summary>
+    /// The bar and space widths match the reference implementation after the merge of its zero width bars. The cases cover the digits 0, 1 and 9 alone
+    /// and in sequence.
+    /// </summary>
+    /// <param name="text">The digits to encode.</param>
+    /// <param name="reference">The reference run widths, separated by commas.</param>
     [Theory]
     [InlineData("1", "0,0,1,8")]
     [InlineData("9", "0,8,1,0")]
@@ -52,18 +58,27 @@ public class FlattermarkenSymbologyTests
     public void DrawsBarsTenMillimetresHigh(double xDimension)
     {
         BarcodeOptions options = new() { Dpi = SymbolEncoder.MillimetreDpi, XDimension = xDimension };
+
         SymbolEncoder.Encode(new FlattermarkenSymbology(), "11099", options, (ref symbol) =>
             Assert.All(symbol.BarHeights.ToArray(), height => Assert.Equal((float)(10 / xDimension), height, 1e-4F)));
     }
 
+    /// <summary>
+    /// The human readable text is the digits as the caller gives them.
+    /// </summary>
     [Fact]
     public void PrintsTheDigitsAsGiven()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
         string[] texts = SymbolEncoder.Read(new FlattermarkenSymbology(), "11099", options, SymbolEncoder.Texts);
+
         Assert.Equal("11099", Assert.Single(texts));
     }
 
+    /// <summary>
+    /// The encoder rejects an empty text and any character that is not an ASCII digit.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("")]
     [InlineData("12A")]
@@ -72,6 +87,12 @@ public class FlattermarkenSymbologyTests
     public void RejectsMalformedInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => SymbolEncoder.Encode(new FlattermarkenSymbology(), text, new BarcodeOptions()));
 
+    /// <summary>
+    /// Converts reference run widths to the runs of the symbol. The reference writes every window as a bar, a space, a bar and a space. This method merges
+    /// the spaces around an inner zero width bar into one space.
+    /// </summary>
+    /// <param name="reference">The reference run widths, separated by commas.</param>
+    /// <returns>The run widths of the symbol, separated by commas.</returns>
     private static string Merge(string reference)
     {
         int[] runs = Array.ConvertAll(reference.Split(','), int.Parse);

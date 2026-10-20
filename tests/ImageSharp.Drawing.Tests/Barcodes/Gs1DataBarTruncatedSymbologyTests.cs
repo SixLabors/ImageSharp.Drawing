@@ -11,6 +11,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// </summary>
 public class Gs1DataBarTruncatedSymbologyTests
 {
+    /// <summary>
+    /// The bar and space widths match the reference implementation.
+    /// </summary>
+    /// <param name="text">The element string to encode.</param>
+    /// <param name="expected">The reference run string.</param>
     [Theory]
     [InlineData("(01)09521234543213", "01151115111238114311112234112211114725121211311")]
     [InlineData("(01)00012345678905", "01111112181274113211214132111124117332224131111")]
@@ -38,6 +43,7 @@ public class Gs1DataBarTruncatedSymbologyTests
     {
         BarcodeOptions options = new() { Dpi = SymbolEncoder.MillimetreDpi, BarHeight = 20F * DataBarEncoder.NominalXDimension };
         float height = SymbolEncoder.Read(new Gs1DataBarTruncatedSymbology(), "(01)00012345678905", options, static (ref symbol) => symbol.HeightInModules);
+
         Assert.Equal(20F, height, new ApproximateFloatComparer(1e-4F));
     }
 }

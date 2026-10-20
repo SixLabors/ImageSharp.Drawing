@@ -16,6 +16,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// </summary>
 public class EanUpcSymbologyTests
 {
+    /// <summary>
+    /// The module widths of each EAN-13 symbol match the reference implementation.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expectedRuns">The reference module widths, separated by commas.</param>
     [Theory]
     [InlineData("5901234123457", "1,1,1,3,1,1,2,1,1,2,3,1,2,2,2,2,1,2,2,1,4,1,1,2,3,1,1,1,1,1,1,1,2,2,2,1,2,1,2,2,1,4,1,1,1,1,3,2,1,2,3,1,1,3,1,2,1,1,1")]
     [InlineData("4006381333931", "1,1,1,3,2,1,1,1,1,2,3,1,1,1,4,1,4,1,1,3,1,2,1,1,2,2,2,1,1,1,1,1,1,4,1,1,1,4,1,1,1,4,1,1,3,1,1,2,1,4,1,1,2,2,2,1,1,1,1")]
@@ -23,10 +28,17 @@ public class EanUpcSymbologyTests
     public void Ean13_EncodesExpectedModuleSequence(string text, string expectedRuns)
         => Assert.Equal(expectedRuns, Runs(new Ean13Symbology(), text));
 
+    /// <summary>
+    /// Twelve digits get their check digit, so the symbol is the one of the thirteen digits with the check digit.
+    /// </summary>
     [Fact]
     public void Ean13_ComputesMissingCheckDigit()
         => Assert.Equal(Runs(new Ean13Symbology(), "5901234123457"), Runs(new Ean13Symbology(), "590123412345"));
 
+    /// <summary>
+    /// An EAN-13 symbol is 95 modules and 30 bars, with a quiet zone of 11 modules before it and 7 after it. The left, centre and right guard bars extend
+    /// 5 modules below the digit bars.
+    /// </summary>
     [Fact]
     public void Ean13_Structure()
     {
@@ -42,15 +54,20 @@ public class EanUpcSymbologyTests
         AssertGuardExtension(new Ean13Symbology(), "5901234123457", [0, 1, 14, 15, 28, 29]);
     }
 
+    /// <summary>
+    /// With a font, the thirteen digits print below the bars. The leading digit prints in the leading quiet zone. Without a font there is no text.
+    /// </summary>
     [Fact]
     public void Ean13_TextPlacements()
     {
         BarcodeOptions options = CreateTextOptions();
+
         SymbolEncoder.Encode(new Ean13Symbology(), "5901234123457", options, static (ref symbol) =>
         {
             // GS1 General Specifications: the leading digit prints in the leading quiet zone and every other digit prints below its own symbol character, so
             // the placement is per digit. Digits hang one module below the digit bars; the renderer grows the drawn area to hold them.
             float textEdge = symbol.BarHeights.ToArray().Min() + BarcodeTextPlacement.Clearance;
+
             Assert.Equal(13, symbol.Text.Length);
             Assert.Equal("5901234123457", string.Concat(SymbolEncoder.Texts(ref symbol)));
             Assert.True(symbol.Text[0].Left < 0);
@@ -61,17 +78,25 @@ public class EanUpcSymbologyTests
         SymbolEncoder.Encode(new Ean13Symbology(), "5901234123457", new BarcodeOptions(), static (ref symbol) => Assert.True(symbol.Text.IsEmpty));
     }
 
+    /// <summary>
+    /// With a font, the eight digits of an EAN-8 symbol print below the bars.
+    /// </summary>
     [Fact]
     public void Ean8_TextPlacements()
         => SymbolEncoder.Encode(new Ean8Symbology(), "96385074", CreateTextOptions(), static (ref symbol) =>
         {
             // GS1 General Specifications: every digit prints below its own symbol character, one module below the digit bars.
             float textEdge = symbol.BarHeights.ToArray().Min() + BarcodeTextPlacement.Clearance;
+
             Assert.Equal("96385074", string.Concat(SymbolEncoder.Texts(ref symbol)));
             Assert.All(symbol.Text.ToArray(), placement => Assert.Equal(BarcodeTextSide.BelowBars, placement.Side));
             Assert.All(symbol.Text.ToArray(), placement => Assert.Equal(textEdge, placement.TextEdge));
         });
 
+    /// <summary>
+    /// The encoder rejects EAN-13 text that is not 12 or 13 digits, and a wrong check digit.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("12345678901")]
     [InlineData("12345678901234")]
@@ -80,14 +105,22 @@ public class EanUpcSymbologyTests
     public void Ean13_RejectsInvalidInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => Encode(new Ean13Symbology(), text));
 
+    /// <summary>
+    /// The module widths of an EAN-8 symbol match the reference implementation.
+    /// </summary>
     [Fact]
     public void Ean8_EncodesExpectedModuleSequence()
         => Assert.Equal("1,1,1,3,1,1,2,1,1,1,4,1,4,1,1,1,2,1,3,1,1,1,1,1,1,2,3,1,3,2,1,1,1,3,1,2,1,1,3,2,1,1,1", Runs(new Ean8Symbology(), "96385074"));
 
+    /// <summary>
+    /// An EAN-8 symbol is 67 modules and 22 bars, with quiet zones of 7 modules. Seven digits get their check digit. The left, centre and right guard bars
+    /// extend 5 modules below the digit bars.
+    /// </summary>
     [Fact]
     public void Ean8_Structure()
     {
         string expected = Runs(new Ean8Symbology(), "96385074");
+
         SymbolEncoder.Encode(new Ean8Symbology(), "9638507", new BarcodeOptions(), (ref symbol) =>
         {
             // GS1 General Specifications: 67 modules, 22 bars, 7 module quiet zones on both sides. The 7 digit input verifies check digit computation: 96385074
@@ -102,6 +135,10 @@ public class EanUpcSymbologyTests
         AssertGuardExtension(new Ean8Symbology(), "96385074", [0, 1, 10, 11, 20, 21]);
     }
 
+    /// <summary>
+    /// The encoder rejects EAN-8 text that is not 7 or 8 digits, and a wrong check digit.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("963850")]
     [InlineData("963850741")]
@@ -110,16 +147,24 @@ public class EanUpcSymbologyTests
     public void Ean8_RejectsInvalidInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => Encode(new Ean8Symbology(), text));
 
+    /// <summary>
+    /// The module widths of a UPC-A symbol match the reference implementation.
+    /// </summary>
     [Fact]
     public void UpcA_EncodesExpectedModuleSequence()
         => Assert.Equal(
             "1,1,1,3,2,1,1,1,4,1,1,1,1,1,4,3,2,1,1,3,2,1,1,3,2,1,1,1,1,1,1,1,2,1,2,2,3,1,1,2,2,2,2,1,1,1,3,2,1,2,3,1,2,1,2,2,1,1,1",
             Runs(new UpcASymbology(), "036000291452"));
 
+    /// <summary>
+    /// A UPC-A symbol is 95 modules with quiet zones of 9 modules. Eleven digits get their check digit. The guard bars and the bars of the first and last
+    /// symbol characters extend 5 modules below the digit bars.
+    /// </summary>
     [Fact]
     public void UpcA_Structure()
     {
         string expected = Runs(new UpcASymbology(), "036000291452");
+
         SymbolEncoder.Encode(new UpcASymbology(), "03600029145", new BarcodeOptions(), (ref symbol) =>
         {
             // GS1 General Specifications: the UPC-A symbol shares the 95 module EAN-13 structure with 9 module quiet zones. Section 5.2.3.2 extends the bars of
@@ -133,10 +178,15 @@ public class EanUpcSymbologyTests
         AssertGuardExtension(new UpcASymbology(), "036000291452", [0, 1, 2, 3, 14, 15, 26, 27, 28, 29]);
     }
 
+    /// <summary>
+    /// With a font, the twelve digits of a UPC-A symbol print. The number system digit prints in the leading quiet zone and the check digit prints in the
+    /// trailing quiet zone.
+    /// </summary>
     [Fact]
     public void UpcA_TextPlacements()
     {
         BarcodeOptions options = CreateTextOptions();
+
         SymbolEncoder.Encode(new UpcASymbology(), "036000291452", options, static (ref symbol) =>
         {
             // The number system digit prints in the leading quiet zone, the check digit in the trailing quiet zone, and every other digit below its own symbol
@@ -181,6 +231,7 @@ public class EanUpcSymbologyTests
 
         int firstWidth = firstRight - firstLeft + 1;
         int lastWidth = lastRight - lastLeft + 1;
+
         Assert.True(firstWidth <= (4F * module) + 1F, $"The first digit is {firstWidth} pixels wide, 4 modules are {4F * module}.");
         Assert.InRange(barsLeft - firstRight - 1, (5F * module) - 1F, (5F * module) + 1F);
         Assert.True(lastWidth <= (4F * module) + 1F, $"The last digit is {lastWidth} pixels wide, 4 modules are {4F * module}.");
@@ -200,6 +251,8 @@ public class EanUpcSymbologyTests
     /// One vector per zero suppression rule of section 5.2.2.4.1 of the GS1 General Specifications: the last compressed digit selects how the UPC-E digits
     /// expand to a GTIN-12, and the check digit is computed over the GTIN-12.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expectedRuns">The reference module widths, separated by commas.</param>
     [Theory]
     [InlineData("01234565", "1,1,1,1,2,2,2,2,1,2,2,1,4,1,1,2,3,1,1,1,3,2,1,1,1,1,4,1,1,1,1,1,1")]
     [InlineData("0425261", "1,1,1,2,3,1,1,2,1,2,2,1,3,2,1,2,2,1,2,1,1,1,4,2,2,2,1,1,1,1,1,1,1")]
@@ -208,10 +261,15 @@ public class EanUpcSymbologyTests
     public void UpcE_EncodesExpectedModuleSequence(string text, string expectedRuns)
         => Assert.Equal(expectedRuns, Runs(new UpcESymbology(), text));
 
+    /// <summary>
+    /// A UPC-E symbol is 51 modules and 17 bars, with a quiet zone of 9 modules before it and 7 after it. Seven digits get their check digit. The two left
+    /// guard bars and the three bars of the special right guard pattern extend 5 modules below the digit bars.
+    /// </summary>
     [Fact]
     public void UpcE_Structure()
     {
         string expected = Runs(new UpcESymbology(), "01234565");
+
         SymbolEncoder.Encode(new UpcESymbology(), "0123456", new BarcodeOptions(), (ref symbol) =>
         {
             // GS1 General Specifications: 51 modules, 17 bars, a 9 module leading and 7 module trailing quiet zone. All five guard bars are extended: two in
@@ -246,12 +304,20 @@ public class EanUpcSymbologyTests
     public void UpcE_RejectsInvalidInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => Encode(new UpcESymbology(), text));
 
+    /// <summary>
+    /// The module widths of each EAN-5 add-on symbol match the reference implementation.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expectedRuns">The reference module widths, separated by commas.</param>
     [Theory]
     [InlineData("90200", "1,1,2,2,1,1,3,1,1,3,2,1,1,1,1,2,1,2,2,1,1,3,2,1,1,1,1,1,1,2,3")]
     [InlineData("52495", "1,1,2,1,3,2,1,1,1,2,1,2,2,1,1,2,3,1,1,1,1,3,1,1,2,1,1,1,2,3,1")]
     public void Ean5_EncodesExpectedModuleSequence(string text, string expectedRuns)
         => Assert.Equal(expectedRuns, Runs(new Ean5Symbology(), text));
 
+    /// <summary>
+    /// An EAN-5 add-on symbol is 47 modules and 16 bars, and all its bars have the same height and top.
+    /// </summary>
     [Fact]
     public void Ean5_Structure()
         => SymbolEncoder.Encode(new Ean5Symbology(), "90200", new BarcodeOptions(), static (ref symbol) =>
@@ -259,16 +325,21 @@ public class EanUpcSymbologyTests
             // GS1 General Specifications Table 5-4: the 4 module add-on guard, five 7 module characters and four 2 module delineators make 47 modules. All
             // add-on bars are uniform in height.
             float first = symbol.BarHeights[0];
+
             Assert.Equal(47, symbol.WidthInModules);
             Assert.Equal(16, symbol.BarHeights.Length);
             Assert.All(symbol.BarHeights.ToArray(), height => Assert.Equal(first, height));
             Assert.All(symbol.BarTops.ToArray(), top => Assert.Equal(0, top));
         });
 
+    /// <summary>
+    /// With a font, the five digits of an EAN-5 add-on symbol print above the bars, and the bars keep their tops at the symbol top.
+    /// </summary>
     [Fact]
     public void Ean5_TextPrintsAboveBars()
     {
         BarcodeOptions options = CreateTextOptions();
+
         SymbolEncoder.Encode(new Ean5Symbology(), "90200", options, static (ref symbol) =>
         {
             // GS1 General Specifications: the add-on interpretation prints above the bars, one digit above its own symbol character. The room it needs belongs
@@ -281,6 +352,10 @@ public class EanUpcSymbologyTests
         });
     }
 
+    /// <summary>
+    /// The encoder rejects EAN-5 text that is not 5 digits.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("9020")]
     [InlineData("902000")]
@@ -288,12 +363,20 @@ public class EanUpcSymbologyTests
     public void Ean5_RejectsInvalidInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => Encode(new Ean5Symbology(), text));
 
+    /// <summary>
+    /// The module widths of each EAN-2 add-on symbol match the reference implementation.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expectedRuns">The reference module widths, separated by commas.</param>
     [Theory]
     [InlineData("05", "1,1,2,3,2,1,1,1,1,1,3,2,1")]
     [InlineData("53", "1,1,2,1,2,3,1,1,1,1,1,4,1")]
     public void Ean2_EncodesExpectedModuleSequence(string text, string expectedRuns)
         => Assert.Equal(expectedRuns, Runs(new Ean2Symbology(), text));
 
+    /// <summary>
+    /// An EAN-2 add-on symbol is 20 modules and 7 bars.
+    /// </summary>
     [Fact]
     public void Ean2_Structure()
         => SymbolEncoder.Encode(new Ean2Symbology(), "05", new BarcodeOptions(), static (ref symbol) =>
@@ -304,6 +387,10 @@ public class EanUpcSymbologyTests
             Assert.Equal(7, symbol.BarHeights.Length);
         });
 
+    /// <summary>
+    /// The encoder rejects EAN-2 text that is not 2 digits.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("5")]
     [InlineData("053")]
@@ -311,6 +398,9 @@ public class EanUpcSymbologyTests
     public void Ean2_RejectsInvalidInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => Encode(new Ean2Symbology(), text));
 
+    /// <summary>
+    /// A bar height in the options sets the height of the digit bars in place of the nominal height. The guard bars stay 5 modules longer.
+    /// </summary>
     [Fact]
     public void BarHeightOption_OverridesNominalHeight()
     {
@@ -400,6 +490,10 @@ public class EanUpcSymbologyTests
         return (first, last);
     }
 
+    /// <summary>
+    /// Creates options with an OCR-B font, so the symbol carries its human readable text.
+    /// </summary>
+    /// <returns>The options.</returns>
     private static BarcodeOptions CreateTextOptions()
         => new()
         {
@@ -425,8 +519,9 @@ public class EanUpcSymbologyTests
     public void CorrectsTheCharactersOfTableFiveTen()
         => SymbolEncoder.Encode(new Ean13Symbology(), "5901234123457", new BarcodeOptions(), static (ref symbol) =>
         {
-            Assert.Equal(1F / 13F, symbol.RunUnit);
             int[] runs = symbol.Runs.ToArray();
+
+            Assert.Equal(1F / 13F, symbol.RunUnit);
 
             // The normal guard is 3 runs and each character 4, so the third left character starts at run 11 and the fourth at run 15. The centre guard is 5
             // runs, so the right half starts at run 32.
@@ -523,6 +618,7 @@ public class EanUpcSymbologyTests
         }
 
         runs.Add(width);
+
         return string.Join(',', runs);
     }
 
@@ -551,6 +647,7 @@ public class EanUpcSymbologyTests
         for (int i = 0; i < symbol.BarHeights.Length; i++)
         {
             float expected = Array.IndexOf(guardBars, i) >= 0 ? digitHeight + 5 : digitHeight;
+
             Assert.Equal(expected, symbol.BarHeights[i]);
             Assert.Equal(0, symbol.BarTops[i]);
         }

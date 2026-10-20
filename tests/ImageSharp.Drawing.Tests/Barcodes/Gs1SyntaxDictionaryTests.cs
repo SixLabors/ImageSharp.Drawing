@@ -53,15 +53,20 @@ public class Gs1SyntaxDictionaryTests
         ["couponposoffer"] = Gs1Linter.CouponPositiveOffer,
     };
 
+    /// <summary>
+    /// The table holds one entry for every entry line of release 2026-01-27, in the same order and with the same contents.
+    /// </summary>
     [Fact]
     public void TableMatchesTheDictionaryRelease()
     {
         string path = System.IO.Path.Combine(AppContext.BaseDirectory, "Barcodes", "gs1-syntax-dictionary.txt");
         string[] lines = File.ReadAllLines(path);
+
         Assert.Contains("# Release: 2026-01-27", lines);
 
         ReadOnlySpan<Gs1ApplicationIdentifier> table = Gs1SyntaxDictionary.Entries;
         int index = 0;
+
         foreach (string line in lines)
         {
             // Entries are the lines that start with an Application Identifier; the rest are comments.

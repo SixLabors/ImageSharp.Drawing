@@ -29,8 +29,8 @@ public sealed class Gs1CompositeComponentSymbology : BarcodeSymbology
     /// Initializes a new instance of the <see cref="Gs1CompositeComponentSymbology"/> class.
     /// </summary>
     /// <param name="component">The 2D component. CC-A takes CC-B of the same columns when the data exceeds CC-A.</param>
-    /// <param name="columns">The number of data columns: 2 to 4 for CC-A and CC-B, 1 to 30 for CC-C. A CC-C takes more columns when its rows would
-    /// exceed 30, and fewer when its columns, with the start and stop patterns and the two row indicators, would reach four times its rows.</param>
+    /// <param name="columns">The number of data columns: 2 to 4 for CC-A and CC-B, 1 to 30 for CC-C. A CC-C takes more columns when it needs more than
+    /// 30 rows. It takes fewer columns when its columns, with the start and stop patterns and the two row indicators, reach four times its rows.</param>
     public Gs1CompositeComponentSymbology(Gs1CompositeComponent component, int columns)
     {
         Guard.MustBeBetweenOrEqualTo((int)component, (int)Gs1CompositeComponent.CcA, (int)Gs1CompositeComponent.CcC, nameof(component));

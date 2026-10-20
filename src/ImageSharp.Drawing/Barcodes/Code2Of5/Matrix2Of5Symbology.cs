@@ -7,8 +7,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// The Matrix 2 of 5 symbology, also called Code 2 of 5 Standard. No published standard defines it. It carries the digits 0 to 9, each in three bars and two
 /// spaces of which two elements are wide. A symbol carries a start pattern, the digits, an optional check digit and a stop pattern.
 /// <para>
-/// The check digit is the modulo 10 calculation of Appendix C of AIM USS-I 2/5, which both reference implementations apply. The printed line shows the digits
-/// the symbol carries and, by default, the check digit.
+/// The check digit is the modulo 10 calculation of Appendix C of AIM USS-I 2/5. The printed line shows the digits the symbol carries and, by default, the check
+/// digit.
 /// </para>
 /// </summary>
 public sealed class Matrix2Of5Symbology : BarcodeSymbology

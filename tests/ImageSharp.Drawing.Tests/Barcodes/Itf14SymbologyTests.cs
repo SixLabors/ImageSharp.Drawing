@@ -18,6 +18,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// </summary>
 public class Itf14SymbologyTests
 {
+    /// <summary>
+    /// The reference runs of 15400141288763, the number of Figure 5-32.
+    /// </summary>
     private const string Figure532 = "111122111211211111221221121121211212112111221221111221211111221212222111112111";
 
     /// <summary>
@@ -51,6 +54,9 @@ public class Itf14SymbologyTests
         Assert.Equal(Widen(reference), SymbolEncoder.Read(new Itf14Symbology(), text, new BarcodeOptions(), SymbolEncoder.RunString));
     }
 
+    /// <summary>
+    /// A supplied check digit that is not the section 7.9 check digit of the data throws.
+    /// </summary>
     [Fact]
     public void RejectsAWrongCheckDigit()
         => Assert.Throws<ArgumentException>(() => Encode("15400141288764"));
@@ -71,9 +77,11 @@ public class Itf14SymbologyTests
     public void PrintsTheFourteenDigits(string text, string expected)
     {
         BarcodeOptions options = new() { Dpi = SymbolEncoder.MicrometreDpi, Font = BarcodeFonts.OcrB.CreateFont(12F) };
+
         SymbolEncoder.Encode(new Itf14Symbology(), text, options, (ref symbol) =>
         {
             BarcodeTextPlacement placement = Assert.Single(symbol.Text.ToArray());
+
             Assert.Equal(expected, symbol.TextOf(placement).ToString());
             Assert.Equal(symbol.HeightInModules + (float)(1.02 / TargetX), placement.TextEdge, new ApproximateFloatComparer(1e-4F));
         });
@@ -89,6 +97,7 @@ public class Itf14SymbologyTests
         => SymbolEncoder.Encode(new Itf14Symbology(), "15400141288763", new BarcodeOptions { Dpi = SymbolEncoder.MicrometreDpi }, static (ref symbol) =>
         {
             ApproximateFloatComparer comparer = new(1e-3F);
+
             Assert.Equal(BearerBarThickness, symbol.FrameThickness, comparer);
             Assert.All(symbol.BarTops.ToArray(), top => Assert.Equal(BearerBarThickness, top, comparer));
             Assert.Equal(BarHeight + BearerBarThickness + BearerBarThickness, symbol.HeightInModules, comparer);
@@ -103,10 +112,12 @@ public class Itf14SymbologyTests
     public void KeepsTheMillimetreDimensionsAtAnotherXDimension()
     {
         BarcodeOptions options = new() { Dpi = SymbolEncoder.MicrometreDpi, XDimension = 1.016, Font = BarcodeFonts.OcrB.CreateFont(12F) };
+
         SymbolEncoder.Encode(new Itf14Symbology(), "15400141288763", options, static (ref symbol) =>
         {
             ApproximateFloatComparer comparer = new(1e-3F);
             float bearerBar = (float)(4.83 / 1.016);
+
             Assert.Equal(bearerBar, symbol.FrameThickness, comparer);
             Assert.Equal((float)(31.75 / 1.016) + bearerBar + bearerBar, symbol.HeightInModules, comparer);
             Assert.Equal(symbol.HeightInModules + (float)(1.02 / 1.016), Assert.Single(symbol.Text.ToArray()).TextEdge, comparer);
@@ -166,9 +177,11 @@ public class Itf14SymbologyTests
         // on each side the runs are the bearer bar, the leading quiet zone, the bars, the trailing quiet zone and the bearer bar.
         int y = (int)(bounds.Top + (bounds.Height * 0.25F));
         List<(bool Dark, int Width)> runs = [];
+
         for (int x = 0; x < image.Width; x++)
         {
             bool dark = image[x, y].PackedValue < 128;
+
             if (runs.Count > 0 && runs[^1].Dark == dark)
             {
                 runs[^1] = (dark, runs[^1].Width + 1);
@@ -190,10 +203,15 @@ public class Itf14SymbologyTests
         }
 
         float module = MathF.Round((float)TargetX / 25.4F * dpi);
+
         Assert.InRange((float)runs[1].Width, 10F * module, (10F * module) + 1F);
         Assert.InRange((float)runs[^2].Width, 10F * module, (10F * module) + 1F);
     }
 
+    /// <summary>
+    /// ITF-14 carries thirteen digits and an optional check digit. The symbology rejects other lengths, a letter and full width digits.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("")]
     [InlineData("12345")]
@@ -212,7 +230,7 @@ public class Itf14SymbologyTests
 
     /// <summary>
     /// Returns the reference runs in run units of half a module: a narrow element of 1 module is 2 units and a wide element of 2 modules becomes the 5 units of
-    /// the 2.5:1 ratio. The trailing space of the reference is dropped.
+    /// the 2.5:1 ratio. The method drops the trailing space of the reference.
     /// </summary>
     /// <param name="reference">The reference run string.</param>
     /// <returns>The runs in run units.</returns>

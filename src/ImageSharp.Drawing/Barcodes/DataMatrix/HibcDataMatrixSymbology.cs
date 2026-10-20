@@ -56,6 +56,7 @@ public sealed class HibcDataMatrixSymbology : BarcodeSymbology
                 0,
                 options.ResolveXDimension(HibcData.MinimumMatrixXDimension, DefaultMatrixXDimension, double.PositiveInfinity),
                 ref symbol);
+
             if (options.Font is not null)
             {
                 HibcData.AddMatrixReadable(encoded.AsSpan(), ref symbol);

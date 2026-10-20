@@ -178,6 +178,12 @@ public class Gs1DataBarExpandedStackedSymbologyTests
         },
     };
 
+    /// <summary>
+    /// The module rows of each symbol, separator rows included, match the reference implementation.
+    /// </summary>
+    /// <param name="text">The element strings to encode.</param>
+    /// <param name="segments">The number of segments in a row.</param>
+    /// <param name="expected">The reference module rows from the top, separated by vertical bars.</param>
     [Theory]
     [MemberData(nameof(Gs1DataBarExpandedStacked_MatchesReferenceRowsData))]
     public void Gs1DataBarExpandedStacked_MatchesReferenceRows(string text, int segments, string expected)
@@ -207,6 +213,7 @@ public class Gs1DataBarExpandedStackedSymbologyTests
     public void Gs1DataBarExpandedStacked_BarHeightOptionSetsEachRow()
     {
         BarcodeOptions options = new() { Dpi = SymbolEncoder.MillimetreDpi, BarHeight = 40F * DataBarExpandedEncoder.NominalXDimension };
+
         float height = SymbolEncoder.Read(
             new Gs1DataBarExpandedStackedSymbology(),
             "(01)90614141000015(3202)000150",
@@ -223,6 +230,7 @@ public class Gs1DataBarExpandedStackedSymbologyTests
     public void Gs1DataBarExpandedStacked_TextPrintsBelowTheLastRow()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
+
         SymbolEncoder.Encode(new Gs1DataBarExpandedStackedSymbology(), "(01)90614141000015(3202)000150", options, static (ref symbol) =>
         {
             BarcodeTextPlacement placement = Assert.Single(symbol.Text.ToArray());
@@ -234,6 +242,7 @@ public class Gs1DataBarExpandedStackedSymbologyTests
     /// <summary>
     /// Section 5.5.2.3.2: "It can be printed in widths of 2 to 20 segments", and a row holds whole segment pairs.
     /// </summary>
+    /// <param name="segments">The number of segments in a row.</param>
     [Theory]
     [InlineData(0)]
     [InlineData(3)]

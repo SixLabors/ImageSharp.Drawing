@@ -48,7 +48,9 @@ public class AustraliaPostSymbologyTests
     public void CalculatesTheParitySymbolsOfDiagramTen()
     {
         int[] parity = new int[4];
+
         AustraliaPostEncoder.Parity([4, 20, 49, 37, 49, 38, 23], parity);
+
         Assert.Equal([54, 17, 53, 58], parity);
     }
 
@@ -91,6 +93,7 @@ public class AustraliaPostSymbologyTests
         });
 
         string[] withCustomer = SymbolEncoder.Read(new AustraliaPostSymbology(), "6254516251ABC123", options, SymbolEncoder.Texts);
+
         Assert.StartsWith("62 54516251 ABC123 ", Assert.Single(withCustomer));
     }
 
@@ -135,6 +138,12 @@ public class AustraliaPostSymbologyTests
             Assert.True(symbol.BottomQuietZone * symbol.XDimension >= 2 - 1e-4);
         });
 
+    /// <summary>
+    /// The encoder rejects text that does not fit a customer format. This includes an empty text, a short sorting code, an undefined format control code
+    /// and a letter in the sorting code. It also includes customer information that is too long for its format or is not in its encoding table.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="table">The encoding table of the customer information.</param>
     [Theory]
     [InlineData("", AustraliaPostEncodingTable.Character)]
     [InlineData("115451625", AustraliaPostEncodingTable.Character)]
@@ -157,6 +166,7 @@ public class AustraliaPostSymbologyTests
     public void ReportsACharacterOutsideTheTableByItsCodePoint()
     {
         ArgumentException exception = Assert.Throws<ArgumentException>(() => Encode("5954516251A😀", AustraliaPostEncodingTable.Character));
+
         Assert.Contains("U+1F600", exception.Message, StringComparison.Ordinal);
     }
 

@@ -71,7 +71,7 @@ public sealed class UpcESymbology : BarcodeSymbology
 
         // The four zero suppression rules of section 5.2.2.4.1 exclude each other, so a GTIN-12 suppresses one way only. The last digit selects the rule, and
         // each rule requires one digit to be nonzero: X5 (D6) when X6 is 5 to 9, X4 (D5) when X6 is 4, and X3 (D4) from 3 to 9 when X6 is 3. Other digits
-        // would come from a GTIN-12 that a different rule suppresses.
+        // come from a GTIN-12 that a different rule suppresses.
         char x6 = text[6];
         if ((x6 >= '5' && text[5] == '0') || (x6 == '4' && text[4] == '0') || (x6 == '3' && text[3] < '3'))
         {

@@ -15,12 +15,13 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// Section 5.3.2.4 requires the bearer bar, which for plate printing "has a constant thickness of 4.83 millimetres (0.190 inch) and must completely surround
 /// the symbol, including its Quiet Zones and butt directly against the top and bottom of the bars". The X dimension is the target of 0.495 millimetre of
 /// Table 5-47, symbol specification table 2 for trade items scanned in general distribution. The symbol specification tables of section 5.12.3 give ITF-14
-/// X dimensions from 0.170 to 1.016 millimetres, and an X dimension outside that range is clamped to it. Section 5.3.2.2 gives the 10X quiet zones and 1.02 millimetres between the bearer bar and the human readable characters. The symbol
-/// height table of section 5.12.3.2 gives a minimum bar height of 31.75 millimetres and a wide to narrow ratio target of 2.5:1. A wide element rounds half
-/// up to a whole pixel, so the ratio is 2.67 at three pixels a module, inside the range of 2.25:1 to 3.0:1 of section 5.3.2.2. The bar height, the bearer
-/// bar and the text space are in millimetres, so they hold at any X dimension. The bearer bar is the 4.83 millimetres of plate printing, more than "a
-/// minimum of twice the width of a narrow bar" that section 5.3.2.4 requires for printing methods without plates. A calculated check digit prints after
-/// the data, and after a space when the input carries spaces, as Figure 5-32 shows.
+/// X dimensions from 0.170 to 1.016 millimetres, and an X dimension outside that range is clamped to it. Section 5.3.2.2 gives the 10X quiet zones and 1.02
+/// millimetres between the bearer bar and the human readable characters. The symbol height table of section 5.12.3.2 gives a minimum bar height of 31.75
+/// millimetres and a wide to narrow ratio target of 2.5:1. A wide element rounds half up to a whole pixel, so the ratio is 2.67 at three pixels a module,
+/// inside the range of 2.25:1 to 3.0:1 of section 5.3.2.2. The bar height, the bearer bar and the text space are in millimetres, so they hold at any X
+/// dimension. The bearer bar is the 4.83 millimetres of plate printing, more than "a minimum of twice the width of a narrow bar" that section 5.3.2.4
+/// requires for printing methods without plates. A calculated check digit prints after the data, and after a space when the input carries spaces, as Figure
+/// 5-32 shows.
 /// </para>
 /// </summary>
 public sealed class Itf14Symbology : BarcodeSymbology
@@ -70,8 +71,9 @@ public sealed class Itf14Symbology : BarcodeSymbology
     {
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
 
-        // The interpretation repeats the input, which may group the digits with spaces, so the input is bounded at one grouping space after each digit.
+        // The interpretation repeats the input, and the input can group the digits with spaces, so the input is bounded at one grouping space after each digit.
         Guard.MustBeLessThanOrEqualTo(text.Length, Digits * 2, nameof(text));
+
         InlineArray14<char> digitStorage = default;
         Span<char> digits = digitStorage;
         int count = 0;

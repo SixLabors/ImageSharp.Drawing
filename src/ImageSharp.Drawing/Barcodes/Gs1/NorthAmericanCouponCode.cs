@@ -36,11 +36,6 @@ internal static class NorthAmericanCouponCode
     private const int PrimaryCompanyPrefix = 9;
 
     /// <summary>
-    /// Gets the number of days in each month of a year that is not a leap year.
-    /// </summary>
-    private static ReadOnlySpan<byte> DaysInMonth => [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-
-    /// <summary>
     /// Validates a coupon code against Table C of the guideline.
     /// </summary>
     /// <param name="data">The data of Application Identifier (8110).</param>
@@ -244,7 +239,8 @@ internal static class NorthAmericanCouponCode
                 ThrowInvalid($"The month of the {name} of a coupon code is 1 to 12; got {month}.", nameof(this.data));
             }
 
-            int lastDay = month == 2 && year % 4 == 0 ? 29 : DaysInMonth[month - 1];
+            // In the years 2000 to 2099 a year is a leap year when it is divisible by four, so the runtime gives the same month lengths as that rule.
+            int lastDay = DateTime.DaysInMonth(2000 + year, month);
             if (day < 1 || day > lastDay)
             {
                 ThrowInvalid($"The day of the {name} of a coupon code is 1 to {lastDay}; got {day}.", nameof(this.data));

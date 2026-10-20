@@ -31,9 +31,11 @@ public class JapanPostSymbologyTests
     {
         byte[] codes = new byte[20];
         JapanPostEncoder.Codes("AKZ", codes);
+
         Assert.Equal([11, 0, 12, 0, 13, 5, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14], codes);
 
         JapanPostEncoder.Codes("1234567890-ABC", codes);
+
         Assert.Equal(0, JapanPostEncoder.CheckCode(codes));
         Assert.Equal("FDFFTFDADFAFADFTFDAFAFDADFTFFFTTTFTDATFTTDATFFTDATFDATDATDATDAFTTDF", Encode("1234567890-ABC"));
     }
@@ -48,9 +50,12 @@ public class JapanPostSymbologyTests
         => SymbolEncoder.Encode(new JapanPostSymbology(), "1234567", new BarcodeOptions(), static (ref symbol) =>
         {
             Assert.Equal(133, symbol.Runs.Length);
+
             double unit = symbol.RunUnit * symbol.XDimension;
             double size = symbol.Runs[0] * unit / 0.6;
+
             Assert.InRange(size * 10, 8, 11.5);
+
             for (int i = 0; i < symbol.Runs.Length; i += 2)
             {
                 Assert.InRange(symbol.Runs[i] * unit / size, 0.50, 0.70);
@@ -64,6 +69,7 @@ public class JapanPostSymbologyTests
 
             string states = SymbolEncoder.FourStates(ref symbol);
             int timing = states.IndexOf('T');
+
             Assert.InRange(symbol.BarHeights[timing] * symbol.XDimension / size, 1.05, 1.35);
             Assert.InRange(SymbolEncoder.BarBottom(ref symbol) * symbol.XDimension / size, 3.40, 3.60);
 
@@ -84,6 +90,11 @@ public class JapanPostSymbologyTests
         Assert.Empty(SymbolEncoder.Read(new JapanPostSymbology(), "15400233-16-4-205", options, SymbolEncoder.Texts));
     }
 
+    /// <summary>
+    /// The data fills at most twenty codes, and a letter takes two codes. The symbology rejects empty input, data longer than twenty codes, lowercase
+    /// letters, a space and full width digits.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("")]
     [InlineData("123456789012345678901")]

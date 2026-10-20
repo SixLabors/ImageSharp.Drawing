@@ -11,7 +11,7 @@ internal static class Gs1SyntaxDictionary
 {
     /// <summary>
     /// The entries, one for each Application Identifier or range of them, in the lexical order of their first Application Identifier, each with its title from
-    /// the dictionary. An entry gives the first and last Application Identifier, whether the element string has a predefined length, whether it may be a GS1
+    /// the dictionary. An entry gives the first and last Application Identifier, whether the element string has a predefined length, whether it can be a GS1
     /// Digital Link data attribute, the components of its data, its excluded Application Identifiers, and its GS1 Digital Link qualifier sequences when it is a
     /// primary key. The requisite rules of the dictionary are left out: they hold over the combined data of all carriers that mark an item, which one symbol
     /// does not hold.

@@ -114,7 +114,7 @@ internal static class ChannelCodeEncoder
         float barHeight = options.ResolveBarHeight(xDimension, nominalBarHeight);
         heights.Fill(barHeight);
 
-        if (options.Font is not null && readable.Length > 0)
+        if (options.Font is not null)
         {
             symbol.ReserveText(1, readable.Length);
             symbol.AddText(readable, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);

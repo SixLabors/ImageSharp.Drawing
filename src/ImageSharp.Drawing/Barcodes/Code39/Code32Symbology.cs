@@ -131,7 +131,6 @@ public sealed class Code32Symbology : BarcodeSymbology
             number /= Base32Characters.Length;
         }
 
-        // The interpretation is the field identifier, then the nine digits of the code.
         double xDimension = options.ResolveXDimension(NominalXDimension);
 
         // The runs count pixels, so every element draws at a whole number of pixels. A wide element is WideElement / NarrowElement modules, rounded half up
@@ -146,6 +145,7 @@ public sealed class Code32Symbology : BarcodeSymbology
             WideElement = ((WideElement * pixels) + (NarrowElement / 2)) / NarrowElement,
         };
 
+        // The interpretation is the field identifier, then the nine digits of the code.
         Code39Encoder.BuildSymbol(encoded, null, [FieldIdentifier], printed, [], in layout, options, ref symbol);
     }
 }

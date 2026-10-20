@@ -7,8 +7,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
 /// HIBC Codablock F, a Health Industry Bar Code carried by a Codablock F symbol. The symbol carries the flag character, the data and the modulo 43 check
-/// character, and prints that same string below the symbol between delimiters when a font is set, with a space printed as an underscore and a zero as
-/// "Ø".
+/// character, and prints that same string below the symbol between delimiters when a font is set, with a space printed as an underscore and a zero as "Ø".
 /// The text follows a data structure of ANSI/HIBC 2.6: primary data, secondary data that ends with its link character, or primary and secondary data joined
 /// with "/", each with any supplemental data fields.
 /// </summary>
@@ -64,7 +63,7 @@ public sealed class HibcCodablockFSymbology : BarcodeSymbology
             using PooledBuffer<char> rented = readableCapacity <= HibcData.InlineBufferLength ? default : new(readableCapacity);
             Span<char> readable = readableCapacity <= HibcData.InlineBufferLength ? ((Span<char>)readableStorage)[..readableCapacity] : rented.Span;
             int written = HibcData.WriteReadable(data, readable);
-            CodablockFEncoder.BuildSymbol(data, this.Columns, [], readable[..written], [], options, ref symbol);
+            CodablockFEncoder.BuildSymbol(data, this.Columns, readable[..written], options, ref symbol);
         }
         finally
         {

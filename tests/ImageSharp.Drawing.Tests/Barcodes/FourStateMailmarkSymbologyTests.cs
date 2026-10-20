@@ -28,7 +28,7 @@ public class FourStateMailmarkSymbologyTests
 
     /// <summary>
     /// Section 2.2.2 of barcode C, Table 12: the destination "JW5O9QA6Y" has the internal user field value 118,259,964,139, and Table 9 gives the international
-    /// designation 0. Barcode L, Table 12: "EF61AH8T " with one trailing space.
+    /// designation "XY11" with five spaces the value 0. Barcode L, Table 12: "EF61AH8T " with one trailing space.
     /// </summary>
     [Fact]
     public void ConvertsTheDestinationField()
@@ -48,16 +48,22 @@ public class FourStateMailmarkSymbologyTests
     {
         int[] numbers = new int[16];
         FourStateMailmarkEncoder.DataNumbers(4, numbers, 9);
+
         Assert.Equal(4, numbers[15]);
+
         int[] check = new int[6];
         FourStateMailmarkEncoder.CheckNumbers(numbers, [1, 17, 26, 30, 27, 30, 24], check);
+
         Assert.Equal([14, 7, 23, 3, 23, 15], check);
 
         int[] numbersL = new int[19];
         FourStateMailmarkEncoder.DataNumbers(4, numbersL, 11);
+
         Assert.Equal(4, numbersL[18]);
+
         int[] checkL = new int[7];
         FourStateMailmarkEncoder.CheckNumbers(numbersL, [1, 5, 9, 5, 26, 17, 25, 22], checkL);
+
         Assert.Equal([20, 1, 20, 7, 14, 11, 18], checkL);
     }
 
@@ -70,7 +76,9 @@ public class FourStateMailmarkSymbologyTests
     {
         UInt128 consolidated = UInt128.Parse("354779892418644019776828", CultureInfo.InvariantCulture);
         int[] numbers = new int[16];
+
         FourStateMailmarkEncoder.DataNumbers(consolidated, numbers, 9);
+
         Assert.Equal([15, 22, 3, 25, 23, 26, 7, 3, 20, 14, 1, 4, 16, 3, 9, 28], numbers);
     }
 
@@ -113,6 +121,7 @@ public class FourStateMailmarkSymbologyTests
         float trackerTop = symbol.BarTops[tracker];
         float trackerBottom = trackerTop + symbol.BarHeights[tracker];
         float bottom = SymbolEncoder.BarBottom(ref symbol);
+
         Assert.InRange(trackerTop * symbol.XDimension, 1.60, 2.16);
         Assert.InRange(symbol.BarHeights[tracker] * symbol.XDimension, 1.02, 1.52);
         Assert.InRange((bottom - trackerBottom) * symbol.XDimension, 1.60, 2.16);
@@ -135,6 +144,11 @@ public class FourStateMailmarkSymbologyTests
         Assert.Empty(SymbolEncoder.Read(new FourStateMailmarkSymbology(), "21B2254800659JW5O9QA6Y", options, SymbolEncoder.Texts));
     }
 
+    /// <summary>
+    /// The encoder rejects an application string that is not 22 or 26 characters. It also rejects a format above 4, a Version ID other than 1, a class
+    /// outside its character set, a letter in a numeric field, a destination that is not a valid post code plus DPS, and small letters.
+    /// </summary>
+    /// <param name="text">The application string.</param>
     [Theory]
     [InlineData("")]
     [InlineData("21B2254800659JW5O9QA6")]

@@ -36,6 +36,11 @@ public class TelepenSymbologyTests
         "3113111113", "11311111111111", "331111111111", "111113111113", "31111111111111", "111311111113", "131111111113", "1111111111111111",
     ];
 
+    /// <summary>
+    /// The symbol runs match the reference runs.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="reference">The reference run string, with the trailing space.</param>
     [Theory]
     [InlineData("ABC123", "111111111133113131333331331111313111111131131311331313111111311111311131311131331111111111")]
     [InlineData("A", "11111111113311313133131111111311331111111111")]
@@ -55,6 +60,7 @@ public class TelepenSymbologyTests
         {
             int check = value == 0 ? 127 : (127 - (value % 127)) % 127;
             string expected = Patterns['_'] + Patterns[value] + Patterns[check] + Patterns['z'];
+
             Assert.Equal(expected[..^1], Encode(((char)value).ToString()));
         }
     }
@@ -93,11 +99,10 @@ public class TelepenSymbologyTests
     public void PrintsTheTextAsGiven()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-
         string[] texts = SymbolEncoder.Read(new TelepenSymbology(), "ABC123", options, SymbolEncoder.Texts);
-        Assert.Equal("ABC123", Assert.Single(texts));
-
         string[] numeric = SymbolEncoder.Read(new TelepenNumericSymbology(), "1X23", options, SymbolEncoder.Texts);
+
+        Assert.Equal("ABC123", Assert.Single(texts));
         Assert.Equal("1X23", Assert.Single(numeric));
     }
 
@@ -112,6 +117,10 @@ public class TelepenSymbologyTests
     public void SpansSixteenModulesPerCharacter(string text)
         => Assert.Equal((16 * (text.Length + 3)) - 1, SymbolEncoder.Read(new TelepenSymbology(), text, new BarcodeOptions(), SymbolEncoder.RunSum));
 
+    /// <summary>
+    /// Telepen carries the ASCII characters 0 to 127 only. The symbology rejects empty input and characters above 127.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("")]
     [InlineData("é")]
@@ -119,6 +128,11 @@ public class TelepenSymbologyTests
     public void RejectsMalformedInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => Encode(text));
 
+    /// <summary>
+    /// Numeric mode carries pairs of digits, and X can replace the second digit of a pair. The symbology rejects empty input, an odd number of characters,
+    /// an X in the first place of a pair, a letter other than X and full width digits.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("")]
     [InlineData("123")]

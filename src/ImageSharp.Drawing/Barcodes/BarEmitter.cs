@@ -27,10 +27,9 @@ internal static class BarEmitter
         using PooledBuffer<MeasuredLine> lineBuffer = BarcodeEmitter.CreateLineBuffer(ref symbol, options);
 
         // A TextBlock is a class, so the span holds object references and cannot come from the byte pool. A bar symbol has at most 14 text placements: an
-        // ISBN has one for each of its 13 digits and one for its caption. The 16 stack slots hold all of them, and a larger count takes an array.
+        // ISBN has one for each of its 13 digits and one for its caption. The 16 stack slots hold all of them.
         InlineArray16<TextBlock> blockStorage = default;
-        int lineCount = lineBuffer.Span.Length;
-        Span<TextBlock> blocks = lineCount <= 16 ? ((Span<TextBlock>)blockStorage)[..lineCount] : new TextBlock[lineCount];
+        Span<TextBlock> blocks = ((Span<TextBlock>)blockStorage)[..lineBuffer.Span.Length];
         Shape(ref symbol, options, lineBuffer.Span, blocks);
         return Measure(ref symbol, options, origin, lineBuffer.Span, out _);
     }
@@ -49,17 +48,17 @@ internal static class BarEmitter
         using PooledBuffer<MeasuredLine> lineBuffer = BarcodeEmitter.CreateLineBuffer(ref symbol, options);
 
         // A TextBlock is a class, so the span holds object references and cannot come from the byte pool. A bar symbol has at most 14 text placements: an
-        // ISBN has one for each of its 13 digits and one for its caption. The 16 stack slots hold all of them, and a larger count takes an array.
+        // ISBN has one for each of its 13 digits and one for its caption. The 16 stack slots hold all of them.
         InlineArray16<TextBlock> blockStorage = default;
-        int lineCount = lineBuffer.Span.Length;
-        Span<TextBlock> blocks = lineCount <= 16 ? ((Span<TextBlock>)blockStorage)[..lineCount] : new TextBlock[lineCount];
+        Span<TextBlock> blocks = ((Span<TextBlock>)blockStorage)[..lineBuffer.Span.Length];
         Shape(ref symbol, options, lineBuffer.Span, blocks);
         return Draw(canvas, ref symbol, options, origin, lineBuffer.Span, blocks, background);
     }
 
     /// <summary>
-    /// Shapes the text of the symbol one time: one text block and one measured line for each text placement. The layout reads the lines and the draw renders
-    /// the blocks, so neither shapes the text again.
+    /// Shapes the text of the symbol: one text block and one measured line for each text placement. The layout reads the lines and the draw renders the
+    /// blocks, so neither shapes the text again. A symbology that limits the size of its text and a caption that spans the bars measure their lines one more
+    /// time before the blocks, to find the font size.
     /// </summary>
     /// <param name="symbol">The encoded linear or stacked symbol.</param>
     /// <param name="options">The sizing and painting options.</param>
@@ -166,8 +165,8 @@ internal static class BarEmitter
     }
 
     /// <summary>
-    /// Returns the x origin of a line. The line stands on the cell edges the bars actually drew on, not on the exact fractional position, so a digit stays over
-    /// its own symbol character. The unrounded edges would let the text and the bars disagree by up to half a module. A centred line straddles the middle of
+    /// Returns the x origin of a line. The line stands on the cell edges where the bars draw, not on the exact fractional position, so a digit stays over its
+    /// own symbol character. With unrounded edges, the text and the bars can disagree by up to half a module. A centred line straddles the middle of
     /// its span, a left aligned line puts the left edge of its ink on the left edge of its span, and a right aligned line puts the right edge of its ink on the
     /// right edge of its span.
     /// </summary>
@@ -692,7 +691,7 @@ internal static class BarEmitter
                 // When the quiet zones are drawn the frame reaches across them, and its outer edges snap outward from the exact ones, so the frame fills
                 // the measured area. The quiet zones absorb the fraction of a pixel between the snapped outer edge and the exact one. The vertical sections
                 // also stand at least the quiet zone and their thickness away from the bar block, which starts and ends on whole pixels. The thickness
-                // rounds on its own, so without that limit a quiet zone could lose a pixel under its minimum. A quiet zone is a minimum, so a quiet zone of
+                // rounds on its own, so without that limit a quiet zone can lose a pixel under its minimum. A quiet zone is a minimum, so a quiet zone of
                 // a fraction of a pixel rounds up. Without the quiet zones the frame ends on the bars.
                 if (this.sides)
                 {
@@ -830,7 +829,7 @@ internal static class BarEmitter
         /// <summary>
         /// Returns the pixel position of an edge of runs that are whole modules with corrections. The module edge rounds onto the pixel grid as an edge without
         /// a correction does, and the correction rounds to its own whole number of pixels, so the edges are those of the runs without corrections until a
-        /// correction is half a pixel or more. Rounded together, a correction of a fraction of a pixel could move one edge of a bar a whole pixel and its
+        /// correction is half a pixel or more. Rounded together, a correction of a fraction of a pixel can move one edge of a bar a whole pixel and its
         /// neighbour not, and change a bar of two pixels by half its width. The corrections of a character sum to zero and are less than half a module, so the
         /// nearest module to an edge is the module edge it corrects.
         /// </summary>
@@ -858,6 +857,7 @@ internal static class BarEmitter
             ReadOnlySpan<float> barHeights = symbol.BarHeights;
             ReadOnlySpan<float> barTops = symbol.BarTops;
             float frame = this.frame;
+            bool corrected = this.correctedModuleUnits > 0;
             for (int r = 0; r < rows.Length; r++)
             {
                 BarcodeRow row = rows[r];
@@ -873,26 +873,19 @@ internal static class BarEmitter
                 for (int i = 0; i < runs.Length; i++)
                 {
                     double runWidth = this.wholePixelRuns ? RunPixels(runs[i], this.runWidthInPixels) : runs[i] * (double)this.runWidthInPixels;
-                    if ((i & 1) == 0 && this.correctedModuleUnits > 0)
-                    {
-                        int bar = i >> 1;
-                        float top = rowTop + rowBarTops[bar];
-                        float bottom = top + rowHeights[bar];
-                        float barTop = frame > 0 && top == frame ? this.upperBottom : this.RowEdge(top);
-                        float barBottom = frame > 0 && bottom == symbol.HeightInModules - frame ? this.lowerTop : this.RowEdge(bottom);
-                        bars[index++] = RectangleF.FromLTRB(this.CorrectedEdge(units), barTop, this.CorrectedEdge(units + runs[i]), barBottom);
-                    }
-                    else if ((i & 1) == 0)
+                    if ((i & 1) == 0)
                     {
                         // Each bar edge rounds from its exact accumulated position onto the device pixel grid, so bars stay crisp for scanning at any module
                         // width and rounding cannot drift across the symbol, and the edge a row shares with the row below it rounds to one pixel row for both.
-                        // Integral module widths, heights and origins round to themselves.
+                        // Integral module widths, heights and origins round to themselves. Corrected runs round their module edges and corrections apart.
                         int bar = i >> 1;
                         float top = rowTop + rowBarTops[bar];
                         float bottom = top + rowHeights[bar];
                         float barTop = frame > 0 && top == frame ? this.upperBottom : this.RowEdge(top);
                         float barBottom = frame > 0 && bottom == symbol.HeightInModules - frame ? this.lowerTop : this.RowEdge(bottom);
-                        bars[index++] = RectangleF.FromLTRB((float)Math.Round(x), barTop, (float)Math.Round(x + runWidth), barBottom);
+                        float left = corrected ? this.CorrectedEdge(units) : (float)Math.Round(x);
+                        float right = corrected ? this.CorrectedEdge(units + runs[i]) : (float)Math.Round(x + runWidth);
+                        bars[index++] = RectangleF.FromLTRB(left, barTop, right, barBottom);
                     }
 
                     x += runWidth;
@@ -949,8 +942,9 @@ internal static class BarEmitter
     }
 
     /// <summary>
-    /// The text options the lines of one symbol render with. A symbol resolves to at most three fonts: the digits, the scaled quiet zone digits and the
-    /// caption. Each font keeps one options instance, built on first use, and the measure and the draw both read it from here.
+    /// The text options the lines of one symbol render with: the digit options, the caption options and the options of the scaled lines. The digit and the
+    /// caption options are built on first use and kept. The scaled options are kept while the next scaled line has the same font size.
+    /// <see cref="Shape"/> reads the options of each line from here.
     /// </summary>
     private struct LineFonts
     {

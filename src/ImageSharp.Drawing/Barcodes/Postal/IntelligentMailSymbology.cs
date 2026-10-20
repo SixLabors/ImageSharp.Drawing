@@ -59,7 +59,7 @@ public sealed class IntelligentMailSymbology : BarcodeSymbology
         Span<FourState> states = stateStorage;
         IntelligentMailEncoder.Encode(text, states);
 
-        // The 31 digits and the six spaces between their groups.
+        // The 31 digits and at most nine spaces between their groups: six between seven tracking code fields and three before the routing code fields.
         InlineArray64<char> lineStorage = default;
         Span<char> line = lineStorage;
         int lineLength = options.Font is null ? 0 : HumanReadable(text, line);

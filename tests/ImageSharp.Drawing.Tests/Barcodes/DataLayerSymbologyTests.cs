@@ -7,15 +7,17 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
 /// Encoder tests for the data layers over EAN-13 and EAN-8: ISBN (ISO 2108), ISMN (ISO 10957), ISSN (ISO 3297) and the Marks &amp; Spencer in-house symbology.
-/// Module sequences are asserted against reference vectors generated with an independent reference implementation; caption and layout assertions follow the
-/// standards and, for M&amp;S which has no public specification, that implementation itself.
+/// The module sequence tests compare with reference vectors from an independent reference implementation. The caption and layout tests follow the standards.
+/// M&amp;S has no public specification, so its layout test follows that reference implementation.
 /// </summary>
 public class DataLayerSymbologyTests
 {
     /// <summary>
-    /// All accepted ISBN input forms encode the same EAN-13: full ISBN-13, ISBN-13 without its check digit, ISBN-10 with its modulus 11 check digit, and
-    /// ISBN-10 without it (the second pair converts through the 978 prefix; the last case computes an X check internally, proving X handling).
+    /// Each accepted ISBN input form encodes the EAN-13 of its ISBN-13: the full ISBN-13, the ISBN-13 without its check digit, the ISBN-10 with its modulus 11
+    /// check digit, and the ISBN-10 without it. An ISBN-10 converts through the 978 prefix. The ISBN-10 of the last case has the check character X.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expectedRuns">The expected run widths in modules, separated by commas.</param>
     [Theory]
     [InlineData("978-0-306-40615-7", "1,1,1,1,3,1,2,3,1,2,1,1,1,2,3,1,4,1,1,1,1,2,3,1,1,1,4,1,1,1,1,1,1,1,3,2,3,2,1,1,1,1,1,4,2,2,2,1,1,2,3,1,1,3,1,2,1,1,1")]
     [InlineData("978-0-306-40615", "1,1,1,1,3,1,2,3,1,2,1,1,1,2,3,1,4,1,1,1,1,2,3,1,1,1,4,1,1,1,1,1,1,1,3,2,3,2,1,1,1,1,1,4,2,2,2,1,1,2,3,1,1,3,1,2,1,1,1")]
@@ -24,10 +26,15 @@ public class DataLayerSymbologyTests
     public void Isbn_EncodesExpectedModuleSequence(string text, string expectedRuns)
         => Assert.Equal(expectedRuns, Encode(new IsbnSymbology(), text));
 
+    /// <summary>
+    /// With a font, the ISBN symbol prints a caption above the bars. The caption is the hyphenated ISBN-13 with its check digit, and an ISBN-10 input prints
+    /// its converted 978 form. Without a font, the symbol has no text. In both cases every bar top is at zero.
+    /// </summary>
     [Fact]
     public void Isbn_CaptionAndLayout()
     {
         BarcodeOptions options = CreateTextOptions();
+
         SymbolEncoder.Encode(new IsbnSymbology(), "978-0-306-40615", options, (ref symbol) =>
         {
             // The caption prints the hyphenated ISBN with the EAN-13 check digit above the bars, spanning the main body of the symbol, and the bars shift down
@@ -60,7 +67,7 @@ public class DataLayerSymbologyTests
 
     /// <summary>
     /// The inputs have a wrong check digit, a prefix outside 978 and 979, the wrong length or a wrong character. The GS1 General Specifications allocate the
-    /// prefix 9790 to the ISMN, so the ISMN 979-0-3452-4680-5 of the ISMN users' manual is not an ISBN.
+    /// prefix 9790 to the ISMN, so the ISMN 979-0-3452-4680-5 of the ISMN users' manual is not an ISBN. The ISBN symbology rejects each input.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     [Theory]
@@ -74,15 +81,20 @@ public class DataLayerSymbologyTests
         => Assert.Throws<ArgumentException>(() => Encode(new IsbnSymbology(), text));
 
     /// <summary>
-    /// Both ISMN input forms: the thirteen digit 9790 form with its check digit, and the older M form without one. ISO 10957:2009 defines the check digit of
-    /// both forms as the EAN-13 check digit.
+    /// Each ISMN input form encodes its EAN-13: the thirteen digit 9790 form with its check digit, and the older M form without one. ISO 10957:2009 defines
+    /// the check digit of both forms as the EAN-13 check digit.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expectedRuns">The expected run widths in modules, separated by commas.</param>
     [Theory]
     [InlineData("979-0-2600-0043-8", "1,1,1,1,3,1,2,2,1,1,3,1,1,2,3,2,1,2,2,4,1,1,1,3,2,1,1,1,1,1,1,1,3,2,1,1,3,2,1,1,3,2,1,1,1,1,3,2,1,4,1,1,1,2,1,3,1,1,1")]
     [InlineData("M-2306-7118", "1,1,1,1,3,1,2,2,1,1,3,1,1,2,3,2,1,2,2,1,1,4,1,3,2,1,1,1,1,1,1,1,1,1,1,4,1,3,1,2,2,2,2,1,2,2,2,1,1,2,1,3,1,3,1,2,1,1,1")]
     public void Ismn_EncodesExpectedModuleSequence(string text, string expectedRuns)
         => Assert.Equal(expectedRuns, Encode(new IsmnSymbology(), text));
 
+    /// <summary>
+    /// The ISMN caption prints the 979-0 form with hyphens between the four elements of the number, for each input form.
+    /// </summary>
     [Fact]
     public void Ismn_Caption()
     {
@@ -101,6 +113,11 @@ public class DataLayerSymbologyTests
         Assert.Equal("ISMN 979-0-2991-0234-9", SymbolEncoder.Read(new IsmnSymbology(), "9790299102349", options, SymbolEncoder.Texts)[^1]);
     }
 
+    /// <summary>
+    /// The ISMN symbology rejects an M form with a wrong check digit, a prefix that is not 9790, an M form that is too short and an M form with a letter in
+    /// the number.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("M-2306-7118-5")]
     [InlineData("978-0-2600-0043")]
@@ -110,24 +127,35 @@ public class DataLayerSymbologyTests
         => Assert.Throws<ArgumentException>(() => Encode(new IsmnSymbology(), text));
 
     /// <summary>
-    /// The ISSN encodes 977, the seven data digits and the sequence variant; the second case supplies an X check character and an explicit 05 variant.
+    /// The ISSN symbol encodes 977, the seven data digits and the sequence variant. The second case has an X check character and the sequence variant 05.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expectedRuns">The expected run widths in modules, separated by commas.</param>
     [Theory]
     [InlineData("0317-8471", "1,1,1,1,3,1,2,2,1,3,1,1,1,2,3,1,4,1,1,1,2,2,2,1,3,1,2,1,1,1,1,1,1,2,1,3,1,1,3,2,1,3,1,2,3,2,1,1,3,2,1,1,2,2,2,1,1,1,1")]
     [InlineData("2434-561X 05", "1,1,1,1,3,1,2,2,1,3,1,2,2,1,2,1,1,3,2,1,1,4,1,1,1,3,2,1,1,1,1,1,1,2,3,1,1,1,1,4,2,2,2,1,3,2,1,1,1,2,3,1,2,2,2,1,1,1,1")]
     public void Issn_EncodesExpectedModuleSequence(string text, string expectedRuns)
         => Assert.Equal(expectedRuns, Encode(new IssnSymbology(), text));
 
+    /// <summary>
+    /// The ISSN caption prints the hyphenated ISSN with its check character. It does not print the sequence variant.
+    /// </summary>
     [Fact]
     public void Issn_Caption()
     {
         BarcodeOptions options = CreateTextOptions();
+
         Assert.Equal("ISSN 0317-8471", SymbolEncoder.Read(new IssnSymbology(), "0317-8471", options, SymbolEncoder.Texts)[^1]);
 
         // The caption prints the ISSN check character, X for ten, not the sequence variant.
         Assert.Equal("ISSN 2434-561X", SymbolEncoder.Read(new IssnSymbology(), "2434-561X 05", options, SymbolEncoder.Texts)[^1]);
     }
 
+    /// <summary>
+    /// The ISSN symbology rejects a wrong check character, an ISSN without its hyphen, a sequence variant of one digit and an X that is not the check
+    /// character.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("0317-8476")]
     [InlineData("03178471")]
@@ -137,8 +165,9 @@ public class DataLayerSymbologyTests
         => Assert.Throws<ArgumentException>(() => Encode(new IssnSymbology(), text));
 
     /// <summary>
-    /// A seven character M&amp;S number zero pads to the same eight digit EAN-8 as its full form, so both inputs produce identical bars.
+    /// A seven character M&amp;S number pads with a zero to the eight digit EAN-8 of its full form. Both inputs produce the same bars.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("0642118")]
     [InlineData("00642118")]
@@ -147,10 +176,15 @@ public class DataLayerSymbologyTests
             "1,1,1,3,2,1,1,3,2,1,1,1,1,1,4,1,1,3,2,1,1,1,1,1,2,1,2,2,2,2,2,1,2,2,2,1,1,2,1,3,1,1,1",
             Encode(new MandsSymbology(), text));
 
+    /// <summary>
+    /// The M&amp;S symbol keeps the centre guard bars at digit height and extends the outer guard bars. It prints the seven digits of the number, and M and S
+    /// in the quiet zones.
+    /// </summary>
     [Fact]
     public void Mands_Layout()
     {
         BarcodeOptions options = CreateTextOptions();
+
         SymbolEncoder.Encode(new MandsSymbology(), "0642118", options, (ref symbol) =>
         {
             // Per the reference implementation: the centre guard bars stay at digit height while the outer guards extend, the padded leading zero and the final
@@ -171,6 +205,10 @@ public class DataLayerSymbologyTests
         });
     }
 
+    /// <summary>
+    /// The M&amp;S symbology rejects a number that is too short, a number that is too long, a wrong check digit and a letter in the number.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("064211")]
     [InlineData("006421187")]
@@ -188,6 +226,10 @@ public class DataLayerSymbologyTests
     private static string Encode(BarcodeSymbology symbology, string text)
         => SymbolEncoder.Read(symbology, text, new BarcodeOptions(), SymbolEncoder.ModuleRuns);
 
+    /// <summary>
+    /// Creates options at the default X dimension, a bar height of 50 default X dimensions, 144 dots per inch and the OCR-B font at 10.75 points.
+    /// </summary>
+    /// <returns>The options.</returns>
     private static BarcodeOptions CreateTextOptions()
         => new()
         {

@@ -52,9 +52,8 @@ public sealed class BarcodeOptions
     /// the same number of pixels wide. The symbol can then be slightly larger or smaller than this X dimension gives. Where the specification of the symbology
     /// gives a smallest and a largest X dimension, the number of pixels is clamped to that range, so a value outside the range draws at the nearest limit. At
     /// a resolution where no whole number of pixels is inside the range, the symbol draws at the smallest whole number of pixels over the smallest X
-    /// dimension. <see cref="MaxiCodeSymbology"/>, whose
-    /// hexagonal modules do not stand on whole pixels, and <see cref="SwissQrCodeSymbology"/>, whose width the specification fixes, draw at the exact X
-    /// dimension.
+    /// dimension. <see cref="MaxiCodeSymbology"/>, whose hexagonal modules do not stand on whole pixels, and <see cref="SwissQrCodeSymbology"/>, whose width
+    /// the specification fixes, draw at the exact X dimension.
     /// </para>
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">The value is not greater than zero.</exception>
@@ -105,10 +104,9 @@ public sealed class BarcodeOptions
     /// Gets or sets the font for the human readable interpretation, whose size is in points and renders at <see cref="Dpi"/>. Set <see langword="null"/> to
     /// print no text. The text prints at the size of this font, except where the standard of a symbology sets a size. The text of an Intelligent Mail Package
     /// Barcode moves into its printed character height of 0.090 to 0.125 inch, and prints bold, as its standard requires, with a synthetic weight when the font
-    /// has no bold face. The text of an Intelligent Mail barcode prints at 10 points or larger, and the
-    /// text of an Australia Post barcode at 8 points or smaller. The text of a GS1-128, GS1 DataBar, ITF-14 or GS1 two-dimensional symbol prints at an em
-    /// height of 2 mm or larger, which is about 5.67 points. A line that must stay within its span prints smaller when it is wider than the span, such as the
-    /// quiet zone digits of a UPC symbol.
+    /// has no bold face. The text of an Intelligent Mail barcode prints at 10 points or larger, and the text of an Australia Post barcode at 8 points or
+    /// smaller. The text of a GS1-128, GS1 DataBar, ITF-14 or GS1 two-dimensional symbol prints at an em height of 2 mm or larger, which is about 5.67 points.
+    /// A line that must stay within its span prints smaller when it is wider than the span, such as the quiet zone digits of a UPC symbol.
     /// </summary>
     public Font? Font { get; set; }
 
@@ -159,8 +157,8 @@ public sealed class BarcodeOptions
 
         // The clamp works in whole pixels: the largest whole number of pixels at or under the maximum, and the smallest at or over the minimum and at least
         // one. The tolerance keeps a limit that falls on a whole pixel, such as 0.254 mm at 100 dpi, on that pixel against the rounding error of the
-        // conversion. At a low resolution a narrow range can hold no whole pixel, and the lowest count is then over the highest. The minimum applies last, so the
-        // module is never under the minimum and is then over the maximum.
+        // conversion. At a low resolution a narrow range can hold no whole pixel, and the lowest count is then over the highest. The minimum applies last, so
+        // the module is never under the minimum and is then over the maximum.
         double highest = Math.Floor((maximum * pixelsPerMillimetre) + LimitTolerance);
         double lowest = Math.Max(1, Math.Ceiling((minimum * pixelsPerMillimetre) - LimitTolerance));
         pixels = Math.Max(Math.Min(pixels, highest), lowest);

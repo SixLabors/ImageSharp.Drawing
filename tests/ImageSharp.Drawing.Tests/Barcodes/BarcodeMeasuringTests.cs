@@ -22,7 +22,7 @@ public class BarcodeMeasuringTests
     private const int Margin = 24;
 
     /// <summary>
-    /// A linear symbol whose leading digit prints in the left quiet zone.
+    /// An EAN-13 symbol prints its leading digit in the left quiet zone. The measured rectangles include that digit.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="provider">The image provider.</param>
@@ -33,7 +33,7 @@ public class BarcodeMeasuringTests
         => RunTest(provider, new Ean13Symbology(), "5901234123457", CreateTextOptions());
 
     /// <summary>
-    /// An add-on symbol, whose digits print above the bars, so the advance and the bounds extend above the origin.
+    /// An EAN-5 add-on symbol prints its digits above the bars. The advance and the bounds extend above the origin.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="provider">The image provider.</param>
@@ -44,7 +44,7 @@ public class BarcodeMeasuringTests
         => RunTest(provider, new Ean5Symbology(), "52495", CreateTextOptions());
 
     /// <summary>
-    /// A caption printed at the size the caller gave it, wider than the bars, so the advance and the bounds extend to the left of the origin.
+    /// An ISBN caption at the font size of the caller is wider than the bars. The advance and the bounds extend to the left of the origin.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="provider">The image provider.</param>
@@ -55,12 +55,13 @@ public class BarcodeMeasuringTests
     {
         BarcodeOptions options = CreateTextOptions();
         options.FitCaptionToSymbolWidth = false;
+
         RunTest(provider, new IsbnSymbology(), "978-0-306-40615-7", options);
     }
 
     /// <summary>
-    /// A symbol with identification bars above the banner and below the interpretation, at its nominal bar height. The symbology draws the text bold, as
-    /// sections 2.4.1 and 2.4.2 of USPS2000508 require.
+    /// An Intelligent Mail Package symbol has identification bars above the banner and below the interpretation, at its nominal bar height. The measured
+    /// rectangles include the bars and both texts. The symbology draws the text bold, as sections 2.4.1 and 2.4.2 of USPS2000508 require.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="provider">The image provider.</param>
@@ -68,18 +69,10 @@ public class BarcodeMeasuringTests
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void IntelligentMailPackage_WithText<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
-        => RunTest(
-            provider,
-            new IntelligentMailPackageSymbology("USPS TRACKING #"),
-            "(420)123456789(92)12391234567812345670",
-            new BarcodeOptions
-            {
-                Background = Brushes.Solid(Color.LightYellow),
-                Font = BarcodeFonts.OcrB.CreateFont(10.75F),
-            });
+        => RunTest(provider, new IntelligentMailPackageSymbology("USPS TRACKING #"), "(420)123456789(92)12391234567812345670", CreateTextOptions());
 
     /// <summary>
-    /// A symbol inside a bearer bar, which runs around the quiet zones.
+    /// An ITF-14 symbol has a bearer bar around its quiet zones. The measured rectangles include the bearer bar.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="provider">The image provider.</param>
@@ -90,7 +83,7 @@ public class BarcodeMeasuringTests
         => RunTest(provider, new Itf14Symbology(), "15400141288763", CreateTextOptions());
 
     /// <summary>
-    /// A stacked symbol with quiet zones on all four sides.
+    /// A PDF417 symbol has quiet zones on all four sides. The renderable bounds include all four quiet zones.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="provider">The image provider.</param>
@@ -101,7 +94,7 @@ public class BarcodeMeasuringTests
         => RunTest(provider, new Pdf417Symbology(), "PDF417 Symbology Standard", CreateOptions());
 
     /// <summary>
-    /// A matrix symbol with its interpretation below the modules.
+    /// A GS1 DataMatrix symbol prints its interpretation below the modules. The measured rectangles include the interpretation.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="provider">The image provider.</param>
@@ -112,7 +105,7 @@ public class BarcodeMeasuringTests
         => RunTest(provider, new Gs1DataMatrixSymbology(), "(01)09521234543213(17)120508(10)ABCD1234(410)9501101020917", CreateMatrixTextOptions());
 
     /// <summary>
-    /// A symbol of hexagons around a circular finder.
+    /// A MaxiCode symbol has hexagons around a circular finder. The measured rectangles include every hexagon.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="provider">The image provider.</param>
@@ -120,13 +113,14 @@ public class BarcodeMeasuringTests
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void MaxiCode<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
-    {
-        BarcodeOptions options = new() { Background = Brushes.Solid(Color.LightYellow) };
-        RunTest(provider, new MaxiCodeSymbology(), "THIS IS A 93 CHARACTER CODE SET A MESSAGE THAT FILLS A MODE 4, UNAPPENDED, MAXICODE SYMBOL...", options);
-    }
+        => RunTest(
+            provider,
+            new MaxiCodeSymbology(),
+            "THIS IS A 93 CHARACTER CODE SET A MESSAGE THAT FILLS A MODE 4, UNAPPENDED, MAXICODE SYMBOL...",
+            CreateOptions());
 
     /// <summary>
-    /// A symbol of dots, whose ink ends on the edges of the outermost dots.
+    /// A DotCode symbol has dots. The bounds end on the edges of the outermost dots.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="provider">The image provider.</param>
@@ -134,7 +128,7 @@ public class BarcodeMeasuringTests
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void DotCode<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
-        => RunTest(provider, new DotCodeSymbology(), "This is DotCode", CreateMatrixOptions());
+        => RunTest(provider, new DotCodeSymbology(), "This is DotCode", CreateOptions());
 
     /// <summary>
     /// Draws the barcode with its measured rectangles outlined, on an image that holds the renderable bounds and a margin.
@@ -168,6 +162,7 @@ public class BarcodeMeasuringTests
                     RectangleF advance = metrics.Advance;
                     RectangleF bounds = metrics.Bounds;
                     RectangleF renderable = metrics.RenderableBounds;
+
                     canvas.Draw(Pens.Solid(Color.Green, 1), new RectanglePolygon(origin.X + advance.X, origin.Y + advance.Y, advance.Width, advance.Height));
                     canvas.Draw(Pens.Solid(Color.Blue, 1), new RectanglePolygon(bounds.X, bounds.Y, bounds.Width, bounds.Height));
                     canvas.Draw(
@@ -182,7 +177,7 @@ public class BarcodeMeasuringTests
             appendSourceFileOrDescription: false);
 
     /// <summary>
-    /// Draws at the default options on a light yellow background.
+    /// Creates the default options with a light yellow background.
     /// </summary>
     /// <returns>The options.</returns>
     private static BarcodeOptions CreateOptions()
@@ -192,34 +187,27 @@ public class BarcodeMeasuringTests
         };
 
     /// <summary>
-    /// Draws the linear symbols at the default options with the OCR-B font at 10.75 points, the size of the linear goldens.
+    /// Creates the options for linear symbols: the options of <see cref="CreateOptions"/> with the OCR-B font at 10.75 points, the size of the linear
+    /// goldens.
     /// </summary>
     /// <returns>The options.</returns>
     private static BarcodeOptions CreateTextOptions()
     {
         BarcodeOptions options = CreateOptions();
         options.Font = BarcodeFonts.OcrB.CreateFont(10.75F);
+
         return options;
     }
 
     /// <summary>
-    /// Draws the matrix symbols at the default options on a light yellow background.
-    /// </summary>
-    /// <returns>The options.</returns>
-    private static BarcodeOptions CreateMatrixOptions()
-        => new()
-        {
-            Background = Brushes.Solid(Color.LightYellow),
-        };
-
-    /// <summary>
-    /// Draws the matrix symbols with the OCR-B font at 9 points, the size of the matrix goldens.
+    /// Creates the options for matrix symbols: the options of <see cref="CreateOptions"/> with the OCR-B font at 9 points, the size of the matrix goldens.
     /// </summary>
     /// <returns>The options.</returns>
     private static BarcodeOptions CreateMatrixTextOptions()
     {
-        BarcodeOptions options = CreateMatrixOptions();
+        BarcodeOptions options = CreateOptions();
         options.Font = BarcodeFonts.OcrB.CreateFont(9F);
+
         return options;
     }
 }

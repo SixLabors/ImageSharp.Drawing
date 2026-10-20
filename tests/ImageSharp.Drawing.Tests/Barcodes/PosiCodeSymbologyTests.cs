@@ -102,14 +102,24 @@ public class PosiCodeSymbologyTests
             Assert.Equal(expected, symbol.TrailingQuietZone);
         });
 
+    /// <summary>
+    /// The human readable line is the text as given.
+    /// </summary>
     [Fact]
     public void PrintsTheTextAsGiven()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
         string[] texts = SymbolEncoder.Read(new PosiCodeSymbology(), "ABC123", options, SymbolEncoder.Texts);
+
         Assert.Equal("ABC123", Assert.Single(texts));
     }
 
+    /// <summary>
+    /// Versions A and B carry the 256 values of ISO/IEC 8859-1. The Limited versions carry the digits, the capital letters, the hyphen and the full stop.
+    /// The symbology rejects empty input and characters outside the set of the version.
+    /// </summary>
+    /// <param name="version">The version.</param>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData(PosiCodeVersion.A, "")]
     [InlineData(PosiCodeVersion.A, "Ā")]

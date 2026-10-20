@@ -52,7 +52,9 @@ public class UspsPostalSymbologyTests
         => SymbolEncoder.Encode(new PostnetSymbology(), "01234", new BarcodeOptions(), static (ref symbol) =>
         {
             Assert.Equal(63, symbol.Runs.Length);
+
             double unit = symbol.RunUnit * symbol.XDimension / Inch;
+
             for (int i = 0; i < symbol.Runs.Length; i += 2)
             {
                 Assert.InRange(symbol.Runs[i] * unit, 0.015, 0.025);
@@ -65,7 +67,9 @@ public class UspsPostalSymbologyTests
             }
 
             float fullBar = MaximumBarHeight(ref symbol);
+
             Assert.InRange(fullBar * symbol.XDimension / Inch, 0.115, 0.135);
+
             for (int i = 0; i < symbol.BarHeights.Length; i++)
             {
                 if (symbol.BarHeights[i] != fullBar)
@@ -103,6 +107,10 @@ public class UspsPostalSymbologyTests
         Assert.Empty(SymbolEncoder.Read(new PlanetSymbology(), "01234567890", options, SymbolEncoder.Texts));
     }
 
+    /// <summary>
+    /// POSTNET carries 5, 9 or 11 digits. The symbology rejects other lengths and non-digits.
+    /// </summary>
+    /// <param name="text">The digits to encode.</param>
     [Theory]
     [InlineData("")]
     [InlineData("0123")]
@@ -114,6 +122,10 @@ public class UspsPostalSymbologyTests
     public void RejectsMalformedPostnetInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => Encode(new PostnetSymbology(), text));
 
+    /// <summary>
+    /// PLANET carries 11 or 13 digits. The symbology rejects other lengths and non-digits.
+    /// </summary>
+    /// <param name="text">The digits to encode.</param>
     [Theory]
     [InlineData("")]
     [InlineData("01234")]
@@ -141,6 +153,7 @@ public class UspsPostalSymbologyTests
     {
         float fullBar = MaximumBarHeight(ref symbol);
         char[] kinds = new char[symbol.BarHeights.Length];
+
         for (int i = 0; i < kinds.Length; i++)
         {
             kinds[i] = symbol.BarHeights[i] == fullBar ? 'F' : 'H';
@@ -157,6 +170,7 @@ public class UspsPostalSymbologyTests
     private static float MaximumBarHeight(ref BarcodeSymbol symbol)
     {
         float height = 0F;
+
         foreach (float bar in symbol.BarHeights)
         {
             height = MathF.Max(height, bar);

@@ -129,7 +129,7 @@ internal static class PosiCodeEncoder
     private enum CharacterSet
     {
         /// <summary>
-        /// Set 0: the digits, the capital letters and the symbols space - . $ / + %, then the latch to set 1 and the shifts to sets 1 and 2.
+        /// Set 0: the digits, the capital letters and the symbols - . space $ / + %, then the latch to set 1 and the shifts to sets 1 and 2.
         /// </summary>
         Set0,
 
@@ -296,12 +296,12 @@ internal static class PosiCodeEncoder
     /// <returns>The codeword, or -1 when the character is not in the set.</returns>
     public static int LimitedValue(int codePoint)
     {
-        // A set 0 entry has no set bits above the codeword, so an entry below the limited count is a limited codeword of set 0.
         if ((uint)codePoint >= Function4)
         {
             return -1;
         }
 
+        // A set 0 entry has no set bits above the codeword, so an entry below the limited count is a limited codeword of set 0.
         int code = CharacterCodes[codePoint];
         return code < LimitedCodewords ? code : -1;
     }
@@ -447,10 +447,11 @@ internal static class PosiCodeEncoder
         AppendRuns(patterns.Stop, runs, ref written);
 
         int widthInModules = BarcodeSymbol.RunWidth(runs);
+
         float barHeight = options.ResolveBarHeight(xDimension, widthInModules * NominalBarHeightFraction);
         heights.Fill(barHeight);
 
-        if (options.Font is not null && readable.Length > 0)
+        if (options.Font is not null)
         {
             symbol.ReserveText(1, readable.Length);
             symbol.AddText(readable, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);

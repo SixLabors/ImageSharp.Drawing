@@ -41,7 +41,7 @@ public sealed class Gs1DataBarExpandedStackedSymbology : BarcodeSymbology
     }
 
     /// <summary>
-    /// Gets the number of segments in a full row. The last row may hold fewer.
+    /// Gets the number of segments in a full row. The last row can hold fewer.
     /// </summary>
     public int Segments { get; }
 

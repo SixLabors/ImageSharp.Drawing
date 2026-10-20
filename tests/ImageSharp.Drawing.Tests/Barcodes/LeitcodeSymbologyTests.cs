@@ -30,7 +30,7 @@ public class LeitcodeSymbologyTests
 
     /// <summary>
     /// The documentation weights the digits 4 and 9 alternately from the first, so 2134807501640 gives 8 + 9 + 12 + 36 + 32 + 0 + 28 + 45 + 0 + 9 + 24 + 36 + 0
-    /// = 239, and "239 Modulo 10 = 9, Ergänzung zu 10 = 1". A supplied check digit that disagrees is rejected.
+    /// = 239, and "239 Modulo 10 = 9, Ergänzung zu 10 = 1". A supplied check digit that disagrees throws.
     /// </summary>
     [Fact]
     public void CalculatesTheDeutschePostCheckDigit()
@@ -39,11 +39,12 @@ public class LeitcodeSymbologyTests
         string[] texts = SymbolEncoder.Read(new LeitcodeSymbology(), "2134807501640", options, SymbolEncoder.Texts);
 
         Assert.Equal("21348.075.016.40 1", Assert.Single(texts));
+
         Assert.Throws<ArgumentException>(() => Encode("21348075016402"));
     }
 
     /// <summary>
-    /// A Leitcode is thirteen data digits and an optional check digit, so anything else is rejected, as is a non-digit.
+    /// A Leitcode is thirteen data digits and an optional check digit. The symbology rejects other lengths and non-digits.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     [Theory]

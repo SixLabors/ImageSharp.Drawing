@@ -193,20 +193,11 @@ internal static class CodablockFEncoder
     /// </summary>
     /// <param name="text">The text to encode. Every character must be ASCII 0 to 127.</param>
     /// <param name="columns">The number of data columns in a row, 4 to 62.</param>
-    /// <param name="readablePrefix">The characters of the human readable interpretation before its body.</param>
-    /// <param name="readableBody">The body of the human readable interpretation.</param>
-    /// <param name="readableSuffix">The characters of the human readable interpretation after its body.</param>
+    /// <param name="readable">The human readable interpretation.</param>
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="symbol">The symbol to write.</param>
     /// <exception cref="ArgumentException">The text carries a character the symbology cannot encode, or more data than 44 rows hold.</exception>
-    public static void BuildSymbol(
-        ReadOnlySpan<char> text,
-        int columns,
-        ReadOnlySpan<char> readablePrefix,
-        ReadOnlySpan<char> readableBody,
-        ReadOnlySpan<char> readableSuffix,
-        BarcodeOptions options,
-        ref BarcodeSymbol symbol)
+    public static void BuildSymbol(ReadOnlySpan<char> text, int columns, ReadOnlySpan<char> readable, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         int n = text.Length;
         if (n > MaximumText)
@@ -265,7 +256,14 @@ internal static class CodablockFEncoder
             {
                 Span<int> runs = symbol.AddRow(dataRuns, out Span<float> heights, out _);
                 heights.Fill(barHeight);
-                WriteRuns(values.Slice(row * rowSize, rowSize), runs);
+
+                // The runs start with a bar. Every character is six elements, and the stop character is seven.
+                int index = 0;
+                foreach (int value in values.Slice(row * rowSize, rowSize))
+                {
+                    AppendPattern(Patterns[value], value == Stop ? 7 : 6, runs, ref index);
+                }
+
                 if (row < rowCount - 1)
                 {
                     Span<int> separator = symbol.AddRow(separatorRuns, out Span<float> separatorHeights, out _);
@@ -277,18 +275,10 @@ internal static class CodablockFEncoder
             AddEdge(width, ref symbol);
 
             float heightInModules = (rowCount * barHeight) + ((rowCount + 1) * SeparatorHeight);
-            int readableLength = readablePrefix.Length + readableBody.Length + readableSuffix.Length;
-            if (options.Font is not null && readableLength > 0)
+            if (options.Font is not null && readable.Length > 0)
             {
-                symbol.ReserveText(1, readableLength);
-                symbol.AddText(
-                    readablePrefix,
-                    readableBody,
-                    readableSuffix,
-                    0F,
-                    width,
-                    BarcodeTextSide.BelowBars,
-                    heightInModules + BarcodeTextPlacement.Clearance);
+                symbol.ReserveText(1, readable.Length);
+                symbol.AddText(readable, 0F, width, BarcodeTextSide.BelowBars, heightInModules + BarcodeTextPlacement.Clearance);
             }
 
             symbol.EndStacked(0F, QuietZone, QuietZone);
@@ -610,20 +600,6 @@ internal static class CodablockFEncoder
         for (int shift = (elements - 1) * 4; shift >= 0; shift -= 4)
         {
             runs[index++] = (int)((pattern >> shift) & 0xF);
-        }
-    }
-
-    /// <summary>
-    /// Writes the run lengths of the symbol character values of one row, starting with a bar.
-    /// </summary>
-    /// <param name="values">The symbol character values of the row, the start and stop characters included.</param>
-    /// <param name="runs">The alternating bar and space run widths in modules to write.</param>
-    private static void WriteRuns(ReadOnlySpan<int> values, Span<int> runs)
-    {
-        int index = 0;
-        foreach (int value in values)
-        {
-            AppendPattern(Patterns[value], value == Stop ? 7 : 6, runs, ref index);
         }
     }
 

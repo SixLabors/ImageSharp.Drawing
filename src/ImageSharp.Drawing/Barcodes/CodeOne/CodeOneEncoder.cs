@@ -142,11 +142,34 @@ internal static class CodeOneEncoder
     /// </summary>
     private enum Mode
     {
+        /// <summary>
+        /// ASCII mode: each codeword carries one character, one digit pair, a shift or a latch.
+        /// </summary>
         Ascii,
+
+        /// <summary>
+        /// C40 mode: three values in two codewords, with the capital letters in the basic set.
+        /// </summary>
         C40,
+
+        /// <summary>
+        /// Text mode: three values in two codewords, with the small letters in the basic set.
+        /// </summary>
         Text,
+
+        /// <summary>
+        /// X12 mode: three values in two codewords from one set of 40 values.
+        /// </summary>
         X12,
+
+        /// <summary>
+        /// Byte mode: a length, then one codeword for each byte.
+        /// </summary>
         Byte,
+
+        /// <summary>
+        /// Decimal mode: three digits in 10 bits.
+        /// </summary>
         Decimal,
     }
 
@@ -1335,7 +1358,8 @@ internal static class CodeOneEncoder
             int start = this.position;
             ModeCounts offset = initial - table[start].Sums;
 
-            // Stage 1 reads one character at a time, until the early test may run and the ASCII count stands at the same part of a codeword as its running sum.
+            // Stage 1 reads one character at a time. It stops when the early test can run and the ASCII count stands at the same part of a codeword as its
+            // running sum.
             int ascii = initial.Ascii;
             int index = start;
             while (index < length)

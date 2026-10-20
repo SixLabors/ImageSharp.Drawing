@@ -46,8 +46,8 @@ public sealed class IsbnSymbology : BarcodeSymbology
             }
         }
 
-        // Every character is a digit, except that the last character of an ISBN-10 may be the check character X. The message decodes the code point at the
-        // first other character, so a surrogate pair reports as the one character it is.
+        // Every character is a digit. The one exception is the check character X, which can be the last character of an ISBN-10. The message decodes the code
+        // point at the first other character, so a surrogate pair reports as the one character it is.
         ReadOnlySpan<char> compact = compactBuffer[..compactLength];
         int invalid = compact.IndexOfAnyExceptInRange('0', '9');
         if (invalid >= 0 && !(invalid == 9 && compact.Length == 10 && compact[9] == 'X'))

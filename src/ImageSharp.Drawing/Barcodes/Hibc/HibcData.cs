@@ -98,7 +98,8 @@ internal static class HibcData
     /// <exception cref="ArgumentException">The text is not valid HIBC data.</exception>
     public static void Prepare(ReadOnlySpan<char> text, bool validateCheckCharacter, ref ValueStringBuilder encoded)
     {
-        Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
+        // The data is at least one character, and a check character to validate follows it.
+        Guard.MustBeGreaterThan(text.Length, validateCheckCharacter ? 1 : 0, nameof(text));
 
         // The check character covers the flag character the encoder puts in front of the data, so the sum starts at the value that character holds in the set.
         int sum = AlphanumericCharacterSet.Value(FlagCharacter);
@@ -175,8 +176,9 @@ internal static class HibcData
         int written = 1;
 
         // Note 1 of section 2.2.1: primary data starts with a letter after the flag character. Primary data holds no "/", so the first "/" after it is the
-        // join of section 2.2.1.1. Secondary data alone has no join, and its "/" characters open supplemental data fields.
-        int join = IsLetter(encoded[1]) ? encoded.IndexOf(Delimiter) : -1;
+        // join of section 2.2.1.1. Secondary data alone has no join, and its "/" characters open supplemental data fields. The check character at the end can
+        // be "/" too, so the search stops before it.
+        int join = IsLetter(encoded[1]) ? encoded[..^1].IndexOf(Delimiter) : -1;
         if (join >= 0)
         {
             written += WritePrinted(encoded[..(join + 1)], readable[written..]);

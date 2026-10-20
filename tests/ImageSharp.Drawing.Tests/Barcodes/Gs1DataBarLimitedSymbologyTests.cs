@@ -12,6 +12,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// </summary>
 public class Gs1DataBarLimitedSymbologyTests
 {
+    /// <summary>
+    /// The bar and space widths match the reference implementation. Thirteen digits get their check digit.
+    /// </summary>
+    /// <param name="text">The element string to encode.</param>
+    /// <param name="expected">The reference run string.</param>
     [Theory]
     [InlineData("(01)09521234543213", "0111141221111341311111121132111122221145112111150")]
     [InlineData("(01)15012345678907", "0113222321211112311211112112211212112321322221150")]
@@ -23,8 +28,8 @@ public class Gs1DataBarLimitedSymbologyTests
         => Encode(text, (ref symbol) => Assert.Equal(expected, SymbolEncoder.RunString(ref symbol)));
 
     /// <summary>
-    /// Section 5.5.2.2 of the GS1 General Specifications: "The minimum height SHALL be 10X", so a bar height under 10X is rejected. At the nominal 0.33 mm
-    /// module 10X is 3.3 mm.
+    /// Section 5.5.2.2 of the GS1 General Specifications: "The minimum height SHALL be 10X", so the encoder rejects a bar height under 10X. At the nominal
+    /// 0.33 mm module 10X is 3.3 mm.
     /// </summary>
     [Fact]
     public void Gs1DataBarLimited_RejectsABarHeightUnderTenModules()
@@ -61,6 +66,7 @@ public class Gs1DataBarLimitedSymbologyTests
     public void Gs1DataBarLimited_TextPrintsTheElementStringWithTheCheckDigit()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
+
         SymbolEncoder.Encode(new Gs1DataBarLimitedSymbology(), "(01)1501234567890", options, static (ref symbol) =>
         {
             BarcodeTextPlacement placement = Assert.Single(symbol.Text.ToArray());
@@ -70,9 +76,10 @@ public class Gs1DataBarLimitedSymbologyTests
     }
 
     /// <summary>
-    /// Section 5.5.2.2: a GTIN-14 must have the indicator digit 1, so a first digit above 1 is refused. The check digit is calculated for the 13 digit inputs,
-    /// so only the first digit is wrong in them.
+    /// Section 5.5.2.2: a GTIN-14 must have the indicator digit 1, so the encoder rejects a first digit above 1. The encoder calculates the check digit of the
+    /// 13 digit inputs, so only the first digit is wrong in them. The encoder also rejects a wrong check digit and text without the element string syntax.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("(01)2501234567890")]
     [InlineData("(01)9501234567890")]

@@ -68,6 +68,11 @@ public class Gs1DataBarStackedOmnidirectionalSymbologyTests
         },
     };
 
+    /// <summary>
+    /// The module rows of each symbol, separator rows included, match the reference implementation.
+    /// </summary>
+    /// <param name="text">The element string to encode.</param>
+    /// <param name="expected">The reference module rows from the top, separated by vertical bars.</param>
     [Theory]
     [MemberData(nameof(Gs1DataBarStackedOmnidirectional_MatchesReferenceRowsData))]
     public void Gs1DataBarStackedOmnidirectional_MatchesReferenceRows(string text, string expected)
@@ -91,8 +96,8 @@ public class Gs1DataBarStackedOmnidirectionalSymbologyTests
         });
 
     /// <summary>
-    /// Section 5.5.2.1.4: "69X is the minimum height of the symbol", two rows of 33X, so a bar height under 33X is rejected. At the nominal 0.33 mm module 33X
-    /// is 10.89 mm.
+    /// Section 5.5.2.1.4: "69X is the minimum height of the symbol", two rows of 33X, so the encoder rejects a bar height under 33X. At the nominal 0.33 mm
+    /// module 33X is 10.89 mm.
     /// </summary>
     [Fact]
     public void Gs1DataBarStackedOmnidirectional_RejectsARowUnderThirtyThreeModules()
@@ -112,6 +117,7 @@ public class Gs1DataBarStackedOmnidirectionalSymbologyTests
     public void Gs1DataBarStackedOmnidirectional_BarHeightOptionSetsEachRow()
     {
         BarcodeOptions options = new() { Dpi = SymbolEncoder.MillimetreDpi, BarHeight = 33F * DataBarEncoder.NominalXDimension };
+
         float height = SymbolEncoder.Read(
             new Gs1DataBarStackedOmnidirectionalSymbology(),
             "(01)00034567890125",

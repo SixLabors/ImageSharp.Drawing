@@ -84,6 +84,11 @@ public class HibcPdf417SymbologyTests
         },
     };
 
+    /// <summary>
+    /// Each row of the symbol at the default column count matches the reference row.
+    /// </summary>
+    /// <param name="text">The data.</param>
+    /// <param name="expected">The run widths of each reference row, separated by "|".</param>
     [Theory]
     [MemberData(nameof(HibcPdf417_MatchesReferenceRowsData))]
     public void HibcPdf417_MatchesReferenceRows(string text, string expected)
@@ -136,6 +141,11 @@ public class HibcPdf417SymbologyTests
         },
     };
 
+    /// <summary>
+    /// Each row of the symbol at four data columns matches the reference row.
+    /// </summary>
+    /// <param name="text">The data.</param>
+    /// <param name="expected">The run widths of each reference row, separated by "|".</param>
     [Theory]
     [MemberData(nameof(HibcPdf417_FourColumnsMatchReferenceRowsData))]
     public void HibcPdf417_FourColumnsMatchReferenceRows(string text, string expected)
@@ -149,10 +159,16 @@ public class HibcPdf417SymbologyTests
     public void HibcPdf417_ValidatesAGivenCheckCharacter()
         => Assert.Equal(Encode(new HibcPdf417Symbology(), "A123BJC5D6E71"), Encode(new HibcPdf417Symbology(2, true), "A123BJC5D6E71G"));
 
+    /// <summary>
+    /// A supplied check character that is not the modulo 43 check character of the data throws.
+    /// </summary>
     [Fact]
     public void HibcPdf417_RejectsAWrongCheckCharacter()
         => Assert.Throws<ArgumentException>(() => Encode(new HibcPdf417Symbology(2, true), "A123BJC5D6E71H"));
 
+    /// <summary>
+    /// HIBC uses the Code 39 character set. A lowercase letter is outside that set and throws.
+    /// </summary>
     [Fact]
     public void HibcPdf417_RejectsCharactersOutsideTheHibcSet()
         => Assert.Throws<ArgumentException>(() => Encode(new HibcPdf417Symbology(), "a123"));
@@ -176,7 +192,9 @@ public class HibcPdf417SymbologyTests
         => SymbolEncoder.Encode(symbology, text, new BarcodeOptions(), (ref symbol) =>
         {
             string[] rows = expected.Split('|');
+
             Assert.Equal(rows.Length, symbol.Rows.Length);
+
             for (int i = 0; i < rows.Length; i++)
             {
                 Assert.Equal(rows[i], SymbolEncoder.RunString(ref symbol, symbol.Rows[i]));

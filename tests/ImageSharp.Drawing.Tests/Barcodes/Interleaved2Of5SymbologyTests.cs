@@ -13,6 +13,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// </summary>
 public class Interleaved2Of5SymbologyTests
 {
+    /// <summary>
+    /// The symbol runs match the widened reference runs.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="reference">The reference run string as the reference implementation emits it.</param>
     [Theory]
     [InlineData("1234", "1111211211112221211211122111")]
     [InlineData("0123456789", "1111121121211212221111211211221121112121121221121122112111")]
@@ -46,7 +51,8 @@ public class Interleaved2Of5SymbologyTests
             SymbolEncoder.Read(new Interleaved2Of5Symbology(CheckCharacterMode.Compute), text, new BarcodeOptions(), SymbolEncoder.RunString));
 
     /// <summary>
-    /// A supplied check digit is validated against the data and carried once, so the symbol is the one the calculated check digit produces.
+    /// The encoder validates a supplied check digit against the data and carries it once, so the symbol is the one the calculated check digit produces. A
+    /// wrong check digit throws, and so does a check digit with no data.
     /// </summary>
     [Fact]
     public void ValidatesASuppliedCheckDigit()
@@ -57,6 +63,7 @@ public class Interleaved2Of5SymbologyTests
         string computed = SymbolEncoder.Read(new Interleaved2Of5Symbology(CheckCharacterMode.Compute), "12345", new BarcodeOptions(), SymbolEncoder.RunString);
 
         Assert.Equal(computed, validated);
+
         Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new Interleaved2Of5Symbology(CheckCharacterMode.Validate), "123456", new BarcodeOptions()));
 
         // A check digit alone has no data to check.
@@ -67,6 +74,10 @@ public class Interleaved2Of5SymbologyTests
     /// Appendix D of AIM USS-I 2/5 prints "all numeric characters in the code including leading zeroes", so the leading zero always prints and the check digit
     /// prints by default. A caller can still keep the check digit off the printed line.
     /// </summary>
+    /// <param name="checkDigit">The check digit mode.</param>
+    /// <param name="printCheckDigit">Whether the check digit is part of the printed line.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expected">The printed line.</param>
     [Theory]
     [InlineData(CheckCharacterMode.None, false, "123", "0123")]
     [InlineData(CheckCharacterMode.Compute, false, "12345", "12345")]
@@ -90,7 +101,7 @@ public class Interleaved2Of5SymbologyTests
     [InlineData("1234", 2)]
     [InlineData("123", 2)]
     [InlineData("0123456789", 5)]
-    public void SpansTheWidthOfSectionFiveThreeTwoTwo(string text, int pairs)
+    public void SpansTheWidthOfSectionThreeThree(string text, int pairs)
         => Assert.Equal((pairs * ((4 * 3) + 6)) + 3 + 6, SymbolEncoder.Read(new Interleaved2Of5Symbology(), text, new BarcodeOptions(), SymbolEncoder.RunSum));
 
     /// <summary>
@@ -101,6 +112,7 @@ public class Interleaved2Of5SymbologyTests
     public void KeepsTheQuietZoneOfSectionThreeTwo()
     {
         BarcodeOptions options = new() { Dpi = SymbolEncoder.MicrometreDpi, XDimension = 0.191 };
+
         SymbolEncoder.Encode(new Interleaved2Of5Symbology(), "1234", options, static (ref symbol) =>
         {
             Assert.Equal((float)(2.54 / 0.191), symbol.LeadingQuietZone, 1e-4F);
@@ -122,6 +134,10 @@ public class Interleaved2Of5SymbologyTests
             new BarcodeOptions { XDimension = 0.5 },
             static (ref symbol) => Assert.All(symbol.BarHeights.ToArray(), height => Assert.Equal(0.15F * 101F, height, 1e-4F)));
 
+    /// <summary>
+    /// Interleaved 2 of 5 carries the digits 0 to 9 only. The symbology rejects empty input, a letter, a space and full width digits.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("")]
     [InlineData("12A4")]
@@ -138,6 +154,12 @@ public class Interleaved2Of5SymbologyTests
     private static string Encode(string text)
         => SymbolEncoder.Read(new Interleaved2Of5Symbology(), text, new BarcodeOptions(), SymbolEncoder.RunString);
 
+    /// <summary>
+    /// Returns the reference runs as this library draws them: every wide element of 2 modules becomes 3 modules. The method drops the trailing space of
+    /// the reference.
+    /// </summary>
+    /// <param name="reference">The reference run string.</param>
+    /// <returns>The runs in modules.</returns>
     private static string Widen(string reference)
         => reference[..^1].Replace('2', '3');
 }

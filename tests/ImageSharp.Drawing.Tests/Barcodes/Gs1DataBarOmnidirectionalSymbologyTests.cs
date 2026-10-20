@@ -12,6 +12,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// </summary>
 public class Gs1DataBarOmnidirectionalSymbologyTests
 {
+    /// <summary>
+    /// The bar and space widths match the reference implementation.
+    /// </summary>
+    /// <param name="text">The element string to encode.</param>
+    /// <param name="expected">The reference run string.</param>
     [Theory]
     [InlineData("(01)09521234543213", "01151115111238114311112234112211114725121211311")]
     [InlineData("(01)00012345678905", "01111112181274113211214132111124117332224131111")]
@@ -23,15 +28,15 @@ public class Gs1DataBarOmnidirectionalSymbologyTests
         => Assert.Equal(expected, string.Concat(Runs(text)));
 
     /// <summary>
-    /// The check digit is calculated when 13 digits are given, so both forms encode the same symbol.
+    /// The encoder calculates the check digit of 13 digits, so both forms encode the same symbol.
     /// </summary>
     [Fact]
     public void Gs1DataBarOmnidirectional_CalculatesTheCheckDigit()
         => Assert.Equal(Runs("(01)00012345678905"), Runs("(01)0001234567890"));
 
     /// <summary>
-    /// Section 5.5.2.1.1 of the GS1 General Specifications: "33X is the minimum height of the symbol", so a bar height under 33X is rejected. At the nominal
-    /// 0.33 mm module 33X is 10.89 mm.
+    /// Section 5.5.2.1.1 of the GS1 General Specifications: "33X is the minimum height of the symbol", so the encoder rejects a bar height under 33X. At the
+    /// nominal 0.33 mm module 33X is 10.89 mm.
     /// </summary>
     [Fact]
     public void Gs1DataBarOmnidirectional_RejectsABarHeightUnderThirtyThreeModules()
@@ -52,6 +57,7 @@ public class Gs1DataBarOmnidirectionalSymbologyTests
     public void Gs1DataBarOmnidirectional_IsNinetySixModulesWideAndFortySixHigh()
     {
         BarcodeOptions options = new() { Dpi = SymbolEncoder.MillimetreDpi };
+
         SymbolEncoder.Encode(new Gs1DataBarOmnidirectionalSymbology(), "(01)09521234543213", options, static (ref symbol) =>
         {
             Assert.Equal(96F, symbol.WidthInModules);
@@ -66,7 +72,7 @@ public class Gs1DataBarOmnidirectionalSymbologyTests
     }
 
     /// <summary>
-    /// The human readable interpretation is the element string with the check digit, below the bars.
+    /// The human readable interpretation is the element string with the check digit, below the bars. Without a font there is no text.
     /// </summary>
     [Fact]
     public void Gs1DataBarOmnidirectional_TextPrintsTheElementStringWithTheCheckDigit()
@@ -78,6 +84,7 @@ public class Gs1DataBarOmnidirectionalSymbologyTests
             static (ref symbol) => Assert.True(symbol.Text.IsEmpty));
 
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
+
         SymbolEncoder.Encode(new Gs1DataBarOmnidirectionalSymbology(), "(01)0952123454321", options, static (ref symbol) =>
         {
             BarcodeTextPlacement placement = Assert.Single(symbol.Text.ToArray());
@@ -88,9 +95,10 @@ public class Gs1DataBarOmnidirectionalSymbologyTests
     }
 
     /// <summary>
-    /// The symbol carries Application Identifier (01) and its 14 digit GTIN, so anything else is refused, and a given check digit must be the one section 7.9
-    /// calculates.
+    /// The symbol carries Application Identifier (01) and its 14 digit GTIN, so the encoder rejects any other text. A given check digit must be the one that
+    /// section 7.9 calculates.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("0952123454321")]
     [InlineData("(02)09521234543213")]

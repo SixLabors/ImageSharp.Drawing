@@ -119,9 +119,9 @@ internal static class Gs1CompositeComponentEncoder
     }
 
     /// <summary>
-    /// Gets the 17 CC-A sizes, six values each: the data columns, the rows, the error correction codewords of Table 9, and the left, centre and right row address
-    /// patterns of the first row from Table 10 and Table 11. The sizes of one column count stand in order of capacity. A 3-column CC-A has no left row address
-    /// pattern, clause 8.2 d), and its left value gives the row of Table 11 that sets the cluster of its first row.
+    /// Gets the 17 CC-A sizes, six values each: the data columns, the rows, the error correction codewords of Table 9, and the left, centre and right row
+    /// address patterns of the first row from Table 10 and Table 11. The sizes of one column count stand in order of capacity. A 3-column CC-A has no left row
+    /// address pattern, clause 8.2 d), and its left value gives the row of Table 11 that sets the cluster of its first row.
     /// </summary>
     private static ReadOnlySpan<byte> CcASizes =>
     [
@@ -724,8 +724,8 @@ internal static class Gs1CompositeComponentEncoder
 
     /// <summary>
     /// Returns the bit capacity of the CC-C that holds a number of bits. The error correction level is the recommended minimum of Table E.1 of ISO/IEC 15438
-    /// for the data codewords, clause 10 g), lowered where the largest symbol leaves too little room. The symbol takes the fewest rows of its columns, and more
-    /// columns when the rows would exceed 30, and fewer columns when all its columns would reach four times its rows.
+    /// for the data codewords, clause 10 g), lowered where the largest symbol leaves too little room. The symbol takes the fewest rows of its columns. It takes
+    /// more columns when it needs more than 30 rows, and fewer columns when all its columns reach four times its rows.
     /// </summary>
     /// <param name="used">The number of bits.</param>
     /// <param name="columns">The data columns, updated when more columns are needed.</param>

@@ -107,8 +107,9 @@ internal static class Code128Encoder
     private const int StopModules = 13;
 
     /// <summary>
-    /// The longest input that encodes in the inline buffers: 128 values, two for each character, and 192 distance bytes, three for each character. Section
-    /// 5.4.1 caps a GS1-128 symbol at 48 data characters, so every conforming GS1-128 symbol encodes inline.
+    /// The character count the inline buffers are sized for: 128 values, two for each character, and 192 distance bytes, three for each character. The
+    /// values also hold five characters that are not text, so text of at most 61 characters encodes inline. Section 5.4.4.3 caps a GS1-128 symbol at 48 data
+    /// characters, so every conforming GS1-128 symbol encodes inline.
     /// </summary>
     private const int InlineLength = 64;
 
@@ -269,6 +270,7 @@ internal static class Code128Encoder
         Span<int> values = capacity <= InlineLength * 2
             ? valueStorage
             : (rentedValues = new PooledBuffer<int>(capacity)).Span;
+
         Span<byte> distances = lookahead <= InlineLength
             ? distanceStorage
             : (rentedDistances = new PooledBuffer<byte>(lookahead * 3)).Span;
@@ -597,8 +599,8 @@ internal static class Code128Encoder
                 nextOnlyInA[i] = !separator && OnlyInSetA(text[i]) ? (byte)0 : SaturatingIncrement(nextOnlyInA[i + 1]);
                 nextOnlyInB[i] = !separator && OnlyInSetB(text[i]) ? (byte)0 : SaturatingIncrement(nextOnlyInB[i + 1]);
 
-                // The digits a code set C run would carry from here, counted on the two parities code set C packs against. A separator carries two, because
-                // code set C encodes the Function 1 in the one symbol character a digit pair would take, so a run of digits continues across it.
+                // The digits a code set C run carries from here, counted on the two parities code set C packs against. A separator carries two, because
+                // code set C encodes the Function 1 in the one symbol character that a digit pair takes, so a run of digits continues across it.
                 if (separator)
                 {
                     digitsFromEven[i] = SaturatingAdd(digitsFromEven[i + 1], 2);

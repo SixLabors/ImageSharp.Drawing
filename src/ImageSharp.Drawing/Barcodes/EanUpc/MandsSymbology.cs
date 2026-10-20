@@ -7,7 +7,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// The Marks &amp; Spencer in-house symbology. It is an EAN-8 symbol that holds the centre guard bars at digit bar height and prints the letters M and S in the
 /// quiet zones. It has no public specification.
 /// <para>
-/// A zero pads a seven character number to eight. The printed interpretation shows neither that leading zero nor the check digit.
+/// The input is seven or eight digits, and the last digit is the EAN-8 check digit. A zero pads a seven digit number to eight. The printed interpretation
+/// does not show that leading zero: the seven input digits fill the first seven character cells, and the eighth cell stays empty.
 /// </para>
 /// </summary>
 public sealed class MandsSymbology : BarcodeSymbology
@@ -38,8 +39,8 @@ public sealed class MandsSymbology : BarcodeSymbology
             throw new ArgumentException($"An M&S barcode must be 7 or 8 characters; got {text.Length}.", nameof(text));
         }
 
-        // An M&S number is seven or eight characters, and a seven character one carries an implied leading zero, so the padded form and its check digit both
-        // fit eight inline characters.
+        // An M&S number is seven or eight characters with the check digit last, and a seven character one carries an implied leading zero, so the padded
+        // form fits eight inline characters.
         bool padded = text.Length == 7;
         InlineArray8<char> paddedStorage = default;
         Span<char> paddedBuffer = paddedStorage;
@@ -68,8 +69,8 @@ public sealed class MandsSymbology : BarcodeSymbology
 
         if (options.Font is not null)
         {
-            // A padded number hides its leading zero and its check digit: seven digits spread over the first seven character cells with the eighth cell left
-            // empty. The full eight digit form prints as-is.
+            // A padded number hides its leading zero: its seven digits, the check digit included, fill the first seven character cells, and the eighth cell
+            // stays empty. The full eight digit form prints as-is.
             float textLine = digitHeight + BarcodeTextPlacement.Clearance;
             ReadOnlySpan<char> shown = padded ? digits[1..] : digits;
             symbol.ReserveText(shown.Length + 2, shown.Length + 2);

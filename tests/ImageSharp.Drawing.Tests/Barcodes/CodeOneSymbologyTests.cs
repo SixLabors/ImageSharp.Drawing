@@ -259,7 +259,9 @@ public class CodeOneSymbologyTests
         },
         {
             string.Empty,
-            "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. ",
+            "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. " +
+            "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. " +
+            "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. ",
             70,
             76,
             "5fa073b6c6becdd05fa|" +
@@ -335,7 +337,13 @@ public class CodeOneSymbologyTests
         },
         {
             string.Empty,
-            "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789",
+            "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789" +
+            "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789" +
+            "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789" +
+            "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789" +
+            "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789" +
+            "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789" +
+            "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789",
             70,
             76,
             "fcd6bdba3dccc8416b9|" +
@@ -411,7 +419,13 @@ public class CodeOneSymbologyTests
         },
         {
             string.Empty,
-            "Code One version G holds 732 data codewords in four blocks. Code One version G holds 732 data codewords in four blocks. Code One version G holds 732 data codewords in four blocks. Code One version G holds 732 data codewords in four blocks. Code One version G holds 732 data codewords in four blocks. Code One version G holds 732 data codewords in four blocks. Code One version G holds 732 data codewords in four blocks. Code One version G holds 732 data codewords in four blocks. Code One version G holds 732 data codewords in four blocks. Code One version G holds 732 data codewords in four blocks. Code One version G holds 732 data codewords in four blocks. Code One version G holds 732 data codewords in four blocks. Code One version G holds 732 data codewords in four blocks. Code One version G holds 732 data codewords in four blocks. ",
+            "Code One version G holds 732 data codewords in four blocks. Code One version G holds 732 data codewords in four blocks. " +
+            "Code One version G holds 732 data codewords in four blocks. Code One version G holds 732 data codewords in four blocks. " +
+            "Code One version G holds 732 data codewords in four blocks. Code One version G holds 732 data codewords in four blocks. " +
+            "Code One version G holds 732 data codewords in four blocks. Code One version G holds 732 data codewords in four blocks. " +
+            "Code One version G holds 732 data codewords in four blocks. Code One version G holds 732 data codewords in four blocks. " +
+            "Code One version G holds 732 data codewords in four blocks. Code One version G holds 732 data codewords in four blocks. " +
+            "Code One version G holds 732 data codewords in four blocks. Code One version G holds 732 data codewords in four blocks. ",
             104,
             98,
             "4faec4ba9dbce28c96bfc83ac|" +
@@ -679,6 +693,14 @@ public class CodeOneSymbologyTests
         },
     };
 
+    /// <summary>
+    /// The size and the module grid of each symbol match the reference implementation.
+    /// </summary>
+    /// <param name="version">The version name, or empty for the smallest of versions A to H that holds the data.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="rows">The number of module rows.</param>
+    /// <param name="columns">The number of module columns.</param>
+    /// <param name="expected">The reference module grid.</param>
     [Theory]
     [MemberData(nameof(MatchesReferenceGridData))]
     public void MatchesReferenceGrid(string version, string text, int rows, int columns, string expected)
@@ -715,6 +737,7 @@ public class CodeOneSymbologyTests
     public void FillsVersionHExactly()
     {
         string text = "AB" + new string('1', 3546);
+
         SymbolEncoder.Encode(new CodeOneSymbology(), text, new BarcodeOptions(), (ref symbol) =>
             Assert.Equal((148, 134), (symbol.MatrixRows, symbol.Columns)));
     }

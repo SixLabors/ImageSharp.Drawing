@@ -1705,6 +1705,15 @@ public class RectangularMicroQrCodeSymbologyTests
         },
     };
 
+    /// <summary>
+    /// The symbol of each fixed version and level has the size and the module grid of the reference grid.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="level">The error correction level.</param>
+    /// <param name="version">The fixed version.</param>
+    /// <param name="rows">The expected number of rows.</param>
+    /// <param name="columns">The expected number of columns.</param>
+    /// <param name="expected">The expected grid.</param>
     [Theory]
     [MemberData(nameof(MatchesReferenceGridData))]
     public void MatchesReferenceGrid(string text, QrErrorCorrectionLevel level, RectangularMicroQrCodeVersion version, int rows, int columns, string expected)
@@ -1731,12 +1740,18 @@ public class RectangularMicroQrCodeSymbologyTests
             Assert.Equal(expected, SymbolEncoder.ModuleGrid(ref symbol));
         });
 
+    /// <summary>
+    /// The symbol has a quiet zone of two modules.
+    /// </summary>
     [Fact]
     public void QuietZoneIsTwoModules()
         => Assert.Equal(
             2F,
             SymbolEncoder.Read(new RectangularMicroQrCodeSymbology(), "1234", new BarcodeOptions(), static (ref symbol) => symbol.LeadingQuietZone));
 
+    /// <summary>
+    /// Rectangular Micro QR Code has the error correction levels M and H only. The symbology rejects the levels L and Q, with and without a fixed version.
+    /// </summary>
     [Fact]
     public void RejectsLevelsLAndQ()
     {
@@ -1745,18 +1760,25 @@ public class RectangularMicroQrCodeSymbologyTests
     }
 
     /// <summary>
-    /// R17x139 at level M, the largest version, holds 361 digits and no more.
+    /// R17x139 at level M, the largest version, holds 361 digits and no more. The symbology rejects 362 digits.
     /// </summary>
     [Fact]
     public void RejectsDataLargerThanTheLargestVersion() => Assert.Throws<ArgumentException>(() => Encode(new RectangularMicroQrCodeSymbology(), Digits(362)));
 
+    /// <summary>
+    /// A symbology fixed at version R7x43 and level H rejects 6 digits, which that version does not hold.
+    /// </summary>
     [Fact]
     public void RejectsDataLargerThanTheFixedVersion()
     {
         RectangularMicroQrCodeSymbology symbology = new(QrErrorCorrectionLevel.H, RectangularMicroQrCodeVersion.R7x43);
+
         Assert.Throws<ArgumentException>(() => Encode(symbology, Digits(6)));
     }
 
+    /// <summary>
+    /// Byte mode carries the 256 byte values. The symbology rejects a character above U+00FF.
+    /// </summary>
     [Fact]
     public void RejectsCharactersAboveTheByteRange() => Assert.Throws<ArgumentException>(() => Encode(new RectangularMicroQrCodeSymbology(), "Ā"));
 

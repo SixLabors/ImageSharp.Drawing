@@ -12,6 +12,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// </summary>
 public class Code39SymbologyTests
 {
+    /// <summary>
+    /// The bar and space widths match the reference implementation for digits, capital letters, the space and the symbols.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expected">The reference run string.</param>
     [Theory]
     [InlineData("CODE39", "1311313111313113111131113113111111331131311133111131331111111133113111131131311")]
     [InlineData("123456", "1311313111311311113111331111313133111111111331113131133111111133311111131131311")]
@@ -25,6 +30,8 @@ public class Code39SymbologyTests
     /// The check character is the sum of the character values modulo the size of the set, and it is carried between the data and the stop character, where
     /// Annex A.1.1 places it.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expected">The reference run string with the check character carried.</param>
     [Theory]
     [InlineData("CODE39", "13113131113131131111311131131111113311313111331111313311111111331131113331111111131131311")]
     [InlineData(
@@ -49,6 +56,9 @@ public class Code39SymbologyTests
     public void ValidatesASuppliedCheckCharacter()
         => Assert.Equal(Encode(new Code39Symbology(CheckCharacterMode.Compute), "CODE39"), Encode(new Code39Symbology(CheckCharacterMode.Validate), "CODE39W"));
 
+    /// <summary>
+    /// The encoder rejects a supplied check character that does not match the data. The check character of CODE39 is W, not X.
+    /// </summary>
     [Fact]
     public void RejectsWrongCheckCharacter()
         => Assert.Throws<ArgumentException>(() => Encode(new Code39Symbology(CheckCharacterMode.Validate), "CODE39X"));
@@ -63,6 +73,7 @@ public class Code39SymbologyTests
     /// <summary>
     /// The symbology carries digits, capital letters, spaces and the symbols -.$/+% and nothing else.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("code39")]
     [InlineData("CODE*39")]
@@ -72,9 +83,11 @@ public class Code39SymbologyTests
         => Assert.ThrowsAny<ArgumentException>(() => Encode(new Code39Symbology(), text));
 
     /// <summary>
-    /// The rejected character is named in the message by both its code point and the character it prints as, so a caller can tell U+0041 from U+FF21 without
-    /// decoding hexadecimal.
+    /// The message names the rejected character by its code point and by the character it prints as. A caller can then tell U+0041 from U+FF21 without
+    /// decoding hexadecimal. A surrogate pair is one character.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expected">The name of the rejected character in the message.</param>
     [Theory]
     [InlineData("code39", "U+0063 'c'")]
     [InlineData("CAFÉ", "U+00C9 'É'")]
@@ -82,9 +95,13 @@ public class Code39SymbologyTests
     public void NamesTheRejectedCharacter(string text, string expected)
     {
         ArgumentException exception = Assert.ThrowsAny<ArgumentException>(() => Encode(new Code39Symbology(), text));
+
         Assert.Contains(expected, exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The encoder rejects more than 500 data characters, the largest number of characters that it accepts.
+    /// </summary>
     [Fact]
     public void RejectsDataBeyondTheMaximumLength()
         => Assert.ThrowsAny<ArgumentException>(() => Encode(new Code39Symbology(), new string('A', 501)));
@@ -93,6 +110,9 @@ public class Code39SymbologyTests
     /// Annex A.2 prints the interpretation "of the data characters (and data and symbol check character(s), if used)", and section 4.3.3 depicts the start and
     /// stop character as an asterisk. A caller who does not want the check character read back turns it off.
     /// </summary>
+    /// <param name="checkCharacter">Whether the symbol carries the check character, and whether the encoder calculates it or validates it.</param>
+    /// <param name="printCheckCharacter">Whether the check character is part of the printed line.</param>
+    /// <param name="expected">The printed line.</param>
     [Theory]
     [InlineData(CheckCharacterMode.None, true, "*CODE39*")]
     [InlineData(CheckCharacterMode.None, false, "*CODE39*")]
@@ -115,6 +135,7 @@ public class Code39SymbologyTests
         => SymbolEncoder.Encode(new Code39Symbology(), "CODE39", new BarcodeOptions(), (ref symbol) =>
         {
             float first = symbol.BarHeights[0];
+
             Assert.All(symbol.BarHeights.ToArray(), height => Assert.Equal(first, height));
             Assert.All(symbol.BarTops.ToArray(), top => Assert.Equal(0, top));
         });
@@ -142,6 +163,9 @@ public class Code39SymbologyTests
     /// characters and the check character, N is the wide to narrow ratio, X the narrow element, I the inter-character gap and Q the quiet zone. Measured in
     /// modules this encoder uses X = 1, N = 3, I = 1 and Q = 10, and the drawn width has to come to the same number.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="checkCharacter">Whether the symbol carries the check character.</param>
+    /// <param name="characters">The count C of the data characters and the check character.</param>
     [Theory]
     [InlineData("CODE39", CheckCharacterMode.None, 6)]
     [InlineData("CODE39", CheckCharacterMode.Compute, 7)]

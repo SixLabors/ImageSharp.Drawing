@@ -348,7 +348,7 @@ internal static class EanUpcEncoder
         for (int i = 0; i < digits.Length; i++)
         {
             float left = firstCellLeft + (i * cellAdvance);
-            symbol.AddText(digits.Slice(i, 1), left, left + 7, side, textEdge);
+            symbol.AddText(digits.Slice(i, 1), left, left + CharacterWidth, side, textEdge);
         }
     }
 

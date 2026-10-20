@@ -353,11 +353,18 @@ public class MaxiCodeSymbologyTests
         },
     };
 
+    /// <summary>
+    /// The symbol is 33 rows of 30 modules, and its module grid matches the reference grid.
+    /// </summary>
+    /// <param name="mode">The mode, or 0 for automatic.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expected">The reference grid, one row of hexadecimal digits per "|" separated part.</param>
     [Theory]
     [MemberData(nameof(MatchesReferenceGridData))]
     public void MatchesReferenceGrid(int mode, string text, string expected)
     {
         MaxiCodeSymbology symbology = mode == 0 ? new MaxiCodeSymbology() : new MaxiCodeSymbology((MaxiCodeMode)mode);
+
         SymbolEncoder.Encode(symbology, text, new BarcodeOptions(), (ref symbol) =>
         {
             Assert.Equal((33, 30), (symbol.MatrixRows, symbol.Columns));
@@ -375,6 +382,7 @@ public class MaxiCodeSymbologyTests
         {
             double y = Math.Sqrt(3) / 2;
             double v = 2 / Math.Sqrt(3);
+
             Assert.Equal(32F, symbol.WidthInModules + symbol.LeadingQuietZone + symbol.TrailingQuietZone);
             Assert.Equal((34 * y) + v, symbol.HeightInModules + symbol.TopQuietZone + symbol.BottomQuietZone, 4);
         });
@@ -411,11 +419,12 @@ public class MaxiCodeSymbologyTests
         string text = new string('A', capitals) + "ÀÀÀÀ";
         string expected = null;
         SymbolEncoder.Encode(new MaxiCodeSymbology(mode), text, new BarcodeOptions(), (ref symbol) => expected = SymbolEncoder.ModuleGrid(ref symbol));
+
         SymbolEncoder.Encode(new MaxiCodeSymbology(), text, new BarcodeOptions(), (ref symbol) => Assert.Equal(expected, SymbolEncoder.ModuleGrid(ref symbol)));
     }
 
     /// <summary>
-    /// A mode 5 symbol holds 77 codewords of data, so data that needs more does not fit it.
+    /// A mode 5 symbol holds 77 codewords of data. Data that needs more codewords throws.
     /// </summary>
     [Fact]
     public void RejectsDataBeyondModeCapacity()
@@ -423,7 +432,7 @@ public class MaxiCodeSymbologyTests
             () => SymbolEncoder.Encode(new MaxiCodeSymbology(MaxiCodeMode.FullErrorCorrection), new string('A', 78), new BarcodeOptions()));
 
     /// <summary>
-    /// MaxiCode carries the 256 byte values, U+0000 to U+00FF.
+    /// MaxiCode carries the 256 byte values, U+0000 to U+00FF. A character above U+00FF throws.
     /// </summary>
     [Fact]
     public void RejectsCharactersAboveLatin1()

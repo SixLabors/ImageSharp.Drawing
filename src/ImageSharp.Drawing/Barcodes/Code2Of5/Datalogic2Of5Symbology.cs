@@ -8,8 +8,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// space patterns of Matrix 2 of 5. A symbol carries the start pattern of Interleaved 2 of 5, the digits, an optional check digit and the stop pattern of
 /// Interleaved 2 of 5.
 /// <para>
-/// The check digit is the modulo 10 calculation of Appendix C of AIM USS-I 2/5, which both reference implementations apply. The printed line shows the digits
-/// the symbol carries and, by default, the check digit.
+/// The check digit is the modulo 10 calculation of Appendix C of AIM USS-I 2/5. The printed line shows the digits the symbol carries and, by default, the
+/// check digit.
 /// </para>
 /// </summary>
 public sealed class Datalogic2Of5Symbology : BarcodeSymbology

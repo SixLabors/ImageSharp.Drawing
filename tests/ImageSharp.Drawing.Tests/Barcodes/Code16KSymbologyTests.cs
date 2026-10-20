@@ -42,7 +42,7 @@ public class Code16KSymbologyTests
         { "123", "321111312221232213121312114122114123211|222112114122114122114121221322112322221" },
 
         // Lower case and control characters alternating, which shifts between code sets A and B.
-        { "ab", "321112221221211244113111211241214213211|222113111411214212114123131212231122221" },
+        { "a\u0001b\u0002", "321112221221211244113111211241214213211|222113111411214212114123131212231122221" },
 
         // Punctuation and lower case together.
         {
@@ -69,10 +69,10 @@ public class Code16KSymbologyTests
         { "ab123456cd", "321111221321211241214211122321311233211|222113311211141311411221412212114122221|212212114122114122114123221124311112122" },
 
         // Control characters before lower case: mode 0, code set A, then a latch to B.
-        { "ab", "321112122221211241214211141311211243211|222111214212114122114122123211112242221" },
+        { "\u0001\u0002ab", "321112122221211241214211141311211243211|222111214212114122114122123211112242221" },
 
         // A lower case letter, four digits and a control character: mode 5, then code set A at the end.
-        { "x1234", "321111312224212111122321311233111413211|222111211242114122114121311412221222221" },
+        { "x1234\u0001", "321111312224212111122321311233111413211|222111211242114122114121311412221222221" },
 
         // Seventy seven upper case letters, the most a sixteen row symbol carries, so rows 9 to 16 use the second half of Table 6.
         {
@@ -96,12 +96,18 @@ public class Code16KSymbologyTests
         },
     };
 
+    /// <summary>
+    /// The bar and space widths of every data row match the reference implementation. A separator row stands between two data rows.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expected">The reference run widths of each data row, separated by vertical bars.</param>
     [Theory]
     [MemberData(nameof(Code16K_MatchesReferenceRowsData))]
     public void Code16K_MatchesReferenceRows(string text, string expected)
         => Encode(text, (ref symbol) =>
         {
             string[] rows = expected.Split('|');
+
             Assert.Equal((rows.Length * 2) - 1, symbol.Rows.Length);
             for (int i = 0; i < rows.Length; i++)
             {
@@ -120,6 +126,7 @@ public class Code16KSymbologyTests
             for (int i = 0; i < symbol.Rows.Length; i++)
             {
                 BarcodeRow row = symbol.Rows[i];
+
                 Assert.Equal(70, SymbolEncoder.RowRuns(ref symbol, row).Sum());
                 if ((i & 1) == 1)
                 {
@@ -137,6 +144,8 @@ public class Code16KSymbologyTests
     /// Section 3.6.2: H = ((h + g) r + g) X, with h the bar height and g the separator height. The bars are 8X, the recommended minimum of section 3.3, when no
     /// height is set.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="rows">The number of data rows.</param>
     [Theory]
     [InlineData("A", 2)]
     [InlineData("CODE 16K", 3)]
@@ -157,6 +166,7 @@ public class Code16KSymbologyTests
     {
         BarcodeOptions options = new() { BarHeight = 12F * BarcodeSymbology.DefaultXDimension };
         ApproximateFloatComparer comparer = new(1e-4F);
+
         SymbolEncoder.Encode(new Code16KSymbology(), "A", options, (ref symbol) =>
         {
             Assert.All(SymbolEncoder.RowBarHeights(ref symbol, symbol.Rows[0]), height => Assert.Equal(12F, height, comparer));
@@ -168,17 +178,20 @@ public class Code16KSymbologyTests
     /// Section 2.3.1: the starting symbol character is s = 7(r - 2) + m, and Table 3 gives the mode. Appendix G rule 1 picks the mode from the first
     /// characters.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="mode">The mode of Table 3 that the first characters select.</param>
     [Theory]
-    [InlineData("ab", 0)]
+    [InlineData("\u0001\u0002ab", 0)]
     [InlineData("CODE 16K", 1)]
     [InlineData("1234567890", 2)]
     [InlineData("12345", 5)]
-    [InlineData("x1234", 5)]
+    [InlineData("x1234\u0001", 5)]
     [InlineData("ab0123456789", 6)]
     public void Code16K_StartingSymbolCharacterFollowsSection231(string text, int mode)
     {
         int[] values = SymbolEncoder.Read(new Code16KSymbology(), text, new BarcodeOptions(), DataRowValues);
         int rows = values.Length / 5;
+
         Assert.Equal((7 * (rows - 2)) + mode, values[0]);
     }
 
@@ -186,6 +199,7 @@ public class Code16KSymbologyTests
     /// Section 2.6: C1 is the modulo 107 sum of the symbol characters weighted from two upward, and C2 is the modulo 107 sum weighted from one upward with C1
     /// as its last term.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("Abcd-1234567890-wxyZ")]
     [InlineData("Hello, World!")]
@@ -203,6 +217,7 @@ public class Code16KSymbologyTests
 
         c1 %= 107;
         c2 = (c2 + ((values.Length - 1) * c1)) % 107;
+
         Assert.Equal(c1, values[^2]);
         Assert.Equal(c2, values[^1]);
     }

@@ -67,8 +67,8 @@ internal static class MsiEncoder
 
     /// <summary>
     /// Calculates the modulo 10 check digit over the digits. Every other digit from the right, the rightmost included, is doubled. The digits of those products
-    /// and the digits that were not doubled are added, and the check digit lifts the sum to the next multiple of ten. Doubling the number the selected digits
-    /// form and adding the digits of the product gives the same sum, because a doubled digit carries exactly when it is ten or more.
+    /// and the digits that were not doubled are added, and the check digit lifts the sum to the next multiple of ten. The digits of a product from 10 to 18
+    /// add to the product less 9.
     /// </summary>
     /// <param name="digits">The digits the check digit covers.</param>
     /// <returns>The check digit.</returns>

@@ -12,9 +12,9 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal static class BarcodeTextOptionsFactory
 {
     /// <summary>
-    /// Returns the options for one line of the human readable interpretation. A line anchors on its alphabetic baseline and centers on its span, so only the
-    /// origin changes from line to line. One instance serves both measuring and drawing, so the rectangle measured for a line is the rectangle the line draws
-    /// into.
+    /// Returns the options for one line of the human readable interpretation. The options keep the default alignment of the text box, so the origin is the
+    /// top left corner of the line. The emitter calculates the origin of each line from its measured rectangles. One instance serves both measuring and
+    /// drawing, so the rectangle measured for a line is the rectangle the line draws into.
     /// </summary>
     /// <param name="font">The font the line renders in, whose size is in points.</param>
     /// <param name="dpi">The resolution the line renders at, in dots per inch.</param>

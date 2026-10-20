@@ -13,7 +13,7 @@ public class ChannelCodeSymbologyTests
 {
     /// <summary>
     /// One vector per channel count at the largest value it carries, the smallest values, and a value with a leading zero, which selects one more channel than
-    /// the value alone would.
+    /// the value alone needs.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     /// <param name="reference">The reference run widths, comma separated.</param>
@@ -32,6 +32,9 @@ public class ChannelCodeSymbologyTests
     public void MatchesReferenceRuns(string text, string reference)
         => Assert.Equal(reference, Encode(text, false));
 
+    /// <summary>
+    /// The short finder pattern is three bars and two spaces in place of five bars and four spaces. The channels after it do not change.
+    /// </summary>
     [Fact]
     public void DrawsTheShortFinderPattern()
         => Assert.Equal("1,1,1,1,1,5,4,1,1,1,2,1,1,1,1", Encode("3493", true));
@@ -56,17 +59,21 @@ public class ChannelCodeSymbologyTests
         });
     }
 
+    /// <summary>
+    /// The human readable text is the digits as the caller gives them, with the leading zeros.
+    /// </summary>
     [Fact]
     public void PrintsTheDigitsAsGiven()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
         string[] texts = SymbolEncoder.Read(new ChannelCodeSymbology(), "0099", options, SymbolEncoder.Texts);
+
         Assert.Equal("0099", Assert.Single(texts));
     }
 
     /// <summary>
-    /// A value beyond the range of its channel count is rejected rather than moved to a wider symbol, because the digit count is the caller's choice of symbol
-    /// size.
+    /// The encoder rejects a value beyond the range of its channel count. It does not move the value to a wider symbol, because the digit count is the
+    /// caller's choice of symbol size. The encoder also rejects fewer than 2 or more than 7 digits, and characters that are not ASCII digits.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     [Theory]

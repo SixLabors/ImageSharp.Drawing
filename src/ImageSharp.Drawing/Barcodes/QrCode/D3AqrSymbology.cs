@@ -8,8 +8,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// arms of dashes and dots that a camera finds from a distance, and it carries a 14-bit category, 7 bits along each arm with a parity module for each arm. The
 /// host carries the data as <see cref="QrCodeSymbology"/> does.
 /// <para>
-/// The symbol is a grid of cells, half a D3 module on a side. A host module is 1, 2 or 4 cells, so a D3 module is the <see cref="HostRatio"/> times as wide. A
-/// module of the X dimension is one cell.
+/// The symbol is a grid of cells. At a <see cref="HostRatio"/> of 2, 2.5 or 3, a host module is 1, 4 or 2 cells on a side, and half a D3 module is 1, 5 or
+/// 3 cells. A module of the X dimension is one cell.
 /// </para>
 /// </summary>
 public sealed class D3AqrSymbology : BarcodeSymbology
@@ -62,8 +62,8 @@ public sealed class D3AqrSymbology : BarcodeSymbology
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        // A cell is half a D3 module. Half a D3 module is 1 cell and a host module 1 cell at a ratio of 2, 5 and 4 cells at 2.5, and 3 and 2 cells at 3, so
-        // both fall on whole cells.
+        // Half a D3 module and a host module must both be whole cells. At a ratio of 2, 2.5 or 3, half a D3 module is 1, 5 or 3 cells, and a host module is
+        // 1, 4 or 2 cells.
         (int half, int hostCellSize) = this.HostRatio switch
         {
             D3AqrHostRatio.Two => (1, 1),

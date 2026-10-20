@@ -54,18 +54,64 @@ internal static class AztecEncoder
     /// </summary>
     private const int Unreached = 1_000_000;
 
-    // The sequence elements that are not characters. A character is its byte value, 0 to 255.
+    /// <summary>
+    /// The sequence element of U/L, the latch to the upper code set.
+    /// </summary>
     private const int LatchUpper = -2;
+
+    /// <summary>
+    /// The sequence element of L/L, the latch to the lower code set.
+    /// </summary>
     private const int LatchLower = -3;
+
+    /// <summary>
+    /// The sequence element of M/L, the latch to the mixed code set.
+    /// </summary>
     private const int LatchMixed = -4;
+
+    /// <summary>
+    /// The sequence element of P/L, the latch to the punctuation code set.
+    /// </summary>
     private const int LatchPunct = -5;
+
+    /// <summary>
+    /// The sequence element of D/L, the latch to the digit code set.
+    /// </summary>
     private const int LatchDigit = -6;
+
+    /// <summary>
+    /// The sequence element of U/S, the shift to the upper code set for one character.
+    /// </summary>
     private const int ShiftUpper = -7;
+
+    /// <summary>
+    /// The sequence element of P/S, the shift to the punctuation code set for one character.
+    /// </summary>
     private const int ShiftPunct = -8;
+
+    /// <summary>
+    /// The sequence element of B/S, the shift to the byte state.
+    /// </summary>
     private const int ShiftBinary = -9;
+
+    /// <summary>
+    /// The sequence element of the punctuation pair CR LF.
+    /// </summary>
     private const int PairCrLf = -11;
+
+    /// <summary>
+    /// The sequence element of the punctuation pair period and space.
+    /// </summary>
     private const int PairPeriodSpace = -12;
+
+    /// <summary>
+    /// The sequence element of the punctuation pair comma and space.
+    /// </summary>
     private const int PairCommaSpace = -13;
+
+    /// <summary>
+    /// The sequence element of the punctuation pair colon and space.
+    /// </summary>
     private const int PairColonSpace = -14;
 
     /// <summary>
@@ -74,35 +120,59 @@ internal static class AztecEncoder
     private static readonly GaloisField ModeField = new(16, 19);
 
     /// <summary>
-    /// The field of the 6-bit data codewords, Table 3: GF(64) with the polynomial 67.
+    /// The field of the 6-bit data codewords, Table 3: GF(64) with the polynomial 67. Each data field builds its tables on first use, so a symbol builds only
+    /// the field of its codeword size. The GF(4096) tables alone hold 12286 ints.
     /// </summary>
-    private static readonly GaloisField Field6 = new(64, 67);
+    private static readonly Lazy<GaloisField> Field6 = new(() => new GaloisField(64, 67));
 
     /// <summary>
     /// The field of the 8-bit data codewords, Table 3: GF(256) with the polynomial 301.
     /// </summary>
-    private static readonly GaloisField Field8 = new(256, 301);
+    private static readonly Lazy<GaloisField> Field8 = new(() => new GaloisField(256, 301));
 
     /// <summary>
     /// The field of the 10-bit data codewords, Table 3: GF(1024) with the polynomial 1033.
     /// </summary>
-    private static readonly GaloisField Field10 = new(1024, 1033);
+    private static readonly Lazy<GaloisField> Field10 = new(() => new GaloisField(1024, 1033));
 
     /// <summary>
     /// The field of the 12-bit data codewords, Table 3.
     /// </summary>
-    private static readonly GaloisField Field12 = new(4096, 4201);
+    private static readonly Lazy<GaloisField> Field12 = new(() => new GaloisField(4096, 4201));
 
     /// <summary>
     /// The states of the search, in the row and column order of the latch and shift tables: the five code sets of Table 2, then the byte state of a B/S.
     /// </summary>
     private enum CodeSet
     {
+        /// <summary>
+        /// The upper code set of Table 2.
+        /// </summary>
         Upper,
+
+        /// <summary>
+        /// The lower code set of Table 2.
+        /// </summary>
         Lower,
+
+        /// <summary>
+        /// The mixed code set of Table 2.
+        /// </summary>
         Mixed,
+
+        /// <summary>
+        /// The punctuation code set of Table 2.
+        /// </summary>
         Punct,
+
+        /// <summary>
+        /// The digit code set of Table 2.
+        /// </summary>
         Digit,
+
+        /// <summary>
+        /// The byte state of a B/S.
+        /// </summary>
         Binary,
     }
 
@@ -325,7 +395,7 @@ internal static class AztecEncoder
                 int codewordBits = size.CodewordBits;
                 if (dataCounts[codewordBits] < 0)
                 {
-                    dataCounts[codewordBits] = CountCodewords(stream, codewordBits);
+                    dataCounts[codewordBits] = Stuff(stream, codewordBits, []);
                 }
 
                 // Section 11.3: the percentage of the symbol capacity plus three codewords is the minimum number of check codewords.
@@ -714,7 +784,8 @@ internal static class AztecEncoder
     /// </summary>
     /// <param name="bits">The bit stream.</param>
     /// <param name="size">The codeword size B.</param>
-    /// <param name="codewords">The buffer the codewords are written to.</param>
+    /// <param name="codewords">The buffer the codewords are written to. Codewords past its end are counted and not written, so an empty buffer only
+    /// counts.</param>
     /// <returns>The number of codewords.</returns>
     private static int Stuff(ReadOnlySpan<byte> bits, int size, Span<int> codewords)
     {
@@ -776,14 +847,6 @@ internal static class AztecEncoder
     }
 
     /// <summary>
-    /// Counts the codewords of the bit stream at a codeword size without keeping them.
-    /// </summary>
-    /// <param name="bits">The bit stream.</param>
-    /// <param name="size">The codeword size B.</param>
-    /// <returns>The number of codewords.</returns>
-    private static int CountCodewords(ReadOnlySpan<byte> bits, int size) => Stuff(bits, size, []);
-
-    /// <summary>
     /// Adds the check codewords of section 7.3.3 after the data codewords: the remainder of the data polynomial times x^K divided by (x - 2^1) ... (x - 2^K)
     /// over the field of Table 3.
     /// </summary>
@@ -794,10 +857,10 @@ internal static class AztecEncoder
     {
         GaloisField field = size switch
         {
-            6 => Field6,
-            8 => Field8,
-            10 => Field10,
-            _ => Field12,
+            6 => Field6.Value,
+            8 => Field8.Value,
+            10 => Field10.Value,
+            _ => Field12.Value,
         };
 
         int checkCount = codewords.Length - dataCount;
@@ -866,7 +929,8 @@ internal static class AztecEncoder
         int size = symbolSize.CodewordBits;
 
         // The core is 11 x 11 modules in a compact symbol and 15 x 15 in a full-range symbol, finder and mode message ring included. Without the grid the
-        // full-range core is 14 modules wide, because the grid line through the centre is not there yet.
+        // full-range core is 14 modules wide, because the grid line through the centre is not there yet. The core width here is the finder alone: 9 modules
+        // in a compact symbol, and 13 less the grid line through the centre, 12, in a full-range symbol. The mode message ring is between it and layer 1.
         int coreWidth = compact ? 9 : 12;
         int packedSide = coreWidth + (layers * 4) + 2;
         using PooledBuffer<bool> packedBuffer = new(packedSide * packedSide);
@@ -977,7 +1041,7 @@ internal static class AztecEncoder
     /// Returns the position of a bit of a data layer in the layout without the reference grid: two modules per domino, the more significant bit outward,
     /// running along the top, down the right, back along the bottom and up the left.
     /// </summary>
-    /// <param name="coreWidth">The width of the core region the layers surround.</param>
+    /// <param name="coreWidth">The width of the finder without the grid line through the centre. The mode message ring is outside it.</param>
     /// <param name="layer">The layer, from 1 inside.</param>
     /// <param name="bit">The bit within the layer.</param>
     /// <param name="layerWidth">The length of a side of the layer in dominos.</param>
@@ -1144,7 +1208,7 @@ internal static class AztecEncoder
     private struct Node
     {
         /// <summary>
-        /// The element: a character, a pair, or a latch or shift code.
+        /// The element: a character as its byte value, 0 to 255, or the negative code of a pair, a latch or a shift.
         /// </summary>
         public int Value;
 
@@ -1170,7 +1234,14 @@ internal static class AztecEncoder
     /// </summary>
     private struct NodeArena : IDisposable
     {
+        /// <summary>
+        /// The nodes. The arena owns the buffer and returns it in <see cref="Dispose"/>.
+        /// </summary>
         private PooledBuffer<Node> buffer;
+
+        /// <summary>
+        /// The number of nodes in use.
+        /// </summary>
         private int count;
 
         /// <summary>

@@ -141,6 +141,7 @@ internal static class Gs1Data
         Span<char> readable = capacity <= InlineBufferLength
             ? ((Span<char>)readableStorage)[..capacity]
             : (rented = new PooledBuffer<char>(capacity)).Span;
+
         try
         {
             int written = WriteReadable(text, true, readable);
@@ -235,7 +236,7 @@ internal static class Gs1Data
             ReadOnlySpan<char> identifier = elements[i].Identifier(buffer);
             Gs1ApplicationIdentifier entry = elements[i].Entry;
 
-            // Data from several carriers on one item may repeat an element string, but never with a different value.
+            // Data from several carriers on one item can repeat an element string, but never with a different value.
             for (int j = i + 1; j < elements.Length; j++)
             {
                 if (elements[j].Identifier(buffer).SequenceEqual(identifier) && !elements[j].Data(buffer).SequenceEqual(elements[i].Data(buffer)))
@@ -360,7 +361,7 @@ internal static class Gs1Data
             throw new ArgumentException($"The data of Application Identifier ({identifier}) is {range} characters; got {data.Length}.", nameof(data));
         }
 
-        // Each component takes as many characters as remain, up to its maximum. Only the last component may vary in length, and an optional component that
+        // Each component takes as many characters as remain, up to its maximum. Only the last component can vary in length, and an optional component that
         // finds no data left is skipped.
         foreach (Gs1Component component in entry.Components)
         {

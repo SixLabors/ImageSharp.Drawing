@@ -53,11 +53,7 @@ public sealed class Gs1DataBarExpandedCompositeSymbology : CompositeBarcodeSymbo
             encoded.Dispose();
         }
 
-        BarcodeRow row = parts[0].Rows[0];
-        InlineArray16<int> finderStorage = default;
-        Span<int> finders = finderStorage;
-        int finderCount = Gs1CompositeLayout.ExpandedFinderStarts(BarcodeSymbol.RunWidth(parts[0].Runs.Slice(row.RunStart, row.RunCount)), finders);
-        Gs1CompositeLayout.AddSeparator(ref parts[0], 4, 4, finders[..finderCount], false);
+        Gs1CompositeLayout.AddExpandedSeparator(ref parts[0]);
         Gs1CompositeLayout.BuildComponent(second, Gs1CompositeComponent.CcA, Columns, 0, parts[0].XDimension, options, ref parts[1]);
     }
 

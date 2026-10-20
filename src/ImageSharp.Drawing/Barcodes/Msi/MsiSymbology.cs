@@ -37,7 +37,7 @@ public sealed class MsiSymbology : BarcodeSymbology
     /// Initializes a new instance of the <see cref="MsiSymbology"/> class.
     /// </summary>
     /// <param name="checkDigit">The check digits the symbol carries after its data.</param>
-    /// <param name="printCheckDigits"> Whether the check digits the symbol carries are part of the human readable interpretation. </param>
+    /// <param name="printCheckDigits">Whether the check digits the symbol carries are part of the human readable interpretation.</param>
     public MsiSymbology(MsiCheckDigit checkDigit, bool printCheckDigits)
     {
         this.CheckDigit = checkDigit;

@@ -12,6 +12,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// </summary>
 public class Code128SymbologyTests
 {
+    /// <summary>
+    /// The bar and space widths match the reference implementation. The cases cover the start code set, the code set C digit pairs and the code set changes.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expected">The reference run string.</param>
     [Theory]
 
     // Upper case text starts in code set B and stays there.
@@ -77,12 +82,13 @@ public class Code128SymbologyTests
         => Encode("CODE128", (ref symbol) =>
         {
             float first = symbol.BarHeights[0];
+
             Assert.All(symbol.BarTops.ToArray(), top => Assert.Equal(0, top));
             Assert.All(symbol.BarHeights.ToArray(), height => Assert.Equal(first, height));
         });
 
     /// <summary>
-    /// The symbology encodes ASCII 0 to 127; anything above that is rejected rather than mangled.
+    /// The symbology encodes ASCII 0 to 127. The encoder rejects a character above that range and does not replace it.
     /// </summary>
     [Fact]
     public void Code128_RejectsNonAscii()

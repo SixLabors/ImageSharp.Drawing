@@ -13,11 +13,15 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// </summary>
 public class Sscc18SymbologyTests
 {
+    /// <summary>
+    /// The reference runs of the SSCC 106141411234567897.
+    /// </summary>
     private const string Expected = "2112324111312122222213122214112313112313111122321311233311212411124111131311232331112";
 
     /// <summary>
-    /// The check digit is optional, and the spaces a caller groups the number with are ignored, so all three forms encode to one symbol.
+    /// The check digit is optional, and the encoder ignores the spaces a caller groups the number with, so all three forms encode to one symbol.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("(00)10614141123456789")]
     [InlineData("(00)106141411234567897")]
@@ -26,16 +30,17 @@ public class Sscc18SymbologyTests
         => Assert.Equal(Expected, Encode(text));
 
     /// <summary>
-    /// A supplied check digit is verified against section 7.9 of the GS1 General Specifications.
+    /// The encoder verifies a supplied check digit against section 7.9 of the GS1 General Specifications. A wrong check digit throws.
     /// </summary>
     [Fact]
     public void RejectsWrongCheckDigit()
         => Assert.Throws<ArgumentException>(() => Encode("(00)106141411234567890"));
 
     /// <summary>
-    /// Section 3.3.1 gives Application Identifier (00) an 18 digit Serial Shipping Container Code, and the input carries the element string syntax, so anything
-    /// else is rejected.
+    /// Section 3.3.1 gives Application Identifier (00) an 18 digit Serial Shipping Container Code, and the input uses the element string syntax. The
+    /// symbology rejects input without the identifier, another identifier, the wrong number of digits and a non-digit.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("106141411234567897")]
     [InlineData("(01)106141411234567897")]

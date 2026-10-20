@@ -41,13 +41,20 @@ public class HibcCodablockFSymbologyTests
         },
     };
 
+    /// <summary>
+    /// Each data row matches the reference row. The symbol has one separator row above each data row and one separator row below the last data row.
+    /// </summary>
+    /// <param name="text">The data.</param>
+    /// <param name="expected">The run widths of each data row, separated by "|".</param>
     [Theory]
     [MemberData(nameof(HibcCodablockF_MatchesReferenceRowsData))]
     public void HibcCodablockF_MatchesReferenceRows(string text, string expected)
         => SymbolEncoder.Encode(new HibcCodablockFSymbology(), text, new BarcodeOptions(), (ref symbol) =>
         {
             string[] rows = expected.Split('|');
+
             Assert.Equal((rows.Length * 2) + 1, symbol.Rows.Length);
+
             for (int i = 0; i < rows.Length; i++)
             {
                 Assert.Equal(rows[i], SymbolEncoder.RunString(ref symbol, symbol.Rows[(i * 2) + 1]));
@@ -55,8 +62,8 @@ public class HibcCodablockFSymbologyTests
         });
 
     /// <summary>
-    /// The symbol is the Codablock F symbol of the flag character, the data and the check character, so an input that already carries its check character
-    /// encodes the same way.
+    /// The symbol is the Codablock F symbol of the flag character, the data and the check character. An input that already carries its check character
+    /// encodes the same way. A wrong check character throws.
     /// </summary>
     [Fact]
     public void HibcCodablockF_ValidatesAGivenCheckCharacter()
@@ -64,6 +71,7 @@ public class HibcCodablockFSymbologyTests
         string calculated = SymbolEncoder.Read(new HibcCodablockFSymbology(), "A123BJC5D6E71", new BarcodeOptions(), SymbolEncoder.RowRunLists);
         string given = SymbolEncoder.Read(new HibcCodablockFSymbology(8, true), "A123BJC5D6E71G", new BarcodeOptions(), SymbolEncoder.RowRunLists);
         string plain = SymbolEncoder.Read(new CodablockFSymbology(), "+A123BJC5D6E71G", new BarcodeOptions(), SymbolEncoder.RowRunLists);
+
         Assert.Equal(calculated, given);
         Assert.Equal(calculated, plain);
 
@@ -71,7 +79,7 @@ public class HibcCodablockFSymbologyTests
     }
 
     /// <summary>
-    /// The column count is 4 to 62.
+    /// The constructor rejects a column count outside 4 to 62.
     /// </summary>
     [Fact]
     public void HibcCodablockF_RejectsInvalidColumns()

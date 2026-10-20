@@ -4,7 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Encapsulates logic for encoding and then measuring barcode symbols.
+/// Encodes barcode symbols and measures their layout without drawing them.
 /// </summary>
 public static class BarcodeMeasurer
 {

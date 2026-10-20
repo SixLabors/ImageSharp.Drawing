@@ -321,7 +321,7 @@ internal static class DataBarExpandedEncoder
 
     /// <summary>
     /// Builds GS1 DataBar Expanded Stacked: rows of the given number of segments, a segment being a symbol character, with a separator of three one module rows
-    /// between two rows. A row of an even number of segment pairs reads right to left on every second row, and the last row may be partial.
+    /// between two rows. A row of an even number of segment pairs reads right to left on every second row, and the last row can be partial.
     /// </summary>
     /// <param name="text">The prepared element strings, with a separator after every variable length element string but the last.</param>
     /// <param name="segments">The number of segments in a full row, even and from 2 to 20.</param>
@@ -836,7 +836,7 @@ internal static class DataBarExpandedEncoder
 
     /// <summary>
     /// Returns the number of symbol characters that carry a number of data bits: the data characters rounded up, and the check character. A symbol carries at
-    /// least four, and one more when a stacked symbol would otherwise leave a single symbol character on its last row.
+    /// least four. When the count leaves a single symbol character on the last row, the symbol carries one more.
     /// </summary>
     /// <param name="bitCount">The number of data bits.</param>
     /// <param name="segments">The number of segments in a row.</param>
@@ -1214,8 +1214,8 @@ internal static class DataBarExpandedEncoder
             this.AppendElement(1);
 
             // The separator is the inverse of the row, inside four light modules at each end. Over the 15 modules of a finder pattern the light modules break
-            // into narrow elements instead, so the separator does not read as part of the finder. A finder follows the 2 guard modules and the 17 of the first
-            // character, and every 49 modules after that pairs of finders stand 98 apart.
+            // into narrow elements instead, so the separator does not read as part of the finder. The first finder starts at module 19, after the 2 guard
+            // modules and the 17 modules of the first character. Each next finder starts 49 modules later, after the 15 finder modules and two characters.
             int rowLength = this.length;
             Span<byte> rowModules = this.row[..rowLength];
             Span<byte> separatorModules = this.separator[..rowLength];
@@ -1224,12 +1224,7 @@ internal static class DataBarExpandedEncoder
                 separatorModules[i] = (byte)(1 - rowModules[i]);
             }
 
-            for (int start = 19; start <= rowLength - 13; start += 98)
-            {
-                AlternateOverFinder(rowModules, separatorModules, start);
-            }
-
-            for (int start = 68; start <= rowLength - 13; start += 98)
+            for (int start = 19; start <= rowLength - 13; start += 49)
             {
                 AlternateOverFinder(rowModules, separatorModules, start);
             }

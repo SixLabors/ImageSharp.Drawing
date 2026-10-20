@@ -11,10 +11,6 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// </summary>
 public static class BarcodeFonts
 {
-    private static readonly Lazy<FontFamily> OcrAFamily = new(() => Load(OcrAFontData.Bytes));
-
-    private static readonly Lazy<FontFamily> OcrBFamily = new(() => Load(OcrBFontData.Bytes));
-
     /// <summary>
     /// Gets the SixLabors OCR-A font family, built from the character drawings of FIPS PUB 32 (1974).
     /// </summary>
@@ -26,10 +22,49 @@ public static class BarcodeFonts
     /// </summary>
     public static FontFamily OcrB => OcrBFamily.Value;
 
+    /// <summary>
+    /// Loads a font family from the bytes of a font file.
+    /// </summary>
+    /// <param name="data">The bytes of the font file.</param>
+    /// <returns>The font family.</returns>
     private static FontFamily Load(ReadOnlySpan<byte> data)
     {
         FontCollection collection = new();
         using MemoryStream stream = new(data.ToArray());
         return collection.Add(stream);
+    }
+
+    /// <summary>
+    /// Holds the OCR-A family. Each family has its own holder type, so only code that reads <see cref="OcrA"/> references the OCR-A font data, and the
+    /// trimmer can remove the data of a family that the application does not use.
+    /// </summary>
+    private static class OcrAFamily
+    {
+        /// <summary>
+        /// The OCR-A family, loaded on first use.
+        /// </summary>
+        private static readonly Lazy<FontFamily> Family = new(() => Load(OcrAFontData.Bytes));
+
+        /// <summary>
+        /// Gets the OCR-A family.
+        /// </summary>
+        public static FontFamily Value => Family.Value;
+    }
+
+    /// <summary>
+    /// Holds the OCR-B family. Each family has its own holder type, so only code that reads <see cref="OcrB"/> references the OCR-B font data, and the
+    /// trimmer can remove the data of a family that the application does not use.
+    /// </summary>
+    private static class OcrBFamily
+    {
+        /// <summary>
+        /// The OCR-B family, loaded on first use.
+        /// </summary>
+        private static readonly Lazy<FontFamily> Family = new(() => Load(OcrBFontData.Bytes));
+
+        /// <summary>
+        /// Gets the OCR-B family.
+        /// </summary>
+        public static FontFamily Value => Family.Value;
     }
 }

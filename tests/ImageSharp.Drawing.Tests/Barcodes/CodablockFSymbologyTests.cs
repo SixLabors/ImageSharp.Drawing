@@ -108,12 +108,19 @@ public class CodablockFSymbologyTests
         { "12345", 4, "2114121131412122221122321311231141312132121421122331112|2114121141312312121131411141311211241412211223122331112" },
     };
 
+    /// <summary>
+    /// The bar and space widths of every data row match the reference implementation. Each data row sits between two separator or edge rows.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="columns">The number of data columns in a row.</param>
+    /// <param name="expected">The reference run widths of each data row, separated by vertical bars.</param>
     [Theory]
     [MemberData(nameof(CodablockF_MatchesReferenceRowsData))]
     public void CodablockF_MatchesReferenceRows(string text, int columns, string expected)
         => Encode(text, columns, (ref symbol) =>
         {
             string[] rows = expected.Split('|');
+
             Assert.Equal((rows.Length * 2) + 1, symbol.Rows.Length);
             for (int i = 0; i < rows.Length; i++)
             {
@@ -125,6 +132,9 @@ public class CodablockFSymbologyTests
     /// A row is eleven modules per character and thirteen for the stop character. A separator row keeps the start and stop patterns of the rows above and below
     /// it and fills the columns between them, and a solid bar closes the symbol at the top and at the bottom. The quiet zones are ten modules.
     /// </summary>
+    /// <param name="columns">The number of data columns in a row.</param>
+    /// <param name="width">The symbol width in modules.</param>
+    /// <param name="fill">The width in modules of the bar that fills a separator row between its start and stop patterns.</param>
     [Theory]
     [InlineData(4, 101, 79)]
     [InlineData(8, 145, 123)]
@@ -151,6 +161,7 @@ public class CodablockFSymbologyTests
     public void CodablockF_RowHeightFollowsTheColumnCount()
     {
         ApproximateFloatComparer comparer = new(1e-4F);
+
         Encode("A", 8, (ref symbol) => Assert.All(SymbolEncoder.RowBarHeights(ref symbol, symbol.Rows[1]), height => Assert.Equal(10F, height)));
         Encode("A", 20, (ref symbol) => Assert.All(SymbolEncoder.RowBarHeights(ref symbol, symbol.Rows[1]), height => Assert.Equal(14F, height, comparer)));
 
@@ -166,6 +177,7 @@ public class CodablockFSymbologyTests
     /// K1 and K2 are the modulo 86 sums of the message characters weighted from one and from zero, and take the fourth and third places from the end of the
     /// last row. Every row ends in the modulo 103 check character of its own characters.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("CODABLOCK F 34567890123456789010040digit")]
     [InlineData("Hello, World!")]
@@ -184,8 +196,9 @@ public class CodablockFSymbologyTests
 
         // The pair maps through the code set the last row ends in. Either mapping of the pair is accepted, and a mix of the two is not.
         int[] last = values[^rowSize..];
-        bool alphabetic = last[^4] == Map(k1, true) && last[^3] == Map(k2, true);
+        bool alphabetic = last[^4] == MapToAlphabetic(k1) && last[^3] == MapToAlphabetic(k2);
         bool numeric = last[^4] == k1 && last[^3] == k2;
+
         Assert.True(alphabetic || numeric);
 
         for (int row = 0; row < values.Length / rowSize; row++)
@@ -280,13 +293,14 @@ public class CodablockFSymbologyTests
         return [.. values];
     }
 
-    private static int Map(int value, bool alphabetic)
+    /// <summary>
+    /// Maps a check value to the code set A or B character that carries it: 0 to 31 map to 64 to 95, 32 to 47 map to 0 to 15, and 48 to 85 map to 26 to 63.
+    /// In code set C a check value is its own character, so that case needs no mapping.
+    /// </summary>
+    /// <param name="value">The check value, 0 to 85.</param>
+    /// <returns>The Code 128 character value in code set A or B.</returns>
+    private static int MapToAlphabetic(int value)
     {
-        if (!alphabetic)
-        {
-            return value;
-        }
-
         if (value < 32)
         {
             return value + 64;

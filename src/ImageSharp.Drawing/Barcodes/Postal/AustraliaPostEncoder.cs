@@ -121,14 +121,14 @@ internal static class AustraliaPostEncoder
         int barCount = BarCount(formatControlCode);
         if (barCount == 0)
         {
-            throw new ArgumentException($"The format control code is 00, 11, 45, 59, 62, 87 or 92; got {text[..2]}.", nameof(text));
+            throw new ArgumentException($"The format control code is 00, 11, 59 or 62; got {formatControlCode}.", nameof(text));
         }
 
         ReadOnlySpan<char> sortingCode = text.Slice(2, 8);
         BarcodeSymbology.ValidateDigits(sortingCode);
         if (formatControlCode is "00" && sortingCode is not "00000000")
         {
-            throw new ArgumentException($"The Null Customer Barcode is only valid with the sorting code 00000000; got {text.Slice(2, 8)}.", nameof(text));
+            throw new ArgumentException($"The Null Customer Barcode is only valid with the sorting code 00000000; got {sortingCode}.", nameof(text));
         }
 
         ReadOnlySpan<char> customer = text.Slice(FixedDigits);

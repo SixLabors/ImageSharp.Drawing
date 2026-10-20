@@ -12,6 +12,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// </summary>
 public class Code93ExtendedSymbologyTests
 {
+    /// <summary>
+    /// The bar and space widths match the reference implementation for small letters and for a shift pair next to a base character.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expected">The reference run string.</param>
     [Theory]
     [InlineData("Code93", "1111412113111222111211221222112211121222112212111411111114112111133111211111411")]
     [InlineData("abc", "1111411222112111131222112112121222112113111211311312111111411")]
@@ -45,6 +50,8 @@ public class Code93ExtendedSymbologyTests
     /// The printed line shows the characters the caller gave rather than the symbol characters that stand for them, and a control character has no printed
     /// form, so it shows as a space.
     /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expected">The printed line.</param>
     [Theory]
     [InlineData("a@b", "a@b")]
     [InlineData("Hello, World!", "Hello, World!")]

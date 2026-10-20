@@ -550,7 +550,7 @@ internal static class Pdf417Codewords
 
     /// <summary>
     /// Encodes a run of text characters in Text Compaction mode, section 5.4.2. The search keeps, for each sub-mode, the fewest base 30 values that encode the
-    /// characters so far and end in that sub-mode. Before each character every sub-mode may latch to another; the character then extends a sub-mode that holds
+    /// characters so far and end in that sub-mode. Before each character every sub-mode can latch to another; the character then extends a sub-mode that holds
     /// it, or a sub-mode that shifts to one that does. The run takes the cheapest end, and an odd count of values takes the pad of section 5.4.2.4.
     /// </summary>
     /// <param name="text">The characters, each one that Table 5 holds.</param>

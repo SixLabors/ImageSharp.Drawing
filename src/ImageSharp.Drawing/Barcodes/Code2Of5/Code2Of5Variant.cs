@@ -10,8 +10,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal enum Code2Of5Variant
 {
     /// <summary>
-    /// Industrial 2 of 5: the digit in five bars, a start pattern of a wide bar, a narrow space, a wide bar, a narrow space and a narrow bar, and a stop
-    /// pattern of a wide bar, a narrow space, a narrow bar, a narrow space and a wide bar.
+    /// Industrial 2 of 5: the digit in five bars, a start pattern of a wide bar, a narrow space, a wide bar, a narrow space, a narrow bar and a narrow space,
+    /// and a stop pattern of a wide bar, a narrow space, a narrow bar, a narrow space and a wide bar.
     /// </summary>
     Industrial,
 
@@ -21,7 +21,7 @@ internal enum Code2Of5Variant
     Iata,
 
     /// <summary>
-    /// Matrix 2 of 5: the digit in three bars and two spaces, a start pattern of a wide bar and four narrow elements, and a stop pattern of a wide bar and four
+    /// Matrix 2 of 5: the digit in three bars and two spaces, a start pattern of a wide bar and five narrow elements, and a stop pattern of a wide bar and four
     /// narrow elements.
     /// </summary>
     Matrix,

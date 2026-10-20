@@ -4,7 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// One component of the data of a GS1 Application Identifier: its character set, its length, whether it may be left out, and the checks its content takes.
+/// One component of the data of a GS1 Application Identifier: its character set, its length, whether it can be left out, and the checks its content takes.
 /// </summary>
 internal readonly struct Gs1Component
 {
@@ -14,7 +14,7 @@ internal readonly struct Gs1Component
     /// <param name="characterSet">The character set: 'N' digits, 'X' character set 82, 'Y' character set 39 or 'Z' character set 64.</param>
     /// <param name="minimum">The shortest length.</param>
     /// <param name="maximum">The longest length.</param>
-    /// <param name="optional">Whether the component may be left out.</param>
+    /// <param name="optional">Whether the component can be left out.</param>
     /// <param name="linters">The checks the content takes, in order.</param>
     public Gs1Component(char characterSet, int minimum, int maximum, bool optional, Gs1Linter[] linters)
     {
@@ -41,7 +41,7 @@ internal readonly struct Gs1Component
     public int Maximum { get; }
 
     /// <summary>
-    /// Gets a value indicating whether the component may be left out.
+    /// Gets a value indicating whether the component can be left out.
     /// </summary>
     public bool Optional { get; }
 

@@ -30,6 +30,7 @@ public class IntelligentMailSymbologyTests
     public void ConvertsTheDigitsToBinary(string text, string hex)
     {
         UInt128 binary = IntelligentMailEncoder.Binary(text.AsSpan(0, 20), text.AsSpan(20));
+
         Assert.Equal(hex, binary.ToString("X26", CultureInfo.InvariantCulture));
     }
 
@@ -46,6 +47,7 @@ public class IntelligentMailSymbologyTests
     public void GeneratesTheFrameCheckSequence(string text, int fcs)
     {
         UInt128 binary = IntelligentMailEncoder.Binary(text.AsSpan(0, 20), text.AsSpan(20));
+
         Assert.Equal(fcs, IntelligentMailEncoder.FrameCheckSequence(binary));
     }
 
@@ -61,10 +63,12 @@ public class IntelligentMailSymbologyTests
 
         int[] codewords = new int[10];
         IntelligentMailEncoder.Codewords(binary, fcs, codewords);
+
         Assert.Equal([673, 787, 607, 1022, 861, 19, 816, 1294, 35, 602], codewords);
 
         int[] characters = new int[10];
         IntelligentMailEncoder.Characters(codewords, fcs, characters);
+
         Assert.Equal([0x0DCB, 0x085C, 0x08E4, 0x0B06, 0x06DD, 0x1740, 0x17C6, 0x1200, 0x123F, 0x1B2B], characters);
     }
 
@@ -77,6 +81,7 @@ public class IntelligentMailSymbologyTests
     {
         int[] characters = new int[10];
         IntelligentMailEncoder.Characters([0, 0, 0, 0, 559, 202, 508, 451, 124, 34], 0x051, characters);
+
         Assert.Equal([0x1FE0, 0x001F, 0x001F, 0x001F, 0x0ADB, 0x01A3, 0x1BC3, 0x1838, 0x012B, 0x0076], characters);
     }
 
@@ -104,8 +109,10 @@ public class IntelligentMailSymbologyTests
         => SymbolEncoder.Encode(new IntelligentMailSymbology(), "0123456709498765432101234567891", new BarcodeOptions(), static (ref symbol) =>
         {
             Assert.Equal(129, symbol.Runs.Length);
+
             double unit = symbol.RunUnit * symbol.XDimension / Inch;
             int leadToLead = 0;
+
             for (int i = 0; i < symbol.Runs.Length - 1; i++)
             {
                 Assert.InRange(symbol.Runs[i] * unit, (i & 1) == 0 ? 0.015 : 0.012, (i & 1) == 0 ? 0.025 : 0.040);
@@ -141,9 +148,11 @@ public class IntelligentMailSymbologyTests
     public void PrintsTheFieldsOfSectionTwoFourThree(string text, string expected)
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
+
         SymbolEncoder.Encode(new IntelligentMailSymbology(), text, options, (ref symbol) =>
         {
             BarcodeTextPlacement placement = Assert.Single(symbol.Text.ToArray());
+
             Assert.Equal(expected, symbol.TextOf(placement).ToString());
             Assert.Equal(BarcodeTextSide.BelowBars, placement.Side);
             Assert.Equal(BarcodeTextAlignment.Left, placement.Alignment);
@@ -152,6 +161,11 @@ public class IntelligentMailSymbologyTests
         });
     }
 
+    /// <summary>
+    /// The input is a 20 digit tracking code and a routing code of 0, 5, 9 or 11 digits, and the second digit of the barcode identifier is 0 to 4. The
+    /// symbology rejects other lengths, a second digit above 4, a letter and full width digits.
+    /// </summary>
+    /// <param name="text">The tracking code followed by the routing code.</param>
     [Theory]
     [InlineData("")]
     [InlineData("0123456709498765432")]

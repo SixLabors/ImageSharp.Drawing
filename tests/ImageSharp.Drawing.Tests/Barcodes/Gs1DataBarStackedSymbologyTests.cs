@@ -55,6 +55,11 @@ public class Gs1DataBarStackedSymbologyTests
         },
     };
 
+    /// <summary>
+    /// The upper row, the separator and the lower row of each symbol match the reference implementation.
+    /// </summary>
+    /// <param name="text">The element string to encode.</param>
+    /// <param name="expected">The reference module rows from the top, separated by vertical bars.</param>
     [Theory]
     [MemberData(nameof(Gs1DataBarStacked_MatchesReferenceRowsData))]
     public void Gs1DataBarStacked_MatchesReferenceRows(string text, string expected)
@@ -84,6 +89,7 @@ public class Gs1DataBarStackedSymbologyTests
     {
         BarcodeOptions options = new() { Dpi = SymbolEncoder.MillimetreDpi, BarHeight = 14F * DataBarEncoder.NominalXDimension };
         ApproximateFloatComparer comparer = new(1e-4F);
+
         SymbolEncoder.Encode(new Gs1DataBarStackedSymbology(), "(01)09521234543213", options, (ref symbol) =>
         {
             Assert.Equal(10F, symbol.Rows[0].Height, comparer);
@@ -99,6 +105,7 @@ public class Gs1DataBarStackedSymbologyTests
     public void Gs1DataBarStacked_TextPrintsBelowTheLowerRow()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
+
         SymbolEncoder.Encode(new Gs1DataBarStackedSymbology(), "(01)0952123454321", options, static (ref symbol) =>
         {
             BarcodeTextPlacement placement = Assert.Single(symbol.Text.ToArray());

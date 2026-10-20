@@ -158,7 +158,7 @@ internal static class Gs1Linters
     /// <exception cref="ArgumentException">A character is not in the set.</exception>
     public static void CheckCharacterSet(char characterSet, ReadOnlySpan<char> identifier, ReadOnlySpan<char> data)
     {
-        // Character set 64 is base64 with the pad character, which may only end the data, padding it to a multiple of three characters with one or two pads.
+        // Character set 64 is base64 with the pad character, which can only end the data, padding it to a multiple of three characters with one or two pads.
         if (characterSet == 'Z')
         {
             int pads = data.Length - data.TrimEnd('=').Length;
@@ -198,7 +198,8 @@ internal static class Gs1Linters
     /// </summary>
     /// <param name="linter">The linter.</param>
     /// <param name="identifier">The Application Identifier, for the error message.</param>
-    /// <param name="data">The component, already checked against its character set.</param>
+    /// <param name="data">The component, already checked against its character set. Its length is in the length range of the component, so a fixed
+    /// length component has its exact length. The checks rely on this and do not check the length again.</param>
     /// <exception cref="ArgumentException">The component fails the check.</exception>
     public static void Check(Gs1Linter linter, ReadOnlySpan<char> identifier, ReadOnlySpan<char> data)
     {
@@ -207,7 +208,7 @@ internal static class Gs1Linters
             case Gs1Linter.Csum:
                 // Section 7.9.1: the digits weigh 3 and 1 alternately from the digit before the check digit, and the check digit lifts the sum to a multiple of
                 // 10.
-                if (data.Length == 0 || data[^1] - '0' != Gs1Data.ComputeCheckDigit(data[..^1]))
+                if (data[^1] - '0' != Gs1Data.ComputeCheckDigit(data[..^1]))
                 {
                     ThrowInvalidData(identifier, "has an incorrect check digit", nameof(data));
                 }
@@ -248,29 +249,24 @@ internal static class Gs1Linters
                 break;
 
             case Gs1Linter.Hh:
-                CheckRange(identifier, data, 2, 23, "an hour from 00 to 23");
+                CheckRange(identifier, data, 23, "an hour from 00 to 23");
                 break;
 
             case Gs1Linter.Mi:
-                CheckRange(identifier, data, 2, 59, "a minute from 00 to 59");
+                CheckRange(identifier, data, 59, "a minute from 00 to 59");
                 break;
 
             case Gs1Linter.Ss:
-                CheckRange(identifier, data, 2, 59, "a second from 00 to 59");
+                CheckRange(identifier, data, 59, "a second from 00 to 59");
                 break;
 
             case Gs1Linter.Hhmi:
-                if (data.Length != 4)
-                {
-                    ThrowInvalidData(identifier, "does not carry a time HHMI of four digits", nameof(data));
-                }
-
-                CheckRange(identifier, data[..2], 2, 23, "an hour from 00 to 23");
-                CheckRange(identifier, data[2..], 2, 59, "a minute from 00 to 59");
+                CheckRange(identifier, data[..2], 23, "an hour from 00 to 23");
+                CheckRange(identifier, data[2..], 59, "a minute from 00 to 59");
                 break;
 
             case Gs1Linter.Iso4217:
-                if (data.Length != 3 || !IsSet(Iso4217Numeric, Number(data)))
+                if (!IsSet(Iso4217Numeric, Number(data)))
                 {
                     ThrowInvalidData(identifier, $"carries '{data}', which is not an ISO 4217 numeric currency code", nameof(data));
                 }
@@ -278,7 +274,7 @@ internal static class Gs1Linters
                 break;
 
             case Gs1Linter.Iso3166:
-                if (data.Length != 3 || !Iso3166.IsNumericCode(Number(data)))
+                if (!Iso3166.IsNumericCode(Number(data)))
                 {
                     ThrowInvalidData(identifier, $"carries '{data}', which is not an ISO 3166-1 numeric country code", nameof(data));
                 }
@@ -287,7 +283,7 @@ internal static class Gs1Linters
 
             case Gs1Linter.Iso3166999:
                 // The value 999 stands for a country that is not known.
-                if (data.Length != 3 || (!data.SequenceEqual("999") && !Iso3166.IsNumericCode(Number(data))))
+                if (!data.SequenceEqual("999") && !Iso3166.IsNumericCode(Number(data)))
                 {
                     ThrowInvalidData(identifier, $"carries '{data}', which is not an ISO 3166-1 numeric country code or 999", nameof(data));
                 }
@@ -304,7 +300,7 @@ internal static class Gs1Linters
 
             case Gs1Linter.Iso5218:
                 // ISO/IEC 5218 has the four codes 0, 1, 2 and 9.
-                if (data.Length != 1 || data[0] is not ('0' or '1' or '2' or '9'))
+                if (data[0] is not ('0' or '1' or '2' or '9'))
                 {
                     ThrowInvalidData(identifier, "does not carry an ISO/IEC 5218 code 0, 1, 2 or 9", nameof(data));
                 }
@@ -312,7 +308,7 @@ internal static class Gs1Linters
                 break;
 
             case Gs1Linter.PercentEncoded:
-                // Section 7.11: the AIs 4300 to 4320 may percent-encode characters as RFC 3986 defines, so every percent sign starts two hexadecimal digits.
+                // Section 7.11: the AIs 4300 to 4320 can percent-encode characters as RFC 3986 defines, so every percent sign starts two hexadecimal digits.
                 for (int i = 0; i < data.Length; i++)
                 {
                     if (data[i] == '%')
@@ -329,7 +325,7 @@ internal static class Gs1Linters
                 break;
 
             case Gs1Linter.YesNo:
-                if (data.Length != 1 || data[0] is not ('0' or '1'))
+                if (data[0] is not ('0' or '1'))
                 {
                     ThrowInvalidData(identifier, "does not carry 0 or 1", nameof(data));
                 }
@@ -337,7 +333,7 @@ internal static class Gs1Linters
                 break;
 
             case Gs1Linter.Hyphen:
-                if (data.Length == 0 || data.ContainsAnyExcept('-'))
+                if (data.ContainsAnyExcept('-'))
                 {
                     ThrowInvalidData(identifier, "does not carry a hyphen where one is required", nameof(data));
                 }
@@ -346,7 +342,7 @@ internal static class Gs1Linters
 
             case Gs1Linter.Latitude:
                 // Section 7.13: X = 10 000 000 x (latitude + 90), so it is at most 1 800 000 000.
-                if (data.Length != 10 || long.Parse(data, CultureInfo.InvariantCulture) > 1_800_000_000)
+                if (long.Parse(data, CultureInfo.InvariantCulture) > 1_800_000_000)
                 {
                     ThrowInvalidData(identifier, "does not carry a latitude of ten digits up to 1800000000", nameof(data));
                 }
@@ -355,7 +351,7 @@ internal static class Gs1Linters
 
             case Gs1Linter.Longitude:
                 // Section 7.13: Y = 10 000 000 x ((longitude + 360) mod 360). The remainder is below 360, so Y is at most 3 599 999 999.
-                if (data.Length != 10 || long.Parse(data, CultureInfo.InvariantCulture) > 3_599_999_999)
+                if (long.Parse(data, CultureInfo.InvariantCulture) > 3_599_999_999)
                 {
                     ThrowInvalidData(identifier, "does not carry a longitude of ten digits up to 3599999999", nameof(data));
                 }
@@ -363,7 +359,7 @@ internal static class Gs1Linters
                 break;
 
             case Gs1Linter.ImporterIndex:
-                if (data.Length != 1 || !(data[0] is '-' or '_' || char.IsAsciiLetterOrDigit(data[0])))
+                if (!(data[0] is '-' or '_' || char.IsAsciiLetterOrDigit(data[0])))
                 {
                     ThrowInvalidData(identifier, "does not carry an importer index of one character from the file-safe base64 alphabet", nameof(data));
                 }
@@ -380,7 +376,7 @@ internal static class Gs1Linters
 
             case Gs1Linter.MediaType:
                 // The AIDC media types 01 to 10 are assigned, and 80 to 99 are for local or national use.
-                int mediaType = data.Length == 2 ? Number(data) : -1;
+                int mediaType = Number(data);
                 if (mediaType is not ((>= 1 and <= 10) or (>= 80 and <= 99)))
                 {
                     ThrowInvalidData(identifier, $"carries '{data}', which is not an AIDC media type", nameof(data));
@@ -401,7 +397,7 @@ internal static class Gs1Linters
                 break;
 
             case Gs1Linter.Winding:
-                if (data.Length != 1 || data[0] is not ('0' or '1' or '9'))
+                if (data[0] is not ('0' or '1' or '9'))
                 {
                     ThrowInvalidData(identifier, "does not carry a winding direction 0, 1 or 9", nameof(data));
                 }
@@ -409,7 +405,7 @@ internal static class Gs1Linters
                 break;
 
             case Gs1Linter.Zero:
-                if (data.Length == 0 || data.ContainsAnyExcept('0'))
+                if (data.ContainsAnyExcept('0'))
                 {
                     ThrowInvalidData(identifier, "does not carry a zero where one is required", nameof(data));
                 }
@@ -425,7 +421,7 @@ internal static class Gs1Linters
                 break;
 
             case Gs1Linter.NoZeroPrefix:
-                if (data.Length > 0 && data[0] == '0')
+                if (data[0] == '0')
                 {
                     ThrowInvalidData(identifier, "starts with a zero, which is not allowed", nameof(data));
                 }
@@ -494,13 +490,12 @@ internal static class Gs1Linters
     /// Checks a two digit field against a maximum value.
     /// </summary>
     /// <param name="identifier">The Application Identifier.</param>
-    /// <param name="data">The field.</param>
-    /// <param name="length">The length of the field.</param>
+    /// <param name="data">The field, two digits.</param>
     /// <param name="maximum">The largest value.</param>
     /// <param name="what">What the field holds, for the error message.</param>
-    private static void CheckRange(ReadOnlySpan<char> identifier, ReadOnlySpan<char> data, int length, int maximum, string what)
+    private static void CheckRange(ReadOnlySpan<char> identifier, ReadOnlySpan<char> data, int maximum, string what)
     {
-        if (data.Length != length || Number(data) > maximum)
+        if (Number(data) > maximum)
         {
             ThrowInvalidData(identifier, $"does not carry {what}", nameof(data));
         }
@@ -515,11 +510,6 @@ internal static class Gs1Linters
     /// <param name="dayZero">Whether a day of 00 is allowed.</param>
     private static void CheckDate(ReadOnlySpan<char> identifier, ReadOnlySpan<char> data, bool dayZero)
     {
-        if (data.Length != 6)
-        {
-            ThrowInvalidData(identifier, "does not carry a date of six digits YYMMDD", nameof(data));
-        }
-
         // The current century holds the years from 49 years back to 50 years ahead. A two digit year more than 50 years ahead in the current century belongs to
         // the century before, and one more than 49 years back belongs to the century after.
         int currentYear = DateTime.UtcNow.Year;
@@ -546,11 +536,6 @@ internal static class Gs1Linters
     /// <param name="dayZero">Whether a day of 00 is allowed.</param>
     private static void CheckFullDate(ReadOnlySpan<char> identifier, ReadOnlySpan<char> data, int year, bool dayZero)
     {
-        if (data.Length != 8 && data.Length != 4)
-        {
-            ThrowInvalidData(identifier, "does not carry a date of eight digits YYYYMMDD", nameof(data));
-        }
-
         ReadOnlySpan<char> monthDay = data[^4..];
         int month = Number(monthDay[..2]);
         int day = Number(monthDay[2..]);
@@ -671,11 +656,7 @@ internal static class Gs1Linters
     /// <param name="data">The data.</param>
     private static void CheckPieceOfTotal(ReadOnlySpan<char> identifier, ReadOnlySpan<char> data)
     {
-        if (data.Length == 0 || data.Length % 2 != 0)
-        {
-            ThrowInvalidData(identifier, "does not carry a piece number and a total count of equal length", nameof(data));
-        }
-
+        // The dictionary gives this check only to components of a fixed even length, so the two halves have one length.
         ReadOnlySpan<char> piece = data[..(data.Length / 2)];
         ReadOnlySpan<char> total = data[(data.Length / 2)..];
         if (!piece.ContainsAnyExcept('0') || !total.ContainsAnyExcept('0'))
@@ -731,7 +712,7 @@ internal static class Gs1Linters
             ThrowInvalidData(identifier, "carries a character that is not a digit", nameof(data));
         }
 
-        if (data.Length == 0 || data[0] is not ('0' or '1'))
+        if (data[0] is not ('0' or '1'))
         {
             ThrowInvalidData(identifier, "does not start with the format code 0 or 1", nameof(data));
         }

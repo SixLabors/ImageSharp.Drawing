@@ -29,7 +29,7 @@ internal enum Gs1Linter
     GcpPos2,
 
     /// <summary>
-    /// A date YYMMDD, where the day may be 00.
+    /// A date YYMMDD, where the day can be 00.
     /// </summary>
     Yymmd0,
 

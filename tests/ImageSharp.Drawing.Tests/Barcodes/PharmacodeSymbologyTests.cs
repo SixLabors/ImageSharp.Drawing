@@ -13,6 +13,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// </summary>
 public class PharmacodeSymbologyTests
 {
+    /// <summary>
+    /// The one-track symbol runs match the reference runs.
+    /// </summary>
+    /// <param name="text">The number to encode.</param>
+    /// <param name="reference">The reference run widths, comma separated, with the trailing gap.</param>
     [Theory]
     [InlineData("3", "1,2,1,2")]
     [InlineData("117480", "3,2,3,2,1,2,1,2,3,2,1,2,3,2,1,2,3,2,3,2,3,2,1,2,3,2,1,2,1,2,3,2")]
@@ -38,6 +43,7 @@ public class PharmacodeSymbologyTests
         int[] runs = Encode(text);
         string actual = string.Empty;
         int value = 0;
+
         for (int i = 0; i < runs.Length; i += 2)
         {
             bool thick = runs[i] == 3;
@@ -61,6 +67,7 @@ public class PharmacodeSymbologyTests
     public void DrawsTheOneTrackDimensionsOfSectionOneTwo(double xDimension)
     {
         BarcodeOptions options = new() { Dpi = SymbolEncoder.MillimetreDpi, XDimension = xDimension };
+
         SymbolEncoder.Encode(new PharmacodeSymbology(), "117480", options, (ref symbol) =>
         {
             Assert.All(symbol.BarHeights.ToArray(), height => Assert.Equal((float)(8.0 / xDimension), height, 1e-4F));
@@ -107,6 +114,7 @@ public class PharmacodeSymbologyTests
             string actual = string.Empty;
             int value = 0;
             int count = symbol.BarHeights.Length;
+
             for (int i = 0; i < count; i++)
             {
                 char kind = symbol.BarHeights[i] == 8F ? 'F' : symbol.BarTops[i] == 4F ? 'L' : 'U';
@@ -129,6 +137,7 @@ public class PharmacodeSymbologyTests
     public void ScalesTheHalfBarsWithTheBarHeight()
     {
         BarcodeOptions options = new() { Dpi = SymbolEncoder.MillimetreDpi, BarHeight = 30F };
+
         SymbolEncoder.Encode(new TwoTrackPharmacodeSymbology(), "105", options, static (ref symbol) =>
         {
             Assert.Equal([30F, 15F, 15F, 30F], symbol.BarHeights.ToArray());
@@ -148,6 +157,10 @@ public class PharmacodeSymbologyTests
         Assert.Empty(SymbolEncoder.Read(new TwoTrackPharmacodeSymbology(), "117480", options, SymbolEncoder.Texts));
     }
 
+    /// <summary>
+    /// The one-track Pharmacode carries a number from 3 to 131070. The symbology rejects empty input, numbers outside that range and non-digits.
+    /// </summary>
+    /// <param name="text">The number to encode.</param>
     [Theory]
     [InlineData("")]
     [InlineData("2")]
@@ -158,6 +171,10 @@ public class PharmacodeSymbologyTests
     public void RejectsMalformedInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => Encode(text));
 
+    /// <summary>
+    /// The two-track Pharmacode carries a number from 4 to 64570080. The symbology rejects empty input, numbers outside that range and non-digits.
+    /// </summary>
+    /// <param name="text">The number to encode.</param>
     [Theory]
     [InlineData("")]
     [InlineData("3")]

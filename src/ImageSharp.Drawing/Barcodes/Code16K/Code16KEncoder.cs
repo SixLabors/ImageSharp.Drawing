@@ -310,8 +310,7 @@ internal static class Code16KEncoder
             };
         }
 
-        // A data character costs at most two symbol characters, a shift and itself, and the symbol adds the starting symbol character and the two check
-        // characters; the pad fills the rest of the rows.
+        // The data starts at value 1. Value 0 is the starting symbol character, which needs the row count, so it is written after the data.
         int count = 1;
         int i = 0;
         CodeSet set;

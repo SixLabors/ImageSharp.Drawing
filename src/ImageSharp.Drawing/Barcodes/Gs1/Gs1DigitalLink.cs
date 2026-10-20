@@ -13,7 +13,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal static class Gs1DigitalLink
 {
     /// <summary>
-    /// The characters a URI may carry, RFC 3986: the unreserved characters, the reserved characters and the percent sign of percent-encoding.
+    /// The characters a URI can carry, RFC 3986: the unreserved characters, the reserved characters and the percent sign of percent-encoding.
     /// </summary>
     private static readonly SearchValues<char> UriCharacters =
         SearchValues.Create("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~:/?#[]@!$&'()*+,;=%");
@@ -173,8 +173,8 @@ internal static class Gs1DigitalLink
     }
 
     /// <summary>
-    /// Parses the path: optional segments of the host, then the primary identification key and its qualifiers as "/AI/value" pairs to the end. The key is the
-    /// rightmost pair whose Application Identifier is a primary key, with every pair after it an Application Identifier too.
+    /// Parses the path: optional path segments before the key, then the primary identification key and its qualifiers as "/AI/value" pairs to the end. The key
+    /// is the rightmost pair whose Application Identifier is a primary key, with every pair after it an Application Identifier too.
     /// </summary>
     /// <param name="path">The path, from its first "/".</param>
     /// <param name="buffer">The buffer the decoded Application Identifiers and values are written to.</param>

@@ -63,8 +63,8 @@ public class IntelligentMailPackageSymbologyTests
     }
 
     /// <summary>
-    /// Section 2.2.4 of USPS2000508: "The overall minimum height of the barcode shall measure at least 0.75 inch", so a bar height under 0.75 inch is
-    /// rejected.
+    /// Section 2.2.4 of USPS2000508: "The overall minimum height of the barcode shall measure at least 0.75 inch". A bar height of 0.75 inch encodes, and a
+    /// bar height under 0.75 inch throws.
     /// </summary>
     [Fact]
     public void RejectsABarHeightUnderThreeQuartersOfAnInch()
@@ -79,7 +79,8 @@ public class IntelligentMailPackageSymbologyTests
     }
 
     /// <summary>
-    /// Section 2.4.2 of USPS2000508: "A service banner shall be printed in all uppercase letters".
+    /// Section 2.4.2 of USPS2000508: "A service banner shall be printed in all uppercase letters". The constructor rejects an empty banner, a blank banner
+    /// and a banner with lowercase letters.
     /// </summary>
     /// <param name="banner">The banner.</param>
     [Theory]
@@ -152,6 +153,7 @@ public class IntelligentMailPackageSymbologyTests
                 MathF.Min(symbol.TopQuietZone, symbol.BottomQuietZone)));
 
         const double inch = 25.4;
+
         Assert.InRange(xDimension, 0.015 * inch, 0.017 * inch);
         Assert.True(barHeight * xDimension >= (0.75 * inch) - 1E-6);
         Assert.InRange(thickness * xDimension, 0.031 * inch, 0.063 * inch);
@@ -184,8 +186,10 @@ public class IntelligentMailPackageSymbologyTests
 
         // The banner and the PIC are the second and the fourth band.
         Assert.Equal(5, runs.Count);
+
         const float minimum = 90F * 300F / 1000F;
         const float maximum = 125F * 300F / 1000F;
+
         Assert.InRange(runs[1].End - runs[1].Start, minimum - 1F, maximum + 1F);
         Assert.InRange(runs[3].End - runs[3].Start, minimum - 1F, maximum + 1F);
     }
@@ -235,11 +239,13 @@ public class IntelligentMailPackageSymbologyTests
 
         // The dark rows form bands from the top down: the upper identification bar, the banner, the bars, the PIC and the lower identification bar.
         List<(int Start, int End)> bands = DarkBands(image);
+
         Assert.Equal(5, bands.Count);
+
         (int bannerLeft, int bannerRight) = DarkColumns(image, bands[1]);
         (int barsLeft, int barsRight) = DarkColumns(image, bands[2]);
-
         float clearZone = 10F * MathF.Round((float)(xDimension / 25.4 * dpi));
+
         Assert.True(bannerLeft >= barsLeft - clearZone - 1F, $"The banner starts at {bannerLeft}, the left clear zone at {barsLeft - clearZone}.");
         Assert.True(bannerRight <= barsRight + clearZone + 1F, $"The banner ends at {bannerRight}, the right clear zone at {barsRight + clearZone}.");
     }
@@ -261,7 +267,9 @@ public class IntelligentMailPackageSymbologyTests
         image.Mutate(x => x.Paint(canvas => canvas.DrawBarcode(symbology, options, new PointF(-bounds.X, -bounds.Y), text)));
 
         List<(int Start, int End)> bands = DarkBands(image);
+
         Assert.Equal(5, bands.Count);
+
         (int picLeft, int picRight) = DarkColumns(image, bands[3]);
         (int barLeft, int barRight) = DarkColumns(image, bands[4]);
 
@@ -310,9 +318,15 @@ public class IntelligentMailPackageSymbologyTests
 
         byte[] pixels = new byte[image.Width * image.Height];
         image.CopyPixelDataTo(pixels);
+
         return pixels;
     }
 
+    /// <summary>
+    /// Encodes the text with the "USPS TRACKING #" banner and a 12 point OCR-B font, which the symbology requires.
+    /// </summary>
+    /// <param name="text">The element strings.</param>
+    /// <returns>The run widths of the symbol.</returns>
     private static string Encode(string text)
         => SymbolEncoder.Read(
             new IntelligentMailPackageSymbology("USPS TRACKING #"),
@@ -329,6 +343,7 @@ public class IntelligentMailPackageSymbologyTests
     {
         List<(int Start, int End)> bands = [];
         int start = -1;
+
         for (int y = 0; y < image.Height; y++)
         {
             bool dark = false;
@@ -366,6 +381,7 @@ public class IntelligentMailPackageSymbologyTests
     {
         int left = int.MaxValue;
         int right = int.MinValue;
+
         for (int y = band.Start; y < band.End; y++)
         {
             for (int x = 0; x < image.Width; x++)

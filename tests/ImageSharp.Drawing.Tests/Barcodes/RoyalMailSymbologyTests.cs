@@ -34,6 +34,9 @@ public class RoyalMailSymbologyTests
     public void EncodesKix(string text, string bars)
         => Assert.Equal(bars, Encode(new KixSymbology(), text));
 
+    /// <summary>
+    /// DAFT input is the bar states themselves, so the symbol carries each given state in order.
+    /// </summary>
     [Fact]
     public void EncodesDaftAsGiven()
         => Assert.Equal("FATDAFTDAD", Encode(new DaftSymbology(), "FATDAFTDAD"));
@@ -62,17 +65,25 @@ public class RoyalMailSymbologyTests
         Assert.Equal(0F, SymbolEncoder.Read(new DaftSymbology(), "FT", new BarcodeOptions(), static (ref symbol) => symbol.LeadingQuietZone));
     }
 
+    /// <summary>
+    /// The human readable line of Royal Mail is the data as given, without the check character. DAFT prints no line.
+    /// </summary>
     [Fact]
     public void PrintsTheDataAsGiven()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-
         string[] texts = SymbolEncoder.Read(new RoyalMailSymbology(), "LE28HS9Z", options, SymbolEncoder.Texts);
+
         Assert.Equal("LE28HS9Z", Assert.Single(texts));
 
         Assert.Empty(SymbolEncoder.Read(new DaftSymbology(), "FATD", options, SymbolEncoder.Texts));
     }
 
+    /// <summary>
+    /// Royal Mail and KIX carry the uppercase letters A to Z and the digits 0 to 9 only. Both symbologies reject empty input, lowercase letters, a space,
+    /// a hyphen and full width characters.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("")]
     [InlineData("le28hs9z")]
@@ -85,6 +96,10 @@ public class RoyalMailSymbologyTests
         Assert.ThrowsAny<ArgumentException>(() => Encode(new KixSymbology(), text));
     }
 
+    /// <summary>
+    /// DAFT input is the letters D, A, F and T only. The symbology rejects empty input, another letter and lowercase letters.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("")]
     [InlineData("FATX")]
