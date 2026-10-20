@@ -95,13 +95,19 @@ public class Gs1128SymbologyTests
 
     /// <summary>
     /// The note of Table 5-50 of the GS1 General Specifications lets a small item truncate the bars of a GS1-128 symbol, but "In no case SHALL the bar height
-    /// be less than 5.08 millimetres". A bar height of 5.08 mm encodes, and 5.07 mm throws.
+    /// be less than 5.08 millimetres". A bar height of 5.07 mm draws at 5.08 mm.
     /// </summary>
     [Fact]
-    public void RejectsABarHeightUnderTheTruncationMinimum()
+    public void DrawsABarHeightUnderTheTruncationMinimumAtTheMinimum()
     {
-        Assert.Null(Record.Exception(() => SymbolEncoder.Encode(new Gs1128Symbology(), "(01)09521234543213", new BarcodeOptions { BarHeight = 5.08 })));
-        Assert.Throws<ArgumentOutOfRangeException>(() => SymbolEncoder.Encode(new Gs1128Symbology(), "(01)09521234543213", new BarcodeOptions { BarHeight = 5.07 }));
+        Assert.Equal(Height(5.08), Height(5.07));
+
+        static float Height(double barHeight)
+            => SymbolEncoder.Read(
+                new Gs1128Symbology(),
+                "(01)09521234543213",
+                new BarcodeOptions { BarHeight = barHeight },
+                static (ref symbol) => symbol.HeightInModules);
     }
 
     /// <summary>

@@ -360,7 +360,9 @@ internal static class Code49Encoder
     {
         int rowCount = codes.Length / CodeCharactersPerRow;
         double xDimension = options.ResolveXDimension(BarcodeSymbology.DefaultXDimension);
-        float barHeight = options.ResolveBarHeight(xDimension, NominalBarHeight);
+
+        // Section 3.3 recommends "a minimum bar height of 8X" and sets no limit, so the bar height is not clamped.
+        float barHeight = options.ResolveBarHeight(xDimension, 0, NominalBarHeight, float.PositiveInfinity);
         ReadOnlySpan<byte> parities = RowParity;
         ReadOnlySpan<ushort> even = Code49Patterns.Even;
         ReadOnlySpan<ushort> odd = Code49Patterns.Odd;

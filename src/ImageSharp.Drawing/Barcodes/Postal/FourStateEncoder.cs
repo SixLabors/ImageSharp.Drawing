@@ -73,7 +73,12 @@ internal static class FourStateEncoder
         // specification makes them proportional to the bar width.
         float nominal = (float)(metrics.XDimension / xDimension);
         float barScale = metrics.ProportionalBars ? 1F : nominal;
-        float scale = options.ResolveBarHeight(xDimension, metrics.FullBar * barScale) / metrics.FullBar;
+        float scale = options.ResolveBarHeight(
+            xDimension,
+            metrics.MinimumFullBar * barScale,
+            metrics.FullBar * barScale,
+            metrics.MaximumFullBar * barScale) / metrics.FullBar;
+
         float ascender = metrics.Ascender * scale;
         float tracker = metrics.Tracker * scale;
         float descender = metrics.Descender * scale;

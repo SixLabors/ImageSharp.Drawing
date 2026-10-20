@@ -70,6 +70,7 @@ public sealed class Gs1DataBarExpandedStackedSymbology : BarcodeSymbology
                 BarcodeTextSide.BelowBars,
                 DataBarEncoder.MinimumXDimension,
                 DataBarEncoder.MaximumXDimension,
+                float.PositiveInfinity,
                 options,
                 ref symbol);
         }

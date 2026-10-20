@@ -161,10 +161,9 @@ internal static class DataBarEncoder
     /// <param name="gtin">The 14 digit GTIN.</param>
     /// <param name="linked">Whether a 2D component of a GS1 Composite symbol is linked to the symbol.</param>
     /// <param name="nominalHeight">The nominal height of the variation in modules.</param>
-    /// <param name="minimumHeight">The minimum height that the variation requires in modules, or 0 for none.</param>
+    /// <param name="minimumHeight">The minimum height that the variation requires in modules. A smaller bar height draws at this height.</param>
     /// <param name="options">The options that control the bar height and the text.</param>
     /// <param name="symbol">The symbol to write.</param>
-    /// <exception cref="ArgumentOutOfRangeException">The bar height is under the minimum height.</exception>
     public static void BuildLinear(
         ReadOnlySpan<char> gtin,
         bool linked,
@@ -174,20 +173,14 @@ internal static class DataBarEncoder
         ref BarcodeSymbol symbol)
     {
         double xDimension = options.ResolveXDimension(MinimumXDimension, NominalXDimension, MaximumXDimension);
-        if (options.IsBarHeightUnder(minimumHeight * xDimension))
-        {
-            double minimum = minimumHeight * xDimension;
-            throw new ArgumentOutOfRangeException(
-                nameof(options),
-                options.BarHeight,
-                $"The symbol is at least {minimumHeight}X high, {minimum:0.##} mm at its X dimension; the bar height is {options.BarHeight:0.##} mm.");
-        }
 
         // The element widths start with the guard space, so a zero width bar leads the runs and the widths follow it.
         Span<int> runs = symbol.BeginLinear(ElementCount + 1, xDimension, out Span<float> heights, out _);
         _ = EncodeWidths(gtin, linked, runs[1..]);
 
-        float barHeight = options.ResolveBarHeight(xDimension, nominalHeight);
+        // Section 5.5.2 of the GS1 General Specifications gives a minimum height and no maximum: "the actual height of the symbol used depends on the specific
+        // application requirements".
+        float barHeight = options.ResolveBarHeight(xDimension, minimumHeight, nominalHeight, float.PositiveInfinity);
         heights.Fill(barHeight);
         AddCaption(gtin, Width, barHeight, options, ref symbol);
         symbol.EndLinear(0, 0);
@@ -201,7 +194,6 @@ internal static class DataBarEncoder
     /// <param name="linked">Whether a 2D component of a GS1 Composite symbol is linked to the symbol.</param>
     /// <param name="options">The options that control the bar height and the text.</param>
     /// <param name="symbol">The symbol to write.</param>
-    /// <exception cref="ArgumentOutOfRangeException">The bar height is under the minimum height of the lower row.</exception>
     public static void BuildStacked(ReadOnlySpan<char> gtin, bool linked, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         InlineArray64<int> widthStorage = default;
@@ -230,17 +222,9 @@ internal static class DataBarEncoder
         double xDimension = options.ResolveXDimension(MinimumXDimension, NominalXDimension, MaximumXDimension);
 
         // Table 5-56 of the GS1 General Specifications gives a minimum symbol height of 3.43 millimetres, 13X, at the X dimension of 0.264 millimetre. The bar
-        // height sets the lower row, and the upper row keeps its ratio of five to seven, so a symbol of 13X has a lower row of 7X.
-        if (options.IsBarHeightUnder(StackedLowerRowHeight * xDimension))
-        {
-            double minimum = StackedLowerRowHeight * xDimension;
-            throw new ArgumentOutOfRangeException(
-                nameof(options),
-                options.BarHeight,
-                $"The lower row is at least {StackedLowerRowHeight}X high, {minimum:0.##} mm at its X dimension; the bar height is {options.BarHeight:0.##} mm.");
-        }
-
-        float lowerHeight = options.ResolveBarHeight(xDimension, StackedLowerRowHeight);
+        // height sets the lower row, and the upper row keeps its ratio of five to seven, so a symbol of 13X has a lower row of 7X. Section 5.5.2.1.3 gives no
+        // maximum height.
+        float lowerHeight = options.ResolveBarHeight(xDimension, StackedLowerRowHeight, StackedLowerRowHeight, float.PositiveInfinity);
         float upperHeight = lowerHeight * StackedUpperRowHeight / StackedLowerRowHeight;
         int upperRuns = DataBarRows.RunCount(upper);
         int separatorRuns = DataBarRows.RunCount(separator);
@@ -304,16 +288,12 @@ internal static class DataBarEncoder
         }
 
         double xDimension = options.ResolveXDimension(MinimumXDimension, NominalXDimension, MaximumXDimension);
-        if (options.IsBarHeightUnder(StackedOmnidirectionalMinimumRowHeight * xDimension))
-        {
-            double minimum = StackedOmnidirectionalMinimumRowHeight * xDimension;
-            throw new ArgumentOutOfRangeException(
-                nameof(options),
-                options.BarHeight,
-                $"Each row is at least 33X high, {minimum:0.##} mm at its X dimension; the bar height is {options.BarHeight:0.##} mm.");
-        }
+        float rowHeight = options.ResolveBarHeight(
+            xDimension,
+            StackedOmnidirectionalMinimumRowHeight,
+            StackedOmnidirectionalRowHeight,
+            float.PositiveInfinity);
 
-        float rowHeight = options.ResolveBarHeight(xDimension, StackedOmnidirectionalRowHeight);
         int runCount = 0;
         int barCount = 0;
         for (int row = 0; row < 5; row++)

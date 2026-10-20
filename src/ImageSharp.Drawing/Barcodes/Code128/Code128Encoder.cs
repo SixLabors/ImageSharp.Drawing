@@ -191,7 +191,6 @@ internal static class Code128Encoder
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="symbol">The symbol to write.</param>
     /// <exception cref="ArgumentException">The text carries a character the symbology cannot encode.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">A GS1 symbol has a bar height under <see cref="Gs1Data.MinimumTruncatedBarHeight"/>.</exception>
     public static void BuildSymbol(
         ReadOnlySpan<char> text,
         bool gs1,
@@ -218,7 +217,6 @@ internal static class Code128Encoder
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="symbol">The symbol to write.</param>
     /// <exception cref="ArgumentException">The text carries a character the symbology cannot encode.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">A GS1 symbol has a bar height under <see cref="Gs1Data.MinimumTruncatedBarHeight"/>.</exception>
     public static void BuildSymbol(
         ReadOnlySpan<char> text,
         bool gs1,
@@ -231,12 +229,16 @@ internal static class Code128Encoder
         BarcodeOptions options,
         ref BarcodeSymbol symbol)
     {
-        // The bars of a GS1 symbol are 31.75 millimetres at any X dimension. The module draws at a whole number of pixels.
+        // The bars of a GS1 symbol are 31.75 millimetres at any X dimension. The module draws at a whole number of pixels. The notes of Tables 5-47 and 5-51
+        // of the GS1 General Specifications: "There is no maximum for the height". The notes of Tables 5-50 and 5-51: "In no case SHALL the bar height be less
+        // than 5.08 millimetres".
         double xDimension = options.ResolveXDimension(minimumXDimension, gs1 ? NominalXDimension : BarcodeSymbology.DefaultXDimension, maximumXDimension);
         Code128Layout layout = new()
         {
             XDimension = xDimension,
             NominalBarHeight = gs1 ? (float)(Gs1BarHeight / xDimension) : NominalBarHeight,
+            MinimumBarHeight = gs1 ? (float)(Gs1Data.MinimumTruncatedBarHeight / xDimension) : 0F,
+            MaximumBarHeight = float.PositiveInfinity,
             TextClearance = BarcodeTextPlacement.Clearance,
             HorizontalQuietZone = QuietZone,
         };
@@ -266,7 +268,6 @@ internal static class Code128Encoder
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="symbol">The symbol to write.</param>
     /// <exception cref="ArgumentException">The text carries a character the symbology cannot encode.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">A GS1 symbol has a bar height under <see cref="Gs1Data.MinimumTruncatedBarHeight"/>.</exception>
     public static void BuildSymbol(
         ReadOnlySpan<char> text,
         bool gs1,
@@ -281,14 +282,6 @@ internal static class Code128Encoder
     {
         double xDimension = layout.XDimension;
         Guard.MustBeLessThanOrEqualTo(text.Length, MaximumLength, nameof(text));
-
-        if (gs1 && options.IsBarHeightUnder(Gs1Data.MinimumTruncatedBarHeight))
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(options),
-                options.BarHeight,
-                $"A GS1-128 symbol has bars at least {Gs1Data.MinimumTruncatedBarHeight} mm high; the bar height is {options.BarHeight:0.##} mm.");
-        }
 
         // The code sets carry ASCII 0 to 127 between them, and clause 4.3.4.2 d) of ISO/IEC 15417 adds the byte values 128 to 255 with FNC4, so anything above
         // U+00FF is rejected. The message decodes the code point at the first such unit, so a surrogate pair reports as the one character it is.
@@ -327,7 +320,12 @@ internal static class Code128Encoder
             WriteRuns(values[..count], runs);
             int widthInModules = ((count - 1) * ModulesPerCharacter) + StopModules;
 
-            float barHeight = options.ResolveBarHeight(xDimension, MathF.Max(layout.NominalBarHeight, widthInModules * layout.MinimumHeightFraction));
+            float barHeight = options.ResolveBarHeight(
+                xDimension,
+                layout.MinimumBarHeight,
+                MathF.Max(layout.NominalBarHeight, widthInModules * layout.MinimumHeightFraction),
+                layout.MaximumBarHeight);
+
             heights.Fill(barHeight);
 
             int readableLength = readablePrefix.Length + readableBody.Length + readableSuffix.Length;

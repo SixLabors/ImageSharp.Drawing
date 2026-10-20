@@ -99,7 +99,7 @@ public sealed class TwoTrackPharmacodeSymbology : BarcodeSymbology
 
         double xDimension = options.ResolveXDimension(MinimumXDimension, XDimension, MaximumXDimension);
 
-        float barHeight = options.ResolveBarHeight(xDimension, (float)(NominalBarHeight / xDimension));
+        float barHeight = options.ResolveBarHeight(xDimension, 0, (float)(NominalBarHeight / xDimension), float.PositiveInfinity);
         float halfHeight = barHeight * 0.5F;
         Span<int> runs = symbol.BeginLinear((count * 2) - 1, xDimension, out Span<float> heights, out Span<float> tops);
         runs.Fill(1);

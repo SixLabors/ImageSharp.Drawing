@@ -47,7 +47,8 @@ internal static class IntelligentMailEncoder
     /// pitch of 22±2 bars per inch", and section 2.3.2 a clear zone of 0.125 inch on each end and 0.028 inch above and below the bars. Section 2.4.1 keeps the
     /// human readable information at least 0.028 inch below the bars, and section 2.4.2 aligns "the left edge of the leftmost digit" with the leftmost bar. The
     /// pitch is 20 to 24 bars per inch. The lengths of section 2.3.1 are that range over the 64 pitches: 3.225 inches is 64 / 20 inch and the widest bar of
-    /// 0.025 inch, and 2.667 inches is 64 / 24 inch, rounded up.
+    /// 0.025 inch, and 2.667 inches is 64 / 24 inch, rounded up. The full bar is clamped to the "overall barcode height of 0.125 inch to 0.165 inch" of
+    /// section 2.3.1. At each end of that range, the tracker and the ascender and descender bars stay inside their own ranges.
     /// </summary>
     public static readonly FourStateMetrics Metrics = new(
         UspsPostalEncoder.NominalXDimension,
@@ -73,6 +74,8 @@ internal static class IntelligentMailEncoder
         MaximumXDimension = UspsPostalEncoder.MaximumXDimension,
         MinimumBarsPerInch = 20,
         MaximumBarsPerInch = 24,
+        MinimumFullBar = (float)(0.125 / 0.020),
+        MaximumFullBar = (float)(0.165 / 0.020),
     };
 
     /// <summary>

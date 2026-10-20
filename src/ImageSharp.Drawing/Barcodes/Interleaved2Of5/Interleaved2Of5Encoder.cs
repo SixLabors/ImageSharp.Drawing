@@ -105,11 +105,15 @@ internal static class Interleaved2Of5Encoder
 
         // Every digit has the same width, so the symbol length that sets the proportional bar height is known before the runs are written.
         float symbolLength = (digits.Length * ModulesPerDigit) + StartStopModules + (2 * quietZone);
+
+        // Section 3.2 gives the minimum bar height as a recommendation, "should be", so it sets the nominal bar height and does not clamp the bar height.
         float nominalBarHeight = MathF.Max(symbolLength * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
         Interleaved2Of5Layout layout = new()
         {
             XDimension = xDimension,
             NominalBarHeight = nominalBarHeight,
+            MinimumBarHeight = 0F,
+            MaximumBarHeight = float.PositiveInfinity,
             QuietZone = quietZone,
             TextClearance = BarcodeTextPlacement.Clearance,
             NarrowElement = 1,
@@ -167,7 +171,7 @@ internal static class Interleaved2Of5Encoder
         // Every digit has two wide and three narrow elements, the start pattern four narrow elements and the stop pattern a wide and two narrow elements.
         float widthInModules = ((digits.Length * ((2 * wide) + (3 * narrow))) + (StartElements * narrow) + wide + (2 * narrow)) * runUnit;
         float bearerBarThickness = layout.BearerBarThickness;
-        float barHeight = options.ResolveBarHeight(layout.XDimension, layout.NominalBarHeight);
+        float barHeight = options.ResolveBarHeight(layout.XDimension, layout.MinimumBarHeight, layout.NominalBarHeight, layout.MaximumBarHeight);
         heights.Fill(barHeight);
         tops.Fill(bearerBarThickness);
 

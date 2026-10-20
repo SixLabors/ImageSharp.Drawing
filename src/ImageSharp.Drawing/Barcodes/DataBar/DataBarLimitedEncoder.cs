@@ -122,13 +122,6 @@ internal static class DataBarLimitedEncoder
         value += digits;
 
         double xDimension = options.ResolveXDimension(DataBarEncoder.MinimumXDimension, NominalXDimension, DataBarEncoder.MaximumXDimension);
-        if (options.IsBarHeightUnder(Height * xDimension))
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(options),
-                options.BarHeight,
-                $"The symbol is at least {Height}X high, {Height * xDimension:0.##} mm at its X dimension; the bar height is {options.BarHeight:0.##} mm.");
-        }
 
         // The element widths start with the guard space, so a zero width bar leads the runs, and the symbol ends on the five module space, so a zero width bar
         // closes them. Both zero width bars are the zeros the symbol storage starts with.
@@ -188,7 +181,8 @@ internal static class DataBarLimitedEncoder
         widths[45] = 1;
         widths[46] = 5;
 
-        float barHeight = options.ResolveBarHeight(xDimension, Height);
+        // Section 5.5.2.2 gives a minimum height and no maximum.
+        float barHeight = options.ResolveBarHeight(xDimension, Height, Height, float.PositiveInfinity);
         heights.Fill(barHeight);
 
         // Section 4.14 of the GS1 General Specifications prints an element string with its Application Identifier in parentheses.

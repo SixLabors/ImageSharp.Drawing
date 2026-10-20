@@ -111,7 +111,7 @@ internal static class ChannelCodeEncoder
         int widthInModules = finder + (channels * 4) - 2;
 
         float nominalBarHeight = MathF.Max(NominalBarHeight, (float)(MinimumBarHeightMillimetres / xDimension));
-        float barHeight = options.ResolveBarHeight(xDimension, nominalBarHeight);
+        float barHeight = options.ResolveBarHeight(xDimension, 0, nominalBarHeight, float.PositiveInfinity);
         heights.Fill(barHeight);
 
         if (options.Font is not null)

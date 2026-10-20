@@ -177,17 +177,8 @@ internal static class Pdf417Encoder
 
         double xDimension = options.ResolveXDimension(BarcodeSymbology.DefaultXDimension);
 
-        // Section 5.8.2: the row height is "Y >= 3X".
-        if (options.IsBarHeightUnder(NominalRowHeight * xDimension))
-        {
-            double minimum = NominalRowHeight * xDimension;
-            throw new ArgumentOutOfRangeException(
-                nameof(options),
-                options.BarHeight,
-                $"A row is at least 3X high, {minimum:0.##} mm at its X dimension; the bar height is {options.BarHeight:0.##} mm.");
-        }
-
-        float rowHeight = options.ResolveBarHeight(xDimension, NominalRowHeight);
+        // Section 5.8.2: the row height is "Y >= 3X", and "the row height may be increased". It gives no maximum.
+        float rowHeight = options.ResolveBarHeight(xDimension, NominalRowHeight, NominalRowHeight, float.PositiveInfinity);
         BuildMatrix(data, c, r, level, compact, xDimension, rowHeight, QuietZone, ref symbol);
     }
 

@@ -51,7 +51,12 @@ public sealed class UpcASymbology : BarcodeSymbology
             ref symbol,
             out Span<float> heights);
 
-        float barHeight = options.ResolveBarHeight(symbol.XDimension, EanUpcEncoder.NominalBarHeight);
+        float barHeight = options.ResolveBarHeight(
+            symbol.XDimension,
+            (float)(EanUpcEncoder.MinimumBarHeight / symbol.XDimension),
+            EanUpcEncoder.NominalBarHeight,
+            float.PositiveInfinity);
+
         EanUpcEncoder.FillGuardedHeights(heights, barHeight, GuardBars);
 
         // Section 5.2.5 of the GS1 General Specifications: "the size of the first and last digits should be reduced to a maximum width equivalent to four

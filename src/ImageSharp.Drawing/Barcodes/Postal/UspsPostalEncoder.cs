@@ -49,6 +49,17 @@ internal static class UspsPostalEncoder
     public const float FullBar = 6.25F;
 
     /// <summary>
+    /// The smallest full bar in modules: 0.115 inch at the 0.020 inch module. DMM 708.4.2.5 a: "A full bar must be 0.125 ±0.010 inch high." The half bar
+    /// keeps its ratio to the full bar, and at each limit of the full bar it stays inside its own "0.050 ±0.010 inch" of 708.4.2.5 b.
+    /// </summary>
+    public const float MinimumFullBar = 5.75F;
+
+    /// <summary>
+    /// The largest full bar in modules: 0.135 inch at the 0.020 inch module, from the same tolerance.
+    /// </summary>
+    public const float MaximumFullBar = 6.75F;
+
+    /// <summary>
     /// The height of a half bar in modules: 0.050 inch at the 0.020 inch module.
     /// </summary>
     public const float HalfBar = 2.5F;
@@ -116,7 +127,7 @@ internal static class UspsPostalEncoder
         // The bar heights and the clear zones are inches in the Domestic Mail Manual, given here in modules of the nominal 0.020 inch bar. The module the
         // symbol draws at can round away from 0.020 inch, so the same inches are this many of its modules.
         float scale = (float)(NominalXDimension / xDimension);
-        float fullBar = options.ResolveBarHeight(xDimension, FullBar * scale);
+        float fullBar = options.ResolveBarHeight(xDimension, MinimumFullBar * scale, FullBar * scale, MaximumFullBar * scale);
         float halfBar = fullBar * HalfBar / FullBar;
         heights[0] = fullBar;
         heights[barCount - 1] = fullBar;

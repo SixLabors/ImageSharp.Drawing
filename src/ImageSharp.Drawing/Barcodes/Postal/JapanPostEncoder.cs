@@ -53,6 +53,8 @@ internal static class JapanPostEncoder
     /// of 0.6 mm, a timing bar of 1.2 mm and a long bar of 3.6 mm, so an extender of 1.2 mm above or below the timing bar. Every size is "×a/10" for a size of
     /// a points, 8 to 11.5, so the bars stay proportional to the bar width. Page 13: "2mm以上の空白", a clear space of at least 2 mm above, below, left and right
     /// of the barcode. The bar width sets the size a, so it is clamped to the bar width of 0.6×a/10 mm at the permitted sizes "8≦ａ≦11.5": 0.48 to 0.69 mm.
+    /// The long bar is clamped to its range "3.40×a/10～3.60×a/10", which is 3.40 / 0.6 to 3.60 / 0.6 modules. The timing bar then stays inside its own range
+    /// "1.05×a/10～1.35×a/10".
     /// </summary>
     public static readonly FourStateMetrics Metrics = new(
         0.6,
@@ -72,6 +74,8 @@ internal static class JapanPostEncoder
     {
         MinimumXDimension = 0.6 * 8 / 10,
         MaximumXDimension = 0.6 * 11.5 / 10,
+        MinimumFullBar = (float)(3.40 / 0.6),
+        MaximumFullBar = (float)(3.60 / 0.6),
     };
 
     /// <summary>

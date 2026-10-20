@@ -42,6 +42,16 @@ public sealed class FacingIdentificationMarkSymbology : BarcodeSymbology
     private const double NominalBarHeight = 25.4 * 5 / 8;
 
     /// <summary>
+    /// The smallest bar height in millimetres, from the tolerance of section 708.9.3 b, "5/8 inch (±1/8 inch)".
+    /// </summary>
+    private const double MinimumBarHeight = 25.4 * ((5.0 / 8) - (1.0 / 8));
+
+    /// <summary>
+    /// The largest bar height in millimetres, from the same tolerance.
+    /// </summary>
+    private const double MaximumBarHeight = 25.4 * ((5.0 / 8) + (1.0 / 8));
+
+    /// <summary>
     /// Gets the patterns A to E, each as nine bits, most significant first, in which a set bit is a bar.
     /// </summary>
     private static ReadOnlySpan<ushort> Patterns => [0b110010011, 0b101101101, 0b110101011, 0b111010111, 0b101000101];
@@ -79,7 +89,12 @@ public sealed class FacingIdentificationMarkSymbology : BarcodeSymbology
         }
 
         symbol.TrimLastRow(written);
-        float barHeight = options.ResolveBarHeight(xDimension, (float)(NominalBarHeight / xDimension));
+        float barHeight = options.ResolveBarHeight(
+            xDimension,
+            (float)(MinimumBarHeight / xDimension),
+            (float)(NominalBarHeight / xDimension),
+            (float)(MaximumBarHeight / xDimension));
+
         heights[..((written + 1) >> 1)].Fill(barHeight);
         symbol.EndLinear(0, 0);
     }

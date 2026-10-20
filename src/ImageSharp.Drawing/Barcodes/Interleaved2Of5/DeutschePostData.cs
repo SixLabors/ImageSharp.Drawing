@@ -87,6 +87,8 @@ internal static class DeutschePostData
         {
             XDimension = xDimension,
             NominalBarHeight = (float)(BarHeight / xDimension),
+            MinimumBarHeight = 0F,
+            MaximumBarHeight = float.PositiveInfinity,
             QuietZone = MathF.Max(Interleaved2Of5Encoder.QuietZone, (float)(QuietZone / xDimension)),
             TextClearance = BarcodeTextPlacement.Clearance,
             NarrowElement = 1,

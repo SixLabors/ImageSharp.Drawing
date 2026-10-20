@@ -148,7 +148,7 @@ internal static class CodabarEncoder
         int widthInModules = BarcodeSymbol.RunWidth(runs);
 
         float nominalBarHeight = MathF.Max(widthInModules * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
-        float barHeight = options.ResolveBarHeight(xDimension, nominalBarHeight);
+        float barHeight = options.ResolveBarHeight(xDimension, 0, nominalBarHeight, float.PositiveInfinity);
         heights.Fill(barHeight);
 
         if (options.Font is not null)

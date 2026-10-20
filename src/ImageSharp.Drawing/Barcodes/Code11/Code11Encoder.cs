@@ -146,7 +146,7 @@ internal static class Code11Encoder
 
         int widthInModules = BarcodeSymbol.RunWidth(runs);
 
-        float barHeight = options.ResolveBarHeight(xDimension, widthInModules * NominalBarHeightFraction);
+        float barHeight = options.ResolveBarHeight(xDimension, 0, widthInModules * NominalBarHeightFraction, float.PositiveInfinity);
         heights.Fill(barHeight);
 
         if (options.Font is not null)

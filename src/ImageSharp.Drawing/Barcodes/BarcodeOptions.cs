@@ -50,7 +50,8 @@ public sealed class BarcodeOptions
     /// <para>
     /// A symbol draws at the X dimension of the nearest whole number of pixels at <see cref="Dpi"/>, at least one pixel, so every module of the symbol is
     /// the same number of pixels wide. The symbol can then be slightly larger or smaller than this X dimension gives. Where the specification of the symbology
-    /// gives a smallest and a largest X dimension, the number of pixels is clamped to that range, so a value outside the range draws at the nearest limit. At
+    /// gives a smallest and a largest X dimension, the number of pixels is clamped to that range, so a value outside the range draws at the nearest limit. The
+    /// specification sets the range to make sure that a scanner can read the symbol. Thus each symbol stays inside its specification for all values. At
     /// a resolution where no whole number of pixels is inside the range, the symbol draws at the smallest whole number of pixels over the smallest X
     /// dimension. <see cref="MaxiCodeSymbology"/>, whose hexagonal modules do not stand on whole pixels, and <see cref="SwissQrCodeSymbology"/>, whose width
     /// the specification fixes, draw at the exact X dimension.
@@ -73,6 +74,11 @@ public sealed class BarcodeOptions
 
     /// <summary>
     /// Gets or sets the bar height in millimetres. Set <see langword="null"/> to take the nominal height that the symbology specification gives.
+    /// <para>
+    /// Some specifications give a minimum bar height, a maximum bar height, or both. A value outside that range draws at the nearest limit. The specification
+    /// sets the range to make sure that a scanner can read the symbol. Thus each symbol stays inside its specification for all values. The X dimension uses
+    /// the same rule.
+    /// </para>
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">The value is not greater than zero.</exception>
     public double? BarHeight
@@ -189,20 +195,15 @@ public sealed class BarcodeOptions
 
     /// <summary>
     /// Resolves the bar height in modules: <see cref="BarHeight"/> divided by the X dimension, both in millimetres, or the nominal height of the symbology when
-    /// no bar height is set.
+    /// no bar height is set, clamped to the range of heights that the specification of the symbology gives. A bar height outside the range draws at the
+    /// nearest limit, as an X dimension outside its range does.
     /// </summary>
     /// <param name="xDimension">The X dimension of the symbol in millimetres, <see cref="BarcodeSymbol.XDimension"/>.</param>
+    /// <param name="minimumHeight">The smallest height that the specification permits in modules, or zero where it gives none.</param>
     /// <param name="nominalHeight">The nominal height of the symbology in modules.</param>
+    /// <param name="maximumHeight">The largest height that the specification permits in modules, or <see cref="float.PositiveInfinity"/> where it gives
+    /// none.</param>
     /// <returns>The bar height in modules.</returns>
-    internal float ResolveBarHeight(double xDimension, float nominalHeight)
-        => this.BarHeight.HasValue ? (float)(this.BarHeight.Value / xDimension) : nominalHeight;
-
-    /// <summary>
-    /// Returns whether <see cref="BarHeight"/> is set and under a minimum height that the standard of a symbology requires. The symbology rejects such a bar
-    /// height. The tolerance keeps a bar height that equals the minimum against the error of the conversion of the minimum to millimetres.
-    /// </summary>
-    /// <param name="millimetres">The minimum height in millimetres.</param>
-    /// <returns><see langword="true"/> when the bar height is under the minimum.</returns>
-    internal bool IsBarHeightUnder(double millimetres)
-        => this.BarHeight < millimetres - 1E-9;
+    internal float ResolveBarHeight(double xDimension, float minimumHeight, float nominalHeight, float maximumHeight)
+        => Math.Clamp(this.BarHeight.HasValue ? (float)(this.BarHeight.Value / xDimension) : nominalHeight, minimumHeight, maximumHeight);
 }

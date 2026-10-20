@@ -50,7 +50,7 @@ internal static class Code39Encoder
     /// symbol character and its gap take the sixteen modules at the top of the range section 4.1 h) gives. An application standard that names a nominal ratio
     /// inside that range builds the symbol with a <see cref="Code39Layout"/>.
     /// </summary>
-    private const int WideElement = 3;
+    public const int WideElement = 3;
 
     /// <summary>
     /// The bar height as a fraction of the symbol width, quiet zones excluded, when the caller sets no height. Section 4.4 e) recommends a minimum of "5,0 mm
@@ -142,9 +142,19 @@ internal static class Code39Encoder
         double xDimension,
         ref BarcodeSymbol symbol)
     {
+        // Section 4.4 e) gives a "Recommended minimum bar code height" and no limit, so it sets the nominal bar height and does not clamp the bar height.
         int widthInModules = SymbolWidth(CharacterCount(data.Length, check));
-        float nominalBarHeight = ProportionalBarHeight(widthInModules, xDimension);
-        BuildSymbol(data, check, readablePrefix, readableBody, readableSuffix, options, xDimension, nominalBarHeight, ref symbol);
+        Code39Layout layout = new()
+        {
+            XDimension = xDimension,
+            NominalBarHeight = ProportionalBarHeight(widthInModules, xDimension),
+            MinimumBarHeight = 0F,
+            MaximumBarHeight = float.PositiveInfinity,
+            NarrowElement = 1,
+            WideElement = WideElement,
+        };
+
+        BuildSymbol(data, check, readablePrefix, readableBody, readableSuffix, in layout, options, ref symbol);
     }
 
     /// <summary>
@@ -158,45 +168,11 @@ internal static class Code39Encoder
         => MathF.Max(widthInModules * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
 
     /// <summary>
-    /// Builds the symbol at a bar height an application standard fixes rather than the proportional recommendation of section 4.4 e). The runs carry the start
-    /// character, the data, an optional check character and the stop character, each followed by its inter-character gap. Section 4.2 separates the characters
-    /// "within the symbol" with that gap, and section 4.3.3 puts the stop character at the right end, so no gap follows it and the runs end on a bar. Annex
-    /// A.1.1 places the check character "immediately following the final data character and before the stop character".
-    /// </summary>
-    /// <param name="data">The data to encode, already validated against the character set.</param>
-    /// <param name="check">The check character to carry after the data, or <see langword="null"/>.</param>
-    /// <param name="readablePrefix">The characters of the human readable interpretation before its body.</param>
-    /// <param name="readableBody">The body of the human readable interpretation.</param>
-    /// <param name="readableSuffix">The characters of the human readable interpretation after its body.</param>
-    /// <param name="options">The options that control layout choices.</param>
-    /// <param name="xDimension">The X dimension in millimetres, <see cref="BarcodeSymbol.XDimension"/>.</param>
-    /// <param name="nominalBarHeight">The bar height in modules a symbol takes when the caller sets none.</param>
-    /// <param name="symbol">The symbol to write.</param>
-    public static void BuildSymbol(
-        ReadOnlySpan<char> data,
-        char? check,
-        ReadOnlySpan<char> readablePrefix,
-        ReadOnlySpan<char> readableBody,
-        ReadOnlySpan<char> readableSuffix,
-        BarcodeOptions options,
-        double xDimension,
-        float nominalBarHeight,
-        ref BarcodeSymbol symbol)
-    {
-        Code39Layout layout = new()
-        {
-            XDimension = xDimension,
-            NominalBarHeight = nominalBarHeight,
-            NarrowElement = 1,
-            WideElement = WideElement,
-        };
-
-        BuildSymbol(data, check, readablePrefix, readableBody, readableSuffix, in layout, options, ref symbol);
-    }
-
-    /// <summary>
     /// Builds the symbol at the dimensions of an application standard, which can name a wide to narrow ratio that is not a whole number. The runs count run
-    /// units of a module divided by the narrow width.
+    /// units of a module divided by the narrow width. The runs carry the start character, the data, an optional check character and the stop character, each
+    /// followed by its inter-character gap. Section 4.2 separates the characters "within the symbol" with that gap, and section 4.3.3 puts the stop character
+    /// at the right end, so no gap follows it and the runs end on a bar. Annex A.1.1 places the check character "immediately following the final data
+    /// character and before the stop character".
     /// </summary>
     /// <param name="data">The data to encode, already validated against the character set.</param>
     /// <param name="check">The check character to carry after the data, or <see langword="null"/>.</param>
@@ -238,7 +214,7 @@ internal static class Code39Encoder
         // Every character has three wide and six narrow elements and a narrow gap, and the stop character carries no gap.
         float runUnit = 1F / narrow;
         float widthInModules = ((characters * ((3 * wide) + (7 * narrow))) - narrow) * runUnit;
-        float barHeight = options.ResolveBarHeight(layout.XDimension, layout.NominalBarHeight);
+        float barHeight = options.ResolveBarHeight(layout.XDimension, layout.MinimumBarHeight, layout.NominalBarHeight, layout.MaximumBarHeight);
         heights.Fill(barHeight);
 
         if (options.Font is not null)

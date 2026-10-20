@@ -130,22 +130,18 @@ public sealed class Itf14Symbology : BarcodeSymbology
         }
 
         double xDimension = options.ResolveXDimension(Gs1Data.Itf14MinimumXDimension, XDimension, Gs1Data.Itf14MaximumXDimension);
-        if (options.IsBarHeightUnder(Gs1Data.MinimumTruncatedBarHeight))
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(options),
-                options.BarHeight,
-                $"An ITF-14 symbol has bars at least {Gs1Data.MinimumTruncatedBarHeight} mm high; the bar height is {options.BarHeight:0.##} mm.");
-        }
 
         // The runs count pixels, so every element draws at a whole number of pixels. A wide element is WideElement / NarrowElement modules, rounded half up
         // to a whole pixel: at an odd number of pixels a module the ratio of 2.5 becomes 3.0 at one pixel and 2.67 at three, and every wide element takes the
-        // same width.
+        // same width. The notes of Tables 5-47 and 5-51 of the GS1 General Specifications: "There is no maximum for the height". The notes of Tables
+        // 5-50 and 5-51: "In no case SHALL the bar height be less than 5.08 millimetres".
         int pixels = options.ModulePixels(xDimension);
         Interleaved2Of5Layout layout = new()
         {
             XDimension = xDimension,
             NominalBarHeight = (float)(NominalBarHeight / xDimension),
+            MinimumBarHeight = (float)(Gs1Data.MinimumTruncatedBarHeight / xDimension),
+            MaximumBarHeight = float.PositiveInfinity,
             QuietZone = Interleaved2Of5Encoder.QuietZone,
             BearerBarThickness = (float)(BearerBarThickness / xDimension),
             TextClearance = MathF.Max(BarcodeTextPlacement.Clearance, (float)(TextClearance / xDimension)),

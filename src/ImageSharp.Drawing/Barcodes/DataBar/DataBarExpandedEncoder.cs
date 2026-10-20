@@ -24,7 +24,9 @@ internal static class DataBarExpandedEncoder
 
     /// <summary>
     /// The height of a row in modules. Section 5.5.2.3.1 of the GS1 General Specifications gives "34X high", and Table 5-44 gives 11.23 millimetres, 34X, at
-    /// the target X dimension.
+    /// the target X dimension. It is also the minimum. Table 5-56 gives GS1 DataBar Expanded 8.98 millimetres, 34X, at the X dimension of 0.264 millimetre. It
+    /// gives GS1 DataBar Expanded Stacked 18.74 millimetres, 71X, for two rows of 34X and the 3X separator. Its note (*): "the symbol height SHALL NOT be
+    /// truncated below the minimum".
     /// </summary>
     public const float RowHeight = 34F;
 
@@ -271,7 +273,6 @@ internal static class DataBarExpandedEncoder
     /// <param name="options">The options that control the bar height and the text.</param>
     /// <param name="symbol">The symbol to write.</param>
     /// <exception cref="ArgumentException">The data carries a character the symbology cannot encode, or more data than 21 data characters hold.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">The bar height is under the minimum row height.</exception>
     public static void BuildLinear(ReadOnlySpan<char> text, ReadOnlySpan<char> caption, bool linked, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         InlineArray256<int> characterStorage = default;
@@ -283,7 +284,6 @@ internal static class DataBarExpandedEncoder
         // or a space, so a zero width bar closes the runs when it ends on a space. The zero width bars are the zeros the symbol storage starts with.
         int elements = 3 + (symbolCharacters * 8) + (finders.Length * 5) + 2;
         double xDimension = options.ResolveXDimension(DataBarEncoder.MinimumXDimension, NominalXDimension, DataBarEncoder.MaximumXDimension);
-        ValidateRowHeight(options, xDimension);
         Span<int> runs = symbol.BeginLinear(elements + ((elements & 1) == 0 ? 1 : 0), xDimension, out Span<float> heights, out _);
         runs[1] = 1;
         runs[2] = 1;
@@ -304,7 +304,8 @@ internal static class DataBarExpandedEncoder
         runs[position] = 1;
         runs[position + 1] = 1;
 
-        float barHeight = options.ResolveBarHeight(xDimension, RowHeight);
+        // Section 5.5.2.3.1 gives a minimum height and no maximum.
+        float barHeight = options.ResolveBarHeight(xDimension, RowHeight, RowHeight, float.PositiveInfinity);
         heights.Fill(barHeight);
 
         if (options.Font is not null)
@@ -334,10 +335,11 @@ internal static class DataBarExpandedEncoder
     /// <param name="side">The side of the symbol the human readable interpretation prints on.</param>
     /// <param name="minimumXDimension">The smallest X dimension the application standard permits, in millimetres.</param>
     /// <param name="maximumXDimension">The largest X dimension the application standard permits, in millimetres.</param>
+    /// <param name="maximumRowHeight">The largest row height the application standard permits, in modules, or <see cref="float.PositiveInfinity"/> where it
+    /// gives none. The smallest row height is <see cref="RowHeight"/>.</param>
     /// <param name="options">The options that control the bar height and the text.</param>
     /// <param name="symbol">The symbol to write.</param>
     /// <exception cref="ArgumentException">The data carries a character the symbology cannot encode, or more data than 21 data characters hold.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">The bar height is under the minimum row height.</exception>
     public static void BuildStacked(
         ReadOnlySpan<char> text,
         int segments,
@@ -348,6 +350,7 @@ internal static class DataBarExpandedEncoder
         BarcodeTextSide side,
         double minimumXDimension,
         double maximumXDimension,
+        float maximumRowHeight,
         BarcodeOptions options,
         ref BarcodeSymbol symbol)
     {
@@ -355,8 +358,7 @@ internal static class DataBarExpandedEncoder
         Span<int> characters = ((Span<int>)characterStorage)[..(MaximumSymbolCharacters * 8)];
         int symbolCharacters = EncodeCharacters(text, segments, linked, characters);
         double xDimension = options.ResolveXDimension(minimumXDimension, NominalXDimension, maximumXDimension);
-        ValidateRowHeight(options, xDimension);
-        float rowHeight = options.ResolveBarHeight(xDimension, RowHeight);
+        float rowHeight = options.ResolveBarHeight(xDimension, RowHeight, RowHeight, maximumRowHeight);
 
         // The buffer holds a row, the separator row that is its inverse, and the middle separator row, each one module wider than the widest row, since a
         // partial last row can move one module right. It is rented once, outside the row loops.
@@ -498,26 +500,6 @@ internal static class DataBarExpandedEncoder
                 widths[k * 2] = odd[k];
                 widths[(k * 2) + 1] = even[k];
             }
-        }
-    }
-
-    /// <summary>
-    /// Rejects a bar height under the minimum row height. Table 5-56 of the GS1 General Specifications gives GS1 DataBar Expanded a minimum symbol height of
-    /// 8.98 millimetres, 34X, at the X dimension of 0.264 millimetre, and GS1 DataBar Expanded Stacked 18.74 millimetres, 71X, for two rows: two rows of 34X
-    /// and the 3X separator. Its note (*): "the symbol height SHALL NOT be truncated below the minimum". The bar height sets every row.
-    /// </summary>
-    /// <param name="options">The options that carry the bar height.</param>
-    /// <param name="xDimension">The X dimension of the symbol in millimetres.</param>
-    /// <exception cref="ArgumentOutOfRangeException">The bar height is under the minimum row height.</exception>
-    private static void ValidateRowHeight(BarcodeOptions options, double xDimension)
-    {
-        if (options.IsBarHeightUnder(RowHeight * xDimension))
-        {
-            double minimum = RowHeight * xDimension;
-            throw new ArgumentOutOfRangeException(
-                nameof(options),
-                options.BarHeight,
-                $"A row is at least {RowHeight}X high, {minimum:0.##} mm at its X dimension; the bar height is {options.BarHeight:0.##} mm.");
         }
     }
 

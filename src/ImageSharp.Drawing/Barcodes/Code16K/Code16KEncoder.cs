@@ -493,7 +493,9 @@ internal static class Code16KEncoder
     {
         int rowCount = values.Length / CharactersPerRow;
         double xDimension = options.ResolveXDimension(BarcodeSymbology.DefaultXDimension);
-        float barHeight = options.ResolveBarHeight(xDimension, NominalBarHeight);
+
+        // Section 3.3 recommends "a minimum bar height of 8X" and sets no limit, so the bar height is not clamped.
+        float barHeight = options.ResolveBarHeight(xDimension, 0, NominalBarHeight, float.PositiveInfinity);
 
         // Section 2.1: start, guard bar, five characters and stop, 4 + 1 + 30 + 4 elements, on a bar at both ends. A separator between two rows is one bar
         // across the row width.

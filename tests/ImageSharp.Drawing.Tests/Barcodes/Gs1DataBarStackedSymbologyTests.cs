@@ -64,18 +64,15 @@ public class Gs1DataBarStackedSymbologyTests
     /// <summary>
     /// Table 5-56 of the GS1 General Specifications gives a minimum symbol height of 4.29 millimetres, 13X, at the target X dimension of 0.330 millimetre, and
     /// "the symbol height SHALL NOT be truncated below the minimum". The bar height sets the lower row, and the rows keep their ratio of seven to five, so the
-    /// lower row of a 13X symbol is 7X, 2.31 mm. A bar height of 2.31 mm encodes, and 2.30 mm throws.
+    /// lower row of a 13X symbol is 7X, 2.31 mm. A bar height of 2.30 mm draws a symbol of 13X.
     /// </summary>
     [Fact]
-    public void Gs1DataBarStacked_RejectsABarHeightUnderTheMinimum()
+    public void Gs1DataBarStacked_DrawsABarHeightUnderTheMinimumAtTheMinimum()
     {
-        Assert.Null(Record.Exception(() => Encode(2.31)));
-        Assert.Throws<ArgumentOutOfRangeException>(() => Encode(2.30));
+        BarcodeOptions under = new() { Dpi = SymbolEncoder.MicrometreDpi, XDimension = 0.330, BarHeight = 2.30 };
 
-        static void Encode(double barHeight)
-            => SymbolEncoder.Encode(
-                new Gs1DataBarStackedSymbology(),
-                "(01)09521234543213",
-                new BarcodeOptions { Dpi = SymbolEncoder.MicrometreDpi, XDimension = 0.330, BarHeight = barHeight });
+        float height = SymbolEncoder.Read(new Gs1DataBarStackedSymbology(), "(01)09521234543213", under, static (ref symbol) => symbol.HeightInModules);
+
+        Assert.Equal(13F, height);
     }
 }

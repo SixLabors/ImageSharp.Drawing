@@ -218,7 +218,7 @@ internal static class MicroPdf417Encoder
         }
 
         double xDimension = options.ResolveXDimension(BarcodeSymbology.DefaultXDimension);
-        float rowHeight = options.ResolveBarHeight(xDimension, NominalRowHeight);
+        float rowHeight = options.ResolveBarHeight(xDimension, 0, NominalRowHeight, float.PositiveInfinity);
         BuildMatrix(data, new SymbolSize(sizes.Slice(offset, SymbolSize.Length)), xDimension, rowHeight, QuietZone, ref symbol);
     }
 

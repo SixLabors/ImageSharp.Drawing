@@ -212,6 +212,18 @@ internal readonly struct FourStateMetrics
     public double MaximumBarsPerInch { get; init; } = double.PositiveInfinity;
 
     /// <summary>
+    /// Gets the smallest full bar in modules that the specification permits, or zero where it gives none. All bar parts scale with the full bar, so this is
+    /// the smallest full bar that keeps every part at or over its own minimum.
+    /// </summary>
+    public float MinimumFullBar { get; init; }
+
+    /// <summary>
+    /// Gets the largest full bar in modules that the specification permits, or <see cref="float.PositiveInfinity"/> where it gives none. All bar parts scale
+    /// with the full bar, so this is the largest full bar that keeps every part at or under its own maximum.
+    /// </summary>
+    public float MaximumFullBar { get; init; } = float.PositiveInfinity;
+
+    /// <summary>
     /// Gets the width of one run unit in modules.
     /// </summary>
     public float RunUnit { get; }

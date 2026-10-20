@@ -144,7 +144,7 @@ internal static class TelepenEncoder
         int widthInModules = BarcodeSymbol.RunWidth(runs);
 
         float nominalBarHeight = MathF.Max((widthInModules + (2 * QuietZone)) * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
-        float barHeight = options.ResolveBarHeight(xDimension, nominalBarHeight);
+        float barHeight = options.ResolveBarHeight(xDimension, 0, nominalBarHeight, float.PositiveInfinity);
         heights[..((runs.Length + 1) >> 1)].Fill(barHeight);
 
         if (options.Font is not null && readable.Length > 0)

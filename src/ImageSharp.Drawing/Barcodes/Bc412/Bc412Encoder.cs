@@ -83,6 +83,16 @@ internal static class Bc412Encoder
     private const double NominalBarHeight = 2.000;
 
     /// <summary>
+    /// The smallest bar height in millimetres, from the tolerance of the same entry of Table 1, "2.000 mm ± 0.025 mm".
+    /// </summary>
+    private const double MinimumBarHeight = 2.000 - 0.025;
+
+    /// <summary>
+    /// The largest bar height in millimetres, from the same tolerance.
+    /// </summary>
+    private const double MaximumBarHeight = 2.000 + 0.025;
+
+    /// <summary>
     /// Gets the run widths of every character, eight per character in bar and space order, in the order of <see cref="Characters"/>. Every bar is one module,
     /// and the widths add to twelve.
     /// </summary>
@@ -176,7 +186,12 @@ internal static class Bc412Encoder
 
         int widthInModules = BarcodeSymbol.RunWidth(runs);
 
-        float barHeight = options.ResolveBarHeight(xDimension, (float)(NominalBarHeight / xDimension));
+        float barHeight = options.ResolveBarHeight(
+            xDimension,
+            (float)(MinimumBarHeight / xDimension),
+            (float)(NominalBarHeight / xDimension),
+            (float)(MaximumBarHeight / xDimension));
+
         heights.Fill(barHeight);
 
         if (options.Font is not null)

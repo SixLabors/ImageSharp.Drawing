@@ -141,6 +141,8 @@ public sealed class Code32Symbology : BarcodeSymbology
         {
             XDimension = xDimension,
             NominalBarHeight = Code39Encoder.ProportionalBarHeight(WidthInModules, xDimension),
+            MinimumBarHeight = 0F,
+            MaximumBarHeight = float.PositiveInfinity,
             NarrowElement = pixels,
             WideElement = ((WideElement * pixels) + (NarrowElement / 2)) / NarrowElement,
         };

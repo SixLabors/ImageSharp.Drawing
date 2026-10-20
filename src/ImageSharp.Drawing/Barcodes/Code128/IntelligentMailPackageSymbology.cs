@@ -21,7 +21,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// banner and below the PIC. The structure "shall include" all three, so the symbol needs a font. Section 2.4.1 and section 2.4.2 call for a "boldface*, sans
 /// serif font". The caller supplies a sans serif font, and the text renders bold, with a synthetic weight when the font has no bold face. Section 2.2.2 limits
 /// the X dimension to 0.013 to 0.021 inch, and section 2.2.4 requires a bar height of at least 0.75 inch. An X dimension outside that range is clamped to
-/// it, and a bar height under that minimum is rejected.
+/// it, and a bar height under that minimum draws at 0.75 inch.
 /// </para>
 /// </summary>
 public sealed class IntelligentMailPackageSymbology : BarcodeSymbology
@@ -180,14 +180,6 @@ public sealed class IntelligentMailPackageSymbology : BarcodeSymbology
 
         double xDimension = options.ResolveXDimension(MinimumXDimension, NominalXDimension, MaximumXDimension);
 
-        // Section 2.2.4: "The overall minimum height of the barcode shall measure at least 0.75 inch".
-        if (options.IsBarHeightUnder(BarHeight))
-        {
-            throw new ArgumentException(
-                $"The Intelligent Mail package barcode is at least 0.75 inch high; the bar height is {options.BarHeight / 25.4:0.###} inch.",
-                nameof(options));
-        }
-
         InlineArray64<char> encodedStorage = default;
         ValueStringBuilder encoded = new(encodedStorage);
         try
@@ -265,11 +257,13 @@ public sealed class IntelligentMailPackageSymbology : BarcodeSymbology
             readableLength += data.Length - start;
 
             // Section 4.10.1 of Publication 199: "A minimum left/right clear zone of 0.25 inch is recommended", over the "10 times the X dimension" it
-            // requires.
+            // requires. Section 2.2.4 gives the bar height a minimum and no maximum.
             Code128Layout layout = new()
             {
                 XDimension = xDimension,
                 NominalBarHeight = (float)(BarHeight / xDimension),
+                MinimumBarHeight = (float)(BarHeight / xDimension),
+                MaximumBarHeight = float.PositiveInfinity,
                 TextClearance = (float)(TextClearance / xDimension),
                 AboveClearance = (float)(BannerClearance / xDimension),
                 HorizontalQuietZone = MathF.Max(Code128Encoder.QuietZone, (float)(HorizontalClearZone / xDimension)),

@@ -38,13 +38,19 @@ public class Itf14SymbologyTests
 
     /// <summary>
     /// The note of Table 5-50 of the GS1 General Specifications lets a small package truncate the bars of an ITF-14 symbol, but "In no case SHALL the bar
-    /// height be less than 5.08 millimetres". A bar height of 5.08 mm encodes, and 5.07 mm throws.
+    /// height be less than 5.08 millimetres". A bar height of 5.07 mm draws at 5.08 mm.
     /// </summary>
     [Fact]
-    public void RejectsABarHeightUnderTheTruncationMinimum()
+    public void DrawsABarHeightUnderTheTruncationMinimumAtTheMinimum()
     {
-        Assert.Null(Record.Exception(() => SymbolEncoder.Encode(new Itf14Symbology(), "15400141288763", new BarcodeOptions { BarHeight = 5.08 })));
-        Assert.Throws<ArgumentOutOfRangeException>(() => SymbolEncoder.Encode(new Itf14Symbology(), "15400141288763", new BarcodeOptions { BarHeight = 5.07 }));
+        Assert.Equal(Height(5.08), Height(5.07));
+
+        static float Height(double barHeight)
+            => SymbolEncoder.Read(
+                new Itf14Symbology(),
+                "15400141288763",
+                new BarcodeOptions { BarHeight = barHeight },
+                static (ref symbol) => symbol.HeightInModules);
     }
 
     /// <summary>

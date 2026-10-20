@@ -70,7 +70,10 @@ internal static class AddOnLayout
 
         double xDimension = options.ResolveXDimension(EanUpcEncoder.MinimumXDimension, EanUpcEncoder.NominalXDimension, EanUpcEncoder.MaximumXDimension);
         EanUpcEncoder.BeginRuns(modules[..position], corrections[..position], xDimension, ref symbol, out Span<float> heights);
-        float barHeight = options.ResolveBarHeight(symbol.XDimension, EanUpcEncoder.NominalAddOnBarHeight);
+
+        // Section 5.2.3.2 of the GS1 General Specifications: the add-on "must not extend outside the symbol height dimensions of the main symbol". The main
+        // symbol resolves the same bar height with a minimum and no maximum, so an add-on without limits is never taller than it.
+        float barHeight = options.ResolveBarHeight(symbol.XDimension, 0, EanUpcEncoder.NominalAddOnBarHeight, float.PositiveInfinity);
         heights.Fill(barHeight);
 
         // Section 5.2.5 of the GS1 General Specifications prints the add-on interpretation above the bars. Each digit prints above its own symbol character;

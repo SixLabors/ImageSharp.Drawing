@@ -239,7 +239,7 @@ internal static class CodablockFEncoder
             int rowCount = values.Length / rowSize;
             int width = RowWidth(columns);
             double xDimension = options.ResolveXDimension(BarcodeSymbology.DefaultXDimension);
-            float barHeight = options.ResolveBarHeight(xDimension, NominalRowHeight(columns));
+            float barHeight = options.ResolveBarHeight(xDimension, 0, NominalRowHeight(columns), float.PositiveInfinity);
 
             // The rows from the top: a solid edge bar, each data row with a separator below it but the last, and a solid edge bar. A separator keeps the start
             // and stop patterns, thirteen runs and seven bars, and an edge bar is one bar across the row width.

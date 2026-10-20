@@ -45,6 +45,16 @@ public sealed class FlattermarkenSymbology : BarcodeSymbology
     /// </summary>
     private const double NominalBarHeight = 10;
 
+    /// <summary>
+    /// The smallest bar height in millimetres, from the "Symbol height between 5 and 10mm" of section 6.1.34 of the TEC-IT Barcode Reference.
+    /// </summary>
+    private const double MinimumBarHeight = 5;
+
+    /// <summary>
+    /// The largest bar height in millimetres, from the same symbol height.
+    /// </summary>
+    private const double MaximumBarHeight = 10;
+
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
@@ -94,7 +104,12 @@ public sealed class FlattermarkenSymbology : BarcodeSymbology
         }
 
         symbol.TrimLastRow(written);
-        float barHeight = options.ResolveBarHeight(xDimension, (float)(NominalBarHeight / xDimension));
+        float barHeight = options.ResolveBarHeight(
+            xDimension,
+            (float)(MinimumBarHeight / xDimension),
+            (float)(NominalBarHeight / xDimension),
+            (float)(MaximumBarHeight / xDimension));
+
         heights[..((written + 1) >> 1)].Fill(barHeight);
 
         if (options.Font is not null)

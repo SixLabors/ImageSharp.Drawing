@@ -27,18 +27,21 @@ public class Gs1DataBarStackedOmnidirectionalSymbologyTests
         });
 
     /// <summary>
-    /// Section 5.5.2.1.4: "69X is the minimum height of the symbol", two rows of 33X, so the encoder rejects a bar height under 33X. At the nominal 0.33 mm
+    /// Section 5.5.2.1.4: "69X is the minimum height of the symbol", two rows of 33X, so a bar height under 33X draws each row at 33X. At the nominal 0.33 mm
     /// module 33X is 10.89 mm.
     /// </summary>
     [Fact]
-    public void Gs1DataBarStackedOmnidirectional_RejectsARowUnderThirtyThreeModules()
+    public void Gs1DataBarStackedOmnidirectional_DrawsARowUnderThirtyThreeModulesAtThirtyThreeModules()
     {
-        Gs1DataBarStackedOmnidirectionalSymbology symbology = new();
-        BarcodeOptions minimum = new() { Dpi = SymbolEncoder.MillimetreDpi, BarHeight = 10.89 };
         BarcodeOptions under = new() { Dpi = SymbolEncoder.MillimetreDpi, BarHeight = 10.88 };
 
-        Assert.Null(Record.Exception(() => SymbolEncoder.Encode(symbology, "(01)00034567890125", minimum)));
-        Assert.Throws<ArgumentOutOfRangeException>(() => SymbolEncoder.Encode(symbology, "(01)00034567890125", under));
+        float height = SymbolEncoder.Read(
+            new Gs1DataBarStackedOmnidirectionalSymbology(),
+            "(01)00034567890125",
+            under,
+            static (ref symbol) => symbol.HeightInModules);
+
+        Assert.Equal(69F, height);
     }
 
     /// <summary>

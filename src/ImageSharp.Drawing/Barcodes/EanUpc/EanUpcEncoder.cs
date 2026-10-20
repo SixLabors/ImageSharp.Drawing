@@ -48,6 +48,18 @@ internal static class EanUpcEncoder
     public const float NominalEan8BarHeight = 55.24F;
 
     /// <summary>
+    /// The smallest EAN-13, UPC-A and UPC-E bar height in millimetres: 18.28mm, the smallest "Minimum symbol height" of the symbol specification tables of
+    /// section 5.12.3 of the GS1 General Specifications. The notes of Table 5-44: "the bar height SHALL NOT be truncated below the minimum as listed in the
+    /// table above", and "There is no maximum for the height".
+    /// </summary>
+    public const double MinimumBarHeight = 18.28;
+
+    /// <summary>
+    /// The smallest EAN-8 bar height in millimetres: 14.58mm, the smallest "Minimum symbol height" of the same tables, with the same notes.
+    /// </summary>
+    public const double MinimumEan8BarHeight = 14.58;
+
+    /// <summary>
     /// The nominal add-on bar height in modules: Figures 5-27 and 5-28 of the GS1 General Specifications give 21.90mm at the nominal 0.33mm X-dimension.
     /// </summary>
     public const float NominalAddOnBarHeight = 66.36F;
@@ -425,7 +437,12 @@ internal static class EanUpcEncoder
             ref symbol,
             out Span<float> heights);
 
-        float barHeight = options.ResolveBarHeight(symbol.XDimension, NominalEan8BarHeight);
+        float barHeight = options.ResolveBarHeight(
+            symbol.XDimension,
+            (float)(MinimumEan8BarHeight / symbol.XDimension),
+            NominalEan8BarHeight,
+            float.PositiveInfinity);
+
         FillGuardedHeights(heights, barHeight, Ean8GuardBars);
 
         // The nominal symbol drawings of section 5.2.6.6 of the GS1 General Specifications print every digit below its own symbol character. Section 5.2.5:
@@ -524,7 +541,7 @@ internal static class EanUpcEncoder
             ref symbol,
             out Span<float> heights);
 
-        float barHeight = options.ResolveBarHeight(symbol.XDimension, NominalBarHeight);
+        float barHeight = options.ResolveBarHeight(symbol.XDimension, (float)(MinimumBarHeight / symbol.XDimension), NominalBarHeight, float.PositiveInfinity);
         FillGuardedHeights(heights, barHeight, Ean13GuardBars);
 
         // Section 5.2.5 of the GS1 General Specifications: "the leftmost digit, which is encoded by variable parity, is printed to the left of the start guard

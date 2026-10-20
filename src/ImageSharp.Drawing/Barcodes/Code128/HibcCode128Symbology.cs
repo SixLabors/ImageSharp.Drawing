@@ -53,11 +53,14 @@ public sealed class HibcCode128Symbology : BarcodeSymbology
             Span<char> readable = readableCapacity <= HibcData.InlineBufferLength ? ((Span<char>)readableStorage)[..readableCapacity] : rented.Span;
             int written = HibcData.WriteReadable(data, readable);
 
-            // Section 5.1 of ANSI/HIBC 2.6 gives a bar height of at least 15% of the symbol length.
+            // Section 5.1 of ANSI/HIBC 2.6: "The height of the bars should be at least 15% of the symbol length." That is a recommendation, so it sets the
+            // nominal bar height and does not clamp the bar height.
             Code128Layout layout = new()
             {
                 XDimension = options.ResolveXDimension(HibcData.MinimumLinearXDimension, DefaultXDimension, double.PositiveInfinity),
                 MinimumHeightFraction = HibcData.MinimumBarHeightFraction,
+                MinimumBarHeight = 0F,
+                MaximumBarHeight = float.PositiveInfinity,
                 TextClearance = BarcodeTextPlacement.Clearance,
                 HorizontalQuietZone = Code128Encoder.QuietZone,
             };

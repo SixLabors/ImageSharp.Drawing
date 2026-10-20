@@ -34,19 +34,22 @@ public class IntelligentMailPackageSymbologyTests
     }
 
     /// <summary>
-    /// Section 2.2.4 of USPS2000508: "The overall minimum height of the barcode shall measure at least 0.75 inch". A bar height of 0.75 inch encodes, and a
-    /// bar height under 0.75 inch throws.
+    /// Section 2.2.4 of USPS2000508: "The overall minimum height of the barcode shall measure at least 0.75 inch". A bar height under 0.75 inch draws at
+    /// 0.75 inch.
     /// </summary>
     [Fact]
-    public void RejectsABarHeightUnderThreeQuartersOfAnInch()
+    public void DrawsABarHeightUnderThreeQuartersOfAnInchAtThreeQuarters()
     {
-        IntelligentMailPackageSymbology symbology = new("USPS TRACKING #");
         Font font = BarcodeFonts.OcrB.CreateFont(12F);
-        BarcodeOptions minimum = new() { Dpi = SymbolEncoder.InchDpi, Font = font, BarHeight = 0.75 * 25.4 };
-        BarcodeOptions under = new() { Dpi = SymbolEncoder.InchDpi, Font = font, BarHeight = 0.749 * 25.4 };
 
-        Assert.Null(Record.Exception(() => SymbolEncoder.Encode(symbology, "(92)12391234567812345670", minimum)));
-        Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(symbology, "(92)12391234567812345670", under));
+        Assert.Equal(BarHeight(0.75 * 25.4), BarHeight(0.749 * 25.4));
+
+        float BarHeight(double barHeight)
+            => SymbolEncoder.Read(
+                new IntelligentMailPackageSymbology("USPS TRACKING #"),
+                "(92)12391234567812345670",
+                new BarcodeOptions { Dpi = SymbolEncoder.InchDpi, Font = font, BarHeight = barHeight },
+                static (ref symbol) => symbol.BarHeights[0]);
     }
 
     /// <summary>

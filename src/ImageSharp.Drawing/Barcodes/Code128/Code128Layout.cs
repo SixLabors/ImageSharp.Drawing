@@ -25,6 +25,17 @@ internal readonly struct Code128Layout
     public float MinimumHeightFraction { get; init; }
 
     /// <summary>
+    /// Gets the smallest bar height in modules that the application standard permits, or zero where it gives none. The bar height is clamped to it.
+    /// </summary>
+    public float MinimumBarHeight { get; init; }
+
+    /// <summary>
+    /// Gets the largest bar height in modules that the application standard permits, or <see cref="float.PositiveInfinity"/> where it gives none. The bar
+    /// height is clamped to it.
+    /// </summary>
+    public float MaximumBarHeight { get; init; }
+
+    /// <summary>
     /// Gets the space between the bars and the human readable interpretation in modules.
     /// </summary>
     public float TextClearance { get; init; }

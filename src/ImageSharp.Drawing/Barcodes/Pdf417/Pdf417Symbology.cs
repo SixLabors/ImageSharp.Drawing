@@ -6,7 +6,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// <summary>
 /// The PDF417 symbology, ISO/IEC 15438. A symbol is 3 to 90 rows of 1 to 30 data columns, each row between a start character, a left and a right row indicator
 /// and a stop character. It carries the characters U+0000 to U+00FF with 2 to 512 error correction codewords. The bar height of the options sets each row, and
-/// section 5.8.2 requires "Y &gt;= 3X", so a bar height under 3X is rejected.
+/// section 5.8.2 requires "Y &gt;= 3X", so a bar height under 3X draws at 3X.
 /// </summary>
 public sealed class Pdf417Symbology : BarcodeSymbology
 {

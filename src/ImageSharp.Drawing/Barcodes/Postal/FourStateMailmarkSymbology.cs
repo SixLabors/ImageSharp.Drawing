@@ -14,7 +14,9 @@ public sealed class FourStateMailmarkSymbology : BarcodeSymbology
 {
     /// <summary>
     /// The dimensions of Table 11, with the bar width clamped to the acceptable sizes of the same table, "Bar width (all) 0.54 0.38 - 0.63", and the bars per
-    /// inch to "Bar pitch ... 20 - 24 bars per inch (25.4mm)".
+    /// inch to "Bar pitch ... 20 - 24 bars per inch (25.4mm)". The bar heights scale together, and the ascender and descender bars of "1.60 - 2.16" mm have
+    /// the narrowest range relative to their recommended 1.90 mm. So the full bar is clamped to 5.10 mm scaled by 1.60 / 1.90 and by 2.16 / 1.90. The
+    /// tracker bar and the full bar then stay inside their own acceptable sizes.
     /// </summary>
     private static readonly FourStateMetrics Metrics = FourStateEncoder.RoyalMail with
     {
@@ -22,6 +24,8 @@ public sealed class FourStateMailmarkSymbology : BarcodeSymbology
         MaximumXDimension = 0.63,
         MinimumBarsPerInch = 20,
         MaximumBarsPerInch = 24,
+        MinimumFullBar = (float)(5.10 * 1.60 / 1.90 / 0.54),
+        MaximumFullBar = (float)(5.10 * 2.16 / 1.90 / 0.54),
     };
 
     /// <inheritdoc/>

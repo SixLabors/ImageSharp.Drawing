@@ -98,7 +98,8 @@ public sealed class PharmacodeSymbology : BarcodeSymbology
             runs[i * 2] = bars[count - 1 - i];
         }
 
-        float barHeight = options.ResolveBarHeight(xDimension, (float)(NominalBarHeight / xDimension));
+        // Section 1.2 gives the minimum and the maximum code bar height as "application-specific", so the bar height is not clamped.
+        float barHeight = options.ResolveBarHeight(xDimension, 0, (float)(NominalBarHeight / xDimension), float.PositiveInfinity);
         heights.Fill(barHeight);
 
         float quietZone = (float)(QuietZone / xDimension);

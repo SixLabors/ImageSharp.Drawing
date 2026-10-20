@@ -341,17 +341,35 @@ public class EanUpcSymbologyTests
     {
         BarcodeOptions options = CreateTextOptions();
         options.Dpi = SymbolEncoder.MillimetreDpi;
-        options.BarHeight = 50F * EanUpcEncoder.NominalXDimension;
+        options.BarHeight = 60F * EanUpcEncoder.NominalXDimension;
         ApproximateFloatComparer comparer = new(1e-3F);
 
         SymbolEncoder.Encode(new Ean13Symbology(), "5901234123457", options, (ref symbol) =>
         {
-            // 16.5 mm at the 0.33 mm X dimension is 50 modules for the digit bars. The guard bars gain the 5 module extension of section 5.2.3.2 of the GS1
+            // 19.8 mm at the 0.33 mm X dimension is 60 modules for the digit bars. The guard bars gain the 5 module extension of section 5.2.3.2 of the GS1
             // General Specifications on top of that.
-            Assert.Equal(50F, symbol.BarHeights[2], comparer);
-            Assert.Equal(55F, symbol.BarHeights[0], comparer);
-            Assert.Equal(55F, symbol.HeightInModules, comparer);
+            Assert.Equal(60F, symbol.BarHeights[2], comparer);
+            Assert.Equal(65F, symbol.BarHeights[0], comparer);
+            Assert.Equal(65F, symbol.HeightInModules, comparer);
         });
+    }
+
+    /// <summary>
+    /// The notes of Table 5-44 of the GS1 General Specifications: "the bar height SHALL NOT be truncated below the minimum as listed in the table above". The
+    /// smallest minimum symbol height of the tables is 18.28 mm for EAN-13 and 14.58 mm for EAN-8, so a bar height of 10 mm draws the digit bars at that
+    /// minimum. At the 0.33 mm X dimension 18.28 mm is 55.39 modules and 14.58 mm is 44.18 modules.
+    /// </summary>
+    [Fact]
+    public void BarHeightOption_UnderTheMinimumDrawsAtTheMinimum()
+    {
+        BarcodeOptions options = new() { Dpi = SymbolEncoder.MillimetreDpi, BarHeight = 10 };
+        ApproximateFloatComparer comparer = new(1e-3F);
+
+        float ean13 = SymbolEncoder.Read(new Ean13Symbology(), "5901234123457", options, static (ref symbol) => symbol.BarHeights[2]);
+        float ean8 = SymbolEncoder.Read(new Ean8Symbology(), "96385074", options, static (ref symbol) => symbol.BarHeights[2]);
+
+        Assert.Equal((float)(18.28 / 0.33), ean13, comparer);
+        Assert.Equal((float)(14.58 / 0.33), ean8, comparer);
     }
 
     /// <summary>

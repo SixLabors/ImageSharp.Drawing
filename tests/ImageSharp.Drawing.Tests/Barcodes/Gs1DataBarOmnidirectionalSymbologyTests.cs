@@ -19,18 +19,17 @@ public class Gs1DataBarOmnidirectionalSymbologyTests
         => Assert.Equal(Runs("(01)00012345678905"), Runs("(01)0001234567890"));
 
     /// <summary>
-    /// Section 5.5.2.1.1 of the GS1 General Specifications: "33X is the minimum height of the symbol", so the encoder rejects a bar height under 33X. At the
-    /// nominal 0.33 mm module 33X is 10.89 mm.
+    /// Section 5.5.2.1.1 of the GS1 General Specifications: "33X is the minimum height of the symbol", so a bar height under 33X draws at 33X. At the nominal
+    /// 0.33 mm module 33X is 10.89 mm.
     /// </summary>
     [Fact]
-    public void Gs1DataBarOmnidirectional_RejectsABarHeightUnderThirtyThreeModules()
+    public void Gs1DataBarOmnidirectional_DrawsABarHeightUnderThirtyThreeModulesAtThirtyThreeModules()
     {
-        Gs1DataBarOmnidirectionalSymbology symbology = new();
-        BarcodeOptions minimum = new() { Dpi = SymbolEncoder.MillimetreDpi, BarHeight = 10.89 };
         BarcodeOptions under = new() { Dpi = SymbolEncoder.MillimetreDpi, BarHeight = 10.88 };
 
-        Assert.Null(Record.Exception(() => SymbolEncoder.Encode(symbology, "(01)09521234543213", minimum)));
-        Assert.Throws<ArgumentOutOfRangeException>(() => SymbolEncoder.Encode(symbology, "(01)09521234543213", under));
+        float height = SymbolEncoder.Read(new Gs1DataBarOmnidirectionalSymbology(), "(01)09521234543213", under, static (ref symbol) => symbol.HeightInModules);
+
+        Assert.Equal(33F, height);
     }
 
     /// <summary>

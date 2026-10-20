@@ -30,6 +30,17 @@ internal static class PznData
     private const float NominalBarHeight = 40F;
 
     /// <summary>
+    /// The smallest bar height in modules. IFA: "For a normal size of X = 0.25 mm, the code can be between 8 and 20 mm high", and the height "changes
+    /// proportionately to the nominal module width", so 8 mm is 32 modules.
+    /// </summary>
+    private const float MinimumBarHeight = 32F;
+
+    /// <summary>
+    /// The largest bar height in modules, the 20 mm of the same range, 80 modules.
+    /// </summary>
+    private const float MaximumBarHeight = 80F;
+
+    /// <summary>
     /// The smallest size of the printed line in points. IFA prints the PZN "in a well-readable font size (at least 6 pt. for a small code)".
     /// </summary>
     private const float MinimumTextSize = 6F;
@@ -103,16 +114,17 @@ internal static class PznData
         text.Slice(0, digits).CopyTo(encoded[1..]);
         encoded[^1] = (char)('0' + check);
 
-        Code39Encoder.BuildSymbol(
-            encoded,
-            null,
-            ReadablePrefix,
-            encoded[1..],
-            [],
-            options,
-            options.ResolveXDimension(MinimumXDimension, NominalXDimension, MaximumXDimension),
-            NominalBarHeight,
-            ref symbol);
+        Code39Layout layout = new()
+        {
+            XDimension = options.ResolveXDimension(MinimumXDimension, NominalXDimension, MaximumXDimension),
+            NominalBarHeight = NominalBarHeight,
+            MinimumBarHeight = MinimumBarHeight,
+            MaximumBarHeight = MaximumBarHeight,
+            NarrowElement = 1,
+            WideElement = Code39Encoder.WideElement,
+        };
+
+        Code39Encoder.BuildSymbol(encoded, null, ReadablePrefix, encoded[1..], [], in layout, options, ref symbol);
 
         symbol.SetTextSize(MinimumTextSize, 0F);
     }

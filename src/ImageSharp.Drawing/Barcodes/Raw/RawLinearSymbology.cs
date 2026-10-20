@@ -48,7 +48,7 @@ public sealed class RawLinearSymbology : BarcodeSymbology
             widthInModules += width;
         }
 
-        float barHeight = options.ResolveBarHeight(xDimension, widthInModules * NominalBarHeightFraction);
+        float barHeight = options.ResolveBarHeight(xDimension, 0, widthInModules * NominalBarHeightFraction, float.PositiveInfinity);
         heights.Fill(barHeight);
         symbol.EndLinear(0, 0);
     }

@@ -8,8 +8,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// <summary>
 /// The GS1 North American Coupon, a GS1 DataBar Expanded Stacked symbol that carries a single element string, the coupon code of GS1 Application Identifier
 /// (8110). The North American Coupon Application Guideline of GS1 US: "Data shall be encoded in a GS1 DataBar Expanded Symbol. This barcode is constructed in
-/// segments and is capable of being stacked (as shown) with a minimum of 2 segments per row." Each row is 34X high, a 3X separator stands between rows, and no
-/// quiet zone is required. Section 5.4 of the guideline gives an X dimension of 0.254 to 0.33 millimetres, and an X dimension outside that range is clamped
+/// segments and is capable of being stacked (as shown) with a minimum of 2 segments per row." Each row is 34X high at every bar height, a 3X separator stands
+/// between rows, and no quiet zone is required. Section 5.4 of the guideline gives an X dimension of 0.254 to 0.33 millimetres, and an X dimension outside that range is clamped
 /// to it.
 /// <para>
 /// The input is <c>(8110)</c> and a coupon code of up to 70 digits, whose elements Table C of the guideline defines: the GS1 Company Prefix with its length
@@ -94,7 +94,8 @@ public sealed class Gs1NorthAmericanCouponSymbology : BarcodeSymbology
 
             int prefixLength = NorthAmericanCouponCode.Validate(data);
 
-            // The caption is the GS1 Company Prefix and the offer code, joined by a hyphen.
+            // The caption is the GS1 Company Prefix and the offer code, joined by a hyphen. Section 5.4 of the guideline: "Each row shall be 34X high", so the
+            // row height is fixed at 34X.
             DataBarExpandedEncoder.BuildStacked(
                 encoded.AsSpan(),
                 this.Segments,
@@ -105,6 +106,7 @@ public sealed class Gs1NorthAmericanCouponSymbology : BarcodeSymbology
                 BarcodeTextSide.AboveBars,
                 MinimumXDimension,
                 MaximumXDimension,
+                DataBarExpandedEncoder.RowHeight,
                 options,
                 ref symbol);
         }

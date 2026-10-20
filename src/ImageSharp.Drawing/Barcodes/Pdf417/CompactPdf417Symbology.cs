@@ -5,7 +5,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
 /// The Compact PDF417 symbology, Annex G of ISO/IEC 15438. A symbol is a PDF417 symbol whose rows omit the right row indicator and end with a single module bar
-/// in place of the stop character. The bar height of the options sets each row, and section 5.8.2 requires "Y &gt;= 3X", so a bar height under 3X is rejected.
+/// in place of the stop character. The bar height of the options sets each row, and section 5.8.2 requires "Y &gt;= 3X", so a bar height under 3X draws at 3X.
 /// </summary>
 public sealed class CompactPdf417Symbology : BarcodeSymbology
 {

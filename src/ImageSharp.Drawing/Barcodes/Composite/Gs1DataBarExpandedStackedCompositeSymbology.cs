@@ -78,6 +78,7 @@ public sealed class Gs1DataBarExpandedStackedCompositeSymbology : CompositeBarco
                 BarcodeTextSide.BelowBars,
                 DataBarEncoder.MinimumXDimension,
                 DataBarEncoder.MaximumXDimension,
+                float.PositiveInfinity,
                 options,
                 ref parts[0]);
         }
