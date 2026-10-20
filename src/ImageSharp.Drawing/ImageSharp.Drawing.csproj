@@ -49,6 +49,10 @@
     <PackageReference Include="SixLabors.PolygonClipper" Version="1.0.1" />
   </ItemGroup>
   <ItemGroup>
+    <!-- The local, gitignored barcode specifications folder holds standalone verification scripts that are not part of the library. -->
+    <Compile Remove="Barcodes\specs\**" />
+  </ItemGroup>
+  <ItemGroup>
     <Compile Update="Helpers\InlineArray.cs">
       <DesignTime>True</DesignTime>
       <AutoGen>True</AutoGen>
