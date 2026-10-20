@@ -153,7 +153,7 @@ internal static class Code93Encoder
     public static void BuildSymbol(ReadOnlySpan<char> text, ReadOnlySpan<char> readable, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         int runCount = ((text.Length + CheckCharacters) * ElementsPerCharacter) + StartStopElements;
-        double xDimension = options.ResolveXDimension(BarcodeSymbology.DefaultXDimension);
+        double xDimension = options.ResolveXDimension(0, BarcodeSymbology.DefaultXDimension, double.PositiveInfinity);
         Span<int> runs = symbol.BeginLinear(runCount, xDimension, out Span<float> heights, out _);
         int written = 0;
 

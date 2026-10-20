@@ -80,6 +80,9 @@ public sealed class Code39Symbology : BarcodeSymbology
         // start and stop character.
         ReadOnlySpan<char> opening = [ReadableDelimiter];
         ReadOnlySpan<char> closing = check is not null && this.PrintCheckCharacter ? [check.Value, ReadableDelimiter] : [ReadableDelimiter];
-        Code39Encoder.BuildSymbol(data, check, opening, data, closing, options, options.ResolveXDimension(DefaultXDimension), ref symbol);
+
+        // Section 4.4 a) of ISO/IEC 16388: the X dimension "should be defined by the application specification", so the symbology gives no limit.
+        double xDimension = options.ResolveXDimension(0, DefaultXDimension, double.PositiveInfinity);
+        Code39Encoder.BuildSymbol(data, check, opening, data, closing, options, xDimension, ref symbol);
     }
 }

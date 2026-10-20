@@ -137,24 +137,15 @@ public sealed class BarcodeOptions
     public bool IncludeQuietZones { get; set; } = true;
 
     /// <summary>
-    /// Resolves the X dimension that a symbol draws at, in millimetres, for a symbology whose specification gives no range of X dimensions. The result is
-    /// <see cref="XDimension"/>, or the nominal X dimension when no X dimension is set, at the nearest whole number of pixels at <see cref="Dpi"/> and at
-    /// least one pixel.
-    /// </summary>
-    /// <param name="nominal">The nominal X dimension of the symbology in millimetres.</param>
-    /// <returns>The X dimension in millimetres.</returns>
-    internal double ResolveXDimension(double nominal)
-        => this.ResolveXDimension(0, nominal, double.PositiveInfinity);
-
-    /// <summary>
     /// Resolves the X dimension that a symbol draws at, in millimetres: <see cref="XDimension"/>, or the nominal X dimension when no X dimension is set, at
     /// the nearest whole number of pixels at <see cref="Dpi"/>, clamped to the whole numbers of pixels inside the range of the specification. A module of a
     /// whole number of pixels draws every bar and space of one width at the same number of pixels. The encoder converts the millimetre sizes of the symbol,
     /// such as the bar height, to modules with this X dimension, so they keep their sizes.
     /// </summary>
-    /// <param name="minimum">The smallest X dimension the specification permits, in millimetres.</param>
+    /// <param name="minimum">The smallest X dimension the specification permits, in millimetres, or zero where it gives none.</param>
     /// <param name="nominal">The nominal X dimension of the symbology in millimetres.</param>
-    /// <param name="maximum">The largest X dimension the specification permits, in millimetres.</param>
+    /// <param name="maximum">The largest X dimension the specification permits, in millimetres, or <see cref="double.PositiveInfinity"/> where it gives
+    /// none.</param>
     /// <returns>The X dimension in millimetres.</returns>
     internal double ResolveXDimension(double minimum, double nominal, double maximum)
     {
@@ -176,8 +167,8 @@ public sealed class BarcodeOptions
     }
 
     /// <summary>
-    /// Returns the number of pixels a module of an X dimension from <see cref="ResolveXDimension(double)"/> draws at, at <see cref="Dpi"/>. A symbology whose
-    /// elements are not whole modules counts its runs in these pixels, so every element draws at a whole number of pixels.
+    /// Returns the number of pixels a module of an X dimension from <see cref="ResolveXDimension(double, double, double)"/> draws at, at <see cref="Dpi"/>. A
+    /// symbology whose elements are not whole modules counts its runs in these pixels, so every element draws at a whole number of pixels.
     /// </summary>
     /// <param name="xDimension">The resolved X dimension in millimetres.</param>
     /// <returns>The number of pixels in one module.</returns>

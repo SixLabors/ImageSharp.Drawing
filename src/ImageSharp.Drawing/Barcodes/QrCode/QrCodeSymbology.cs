@@ -53,13 +53,14 @@ public sealed class QrCodeSymbology : BarcodeSymbology
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
+        // Section 8.1 of ISO/IEC 18004: "the width of a module shall be specified by the application", so the symbology gives no limit.
         QrEncoder.BuildSymbol(
             text,
             false,
             QrFormat.Full,
             this.ErrorCorrectionLevel,
             this.Version ?? 0,
-            options.ResolveXDimension(DefaultMatrixXDimension),
+            options.ResolveXDimension(0, DefaultMatrixXDimension, double.PositiveInfinity),
             ref symbol);
     }
 }

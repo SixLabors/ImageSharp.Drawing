@@ -166,7 +166,7 @@ internal static class PlesseyEncoder
         ref BarcodeSymbol symbol)
     {
         int runCount = Start.Length + ((data.Length + checks.Length) * BitsPerCharacter * 2) + Stop.Length;
-        double xDimension = options.ResolveXDimension(NominalXDimension);
+        double xDimension = options.ResolveXDimension(0, NominalXDimension, double.PositiveInfinity);
         Span<int> runs = symbol.BeginLinear(runCount, xDimension, out Span<float> heights, out _);
         int written = 0;
         foreach (byte width in Start)

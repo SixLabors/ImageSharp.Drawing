@@ -59,6 +59,7 @@ public sealed class HanXinSymbology : BarcodeSymbology
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        HanXinEncoder.BuildSymbol(text, this.ErrorCorrectionLevel, this.Version ?? 0, options.ResolveXDimension(DefaultMatrixXDimension), ref symbol);
+        double xDimension = options.ResolveXDimension(0, DefaultMatrixXDimension, double.PositiveInfinity);
+        HanXinEncoder.BuildSymbol(text, this.ErrorCorrectionLevel, this.Version ?? 0, xDimension, ref symbol);
     }
 }

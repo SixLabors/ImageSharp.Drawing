@@ -12,6 +12,18 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 public class Code49SymbologyTests
 {
     /// <summary>
+    /// Section 3.2: "The minimum standard Xdimension used is 0.0075 inches (0.191 mm)". At 1000 pixels a millimetre the smallest whole number of pixels at or
+    /// over 0.1905 mm is 191 pixels, so an X dimension of 0.1 mm draws at 0.191 mm.
+    /// </summary>
+    [Fact]
+    public void Code49_ClampsAnXDimensionUnderTheMinimumStandardValue()
+        => SymbolEncoder.Encode(
+            new Code49Symbology(),
+            "12345",
+            new BarcodeOptions { Dpi = SymbolEncoder.MicrometreDpi, XDimension = 0.1 },
+            static (ref symbol) => Assert.Equal(0.191, symbol.XDimension, 1e-9));
+
+    /// <summary>
     /// Section 2.3.7 works "EXAMPLE 2" through to its code character matrix: the data with the row check character 41, then the last row with the two symbol
     /// check characters 1729 and 895 as code character pairs, the row count character 0 and the row check character 22.
     /// </summary>

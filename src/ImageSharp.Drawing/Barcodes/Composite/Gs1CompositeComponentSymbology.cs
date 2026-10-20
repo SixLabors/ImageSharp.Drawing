@@ -64,7 +64,7 @@ public sealed class Gs1CompositeComponentSymbology : BarcodeSymbology
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        double xDimension = options.ResolveXDimension(DefaultXDimension);
+        double xDimension = options.ResolveXDimension(0, DefaultXDimension, double.PositiveInfinity);
         _ = Gs1CompositeComponentEncoder.Build(text, this.Component, this.Columns, 0, xDimension, ref symbol);
         if (options.Font is null)
         {

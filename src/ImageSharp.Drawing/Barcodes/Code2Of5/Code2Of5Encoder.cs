@@ -187,7 +187,7 @@ internal static class Code2Of5Encoder
         bool barsOnly = variant is Code2Of5Variant.Industrial or Code2Of5Variant.Iata;
         int elementsPerDigit = barsOnly ? BarElementsPerDigit : MatrixElementsPerDigit;
 
-        double xDimension = options.ResolveXDimension(BarcodeSymbology.DefaultXDimension);
+        double xDimension = options.ResolveXDimension(0, BarcodeSymbology.DefaultXDimension, double.PositiveInfinity);
         int runCount = (digits.Length * elementsPerDigit) + start.Length + stop.Length;
         Span<int> runs = symbol.BeginLinear(runCount, xDimension, out Span<float> heights, out _);
         int written = 0;

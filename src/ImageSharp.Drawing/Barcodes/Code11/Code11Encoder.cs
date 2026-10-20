@@ -127,7 +127,7 @@ internal static class Code11Encoder
     public static void BuildSymbol(ReadOnlySpan<char> data, ReadOnlySpan<char> checks, bool printChecks, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         int characters = data.Length + checks.Length + StartStopCharacters;
-        double xDimension = options.ResolveXDimension(BarcodeSymbology.DefaultXDimension);
+        double xDimension = options.ResolveXDimension(0, BarcodeSymbology.DefaultXDimension, double.PositiveInfinity);
         Span<int> runs = symbol.BeginLinear((characters * (ElementsPerCharacter + 1)) - 1, xDimension, out Span<float> heights, out _);
         int written = 0;
 

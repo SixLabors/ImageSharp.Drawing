@@ -175,7 +175,8 @@ internal static class Pdf417Encoder
             level = Math.Max(level, roomLevel);
         }
 
-        double xDimension = options.ResolveXDimension(BarcodeSymbology.DefaultXDimension);
+        // Section 5.8.1: the X dimension "should be defined by the application specification", so this standard gives no limit.
+        double xDimension = options.ResolveXDimension(0, BarcodeSymbology.DefaultXDimension, double.PositiveInfinity);
 
         // Section 5.8.2: the row height is "Y >= 3X", and "the row height may be increased". It gives no maximum.
         float rowHeight = options.ResolveBarHeight(xDimension, NominalRowHeight, NominalRowHeight, float.PositiveInfinity);

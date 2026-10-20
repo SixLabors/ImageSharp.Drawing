@@ -72,6 +72,18 @@ public class Interleaved2Of5SymbologyTests
         => Assert.Equal((pairs * ((4 * 3) + 6)) + 3 + 6, SymbolEncoder.Read(new Interleaved2Of5Symbology(), text, new BarcodeOptions(), SymbolEncoder.RunSum));
 
     /// <summary>
+    /// Section 3.2 of AIM USS-I 2/5: the narrow element width "has a minimum standard value of 0.0075 inches (0.191 mm)". At 1000 pixels a millimetre the
+    /// smallest whole number of pixels at or over 0.1905 mm is 191 pixels, so an X dimension of 0.1 mm draws at 0.191 mm.
+    /// </summary>
+    [Fact]
+    public void ClampsAnXDimensionUnderTheMinimumStandardValue()
+        => SymbolEncoder.Encode(
+            new Interleaved2Of5Symbology(),
+            "1234",
+            new BarcodeOptions { Dpi = SymbolEncoder.MicrometreDpi, XDimension = 0.1 },
+            static (ref symbol) => Assert.Equal(0.191, symbol.XDimension, 1e-9));
+
+    /// <summary>
     /// Section 3.2 of AIM USS-I 2/5: "The minimum quiet zone width is ten times the X dimension or 0.10 inch (2.54 mm), whichever is greater." At the 0.191 mm
     /// X dimension of that section the 2.54 mm is wider than ten modules.
     /// </summary>

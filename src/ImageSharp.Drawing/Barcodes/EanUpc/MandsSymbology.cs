@@ -63,7 +63,13 @@ public sealed class MandsSymbology : BarcodeSymbology
         Span<sbyte> corrections = ((Span<sbyte>)correctionStorage)[..EanUpcEncoder.Ean8Width];
         EanUpcEncoder.WriteEan8Modules(digits, modules, corrections);
 
-        EanUpcEncoder.BeginRuns(modules, corrections, options.ResolveXDimension(EanUpcEncoder.NominalXDimension), ref symbol, out Span<float> heights);
+        EanUpcEncoder.BeginRuns(
+            modules,
+            corrections,
+            options.ResolveXDimension(0, EanUpcEncoder.NominalXDimension, double.PositiveInfinity),
+            ref symbol,
+            out Span<float> heights);
+
         float digitHeight = options.ResolveBarHeight(symbol.XDimension, 0, EanUpcEncoder.NominalEan8BarHeight, float.PositiveInfinity);
         EanUpcEncoder.FillGuardedHeights(heights, digitHeight, GuardBars);
 

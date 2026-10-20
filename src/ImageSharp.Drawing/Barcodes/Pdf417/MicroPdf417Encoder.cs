@@ -217,7 +217,7 @@ internal static class MicroPdf417Encoder
                 : $"The data takes {data.Length} codewords and does not fit in a MicroPDF417 symbol.");
         }
 
-        double xDimension = options.ResolveXDimension(BarcodeSymbology.DefaultXDimension);
+        double xDimension = options.ResolveXDimension(0, BarcodeSymbology.DefaultXDimension, double.PositiveInfinity);
         float rowHeight = options.ResolveBarHeight(xDimension, 0, NominalRowHeight, float.PositiveInfinity);
         BuildMatrix(data, new SymbolSize(sizes.Slice(offset, SymbolSize.Length)), xDimension, rowHeight, QuietZone, ref symbol);
     }

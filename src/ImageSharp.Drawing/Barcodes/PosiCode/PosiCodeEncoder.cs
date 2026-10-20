@@ -432,7 +432,7 @@ internal static class PosiCodeEncoder
             _ => new(CharactersLimitedB, StartLimitedB, StopLimited),
         };
 
-        double xDimension = options.ResolveXDimension(BarcodeSymbology.DefaultXDimension);
+        double xDimension = options.ResolveXDimension(0, BarcodeSymbology.DefaultXDimension, double.PositiveInfinity);
         int runCount = patterns.Start.Length + (codewords.Length * RunsPerCharacter) + CheckRuns + patterns.Stop.Length;
         Span<int> runs = symbol.BeginLinear(runCount, xDimension, out Span<float> heights, out _);
         int written = 0;

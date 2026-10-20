@@ -48,6 +48,12 @@ internal static class Code49Encoder
     public const float NominalBarHeight = 8F;
 
     /// <summary>
+    /// The smallest X dimension in millimetres. Section 3.2: "The minimum standard Xdimension used is 0.0075 inches (0.191 mm)". Appendix E permits a
+    /// smaller X dimension only in a closed system, as a deviation "from standard tolerances". The specification gives no largest X dimension.
+    /// </summary>
+    private const double MinimumXDimension = 0.0075 * 25.4;
+
+    /// <summary>
     /// The height in modules of the separator bars: the "1-module high separator bar" of section 2.1.
     /// </summary>
     public const float SeparatorHeight = 1F;
@@ -359,7 +365,7 @@ internal static class Code49Encoder
     private static void WriteRows(ReadOnlySpan<int> codes, ReadOnlySpan<char> readable, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         int rowCount = codes.Length / CodeCharactersPerRow;
-        double xDimension = options.ResolveXDimension(BarcodeSymbology.DefaultXDimension);
+        double xDimension = options.ResolveXDimension(MinimumXDimension, BarcodeSymbology.DefaultXDimension, double.PositiveInfinity);
 
         // Section 3.3 recommends "a minimum bar height of 8X" and sets no limit, so the bar height is not clamped.
         float barHeight = options.ResolveBarHeight(xDimension, 0, NominalBarHeight, float.PositiveInfinity);

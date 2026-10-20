@@ -58,6 +58,7 @@ public sealed class DotCodeSymbology : BarcodeSymbology
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        DotCodeEncoder.BuildSymbol(text, false, this.Columns ?? 0, this.Rows ?? 0, options.ResolveXDimension(DefaultMatrixXDimension), ref symbol);
+        double xDimension = options.ResolveXDimension(0, DefaultMatrixXDimension, double.PositiveInfinity);
+        DotCodeEncoder.BuildSymbol(text, false, this.Columns ?? 0, this.Rows ?? 0, xDimension, ref symbol);
     }
 }

@@ -19,6 +19,7 @@ public sealed class DataMatrixRectangularSymbology : BarcodeSymbology
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        DataMatrixEncoder.BuildSymbol(text, false, DataMatrixFormat.Rectangular, 0, 0, options.ResolveXDimension(DefaultMatrixXDimension), ref symbol);
+        double xDimension = options.ResolveXDimension(0, DefaultMatrixXDimension, double.PositiveInfinity);
+        DataMatrixEncoder.BuildSymbol(text, false, DataMatrixFormat.Rectangular, 0, 0, xDimension, ref symbol);
     }
 }

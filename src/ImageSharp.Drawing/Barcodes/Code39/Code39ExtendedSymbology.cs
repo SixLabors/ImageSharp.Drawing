@@ -140,7 +140,7 @@ public sealed class Code39ExtendedSymbology : BarcodeSymbology
                 readable.AsSpan(),
                 closing,
                 options,
-                options.ResolveXDimension(DefaultXDimension),
+                options.ResolveXDimension(0, DefaultXDimension, double.PositiveInfinity),
                 ref symbol);
         }
         finally

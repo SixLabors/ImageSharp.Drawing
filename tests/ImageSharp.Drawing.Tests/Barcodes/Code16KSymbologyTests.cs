@@ -12,6 +12,18 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 public class Code16KSymbologyTests
 {
     /// <summary>
+    /// Section 3.2: "The minimum standard X dimension used is 0.0075 inches (0.191 mm)". At 1000 pixels a millimetre the smallest whole number of pixels at
+    /// or over 0.1905 mm is 191 pixels, so an X dimension of 0.1 mm draws at 0.191 mm.
+    /// </summary>
+    [Fact]
+    public void Code16K_ClampsAnXDimensionUnderTheMinimumStandardValue()
+        => SymbolEncoder.Encode(
+            new Code16KSymbology(),
+            "CODE 16K",
+            new BarcodeOptions { Dpi = SymbolEncoder.MicrometreDpi, XDimension = 0.1 },
+            static (ref symbol) => Assert.Equal(0.191, symbol.XDimension, 1e-9));
+
+    /// <summary>
     /// Section 2.1: every row is 70 modules, and a one module separator bar stands between rows. Section 3.4 gives ten modules of quiet zone before the start
     /// pattern and one after the stop pattern.
     /// </summary>

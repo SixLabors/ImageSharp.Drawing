@@ -125,7 +125,7 @@ internal static class MsiEncoder
     /// <param name="symbol">The symbol to write.</param>
     public static void BuildSymbol(ReadOnlySpan<char> digits, ReadOnlySpan<char> readable, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        double xDimension = options.ResolveXDimension(BarcodeSymbology.DefaultXDimension);
+        double xDimension = options.ResolveXDimension(0, BarcodeSymbology.DefaultXDimension, double.PositiveInfinity);
         Span<int> runs = symbol.BeginLinear(StartElements + (digits.Length * BitsPerDigit * 2) + StopElements, xDimension, out Span<float> heights, out _);
 
         // The start character is a 1 bit, a wide bar and a narrow space.

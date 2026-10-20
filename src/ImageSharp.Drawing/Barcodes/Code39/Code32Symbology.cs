@@ -131,7 +131,7 @@ public sealed class Code32Symbology : BarcodeSymbology
             number /= Base32Characters.Length;
         }
 
-        double xDimension = options.ResolveXDimension(NominalXDimension);
+        double xDimension = options.ResolveXDimension(0, NominalXDimension, double.PositiveInfinity);
 
         // The runs count pixels, so every element draws at a whole number of pixels. A wide element is WideElement / NarrowElement modules, rounded half up
         // to a whole pixel: at an odd number of pixels a module the ratio of 2.5 becomes 3.0 at one pixel and 2.67 at three, and every wide element takes the

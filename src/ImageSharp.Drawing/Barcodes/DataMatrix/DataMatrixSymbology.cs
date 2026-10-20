@@ -55,12 +55,13 @@ public sealed class DataMatrixSymbology : BarcodeSymbology
                 DataMatrixFormat.SquareOrRectangular,
                 this.Rows.Value,
                 this.Columns!.Value,
-                options.ResolveXDimension(DefaultMatrixXDimension),
+                options.ResolveXDimension(0, DefaultMatrixXDimension, double.PositiveInfinity),
                 ref symbol);
         }
         else
         {
-            DataMatrixEncoder.BuildSymbol(text, false, DataMatrixFormat.Square, 0, 0, options.ResolveXDimension(DefaultMatrixXDimension), ref symbol);
+            double xDimension = options.ResolveXDimension(0, DefaultMatrixXDimension, double.PositiveInfinity);
+            DataMatrixEncoder.BuildSymbol(text, false, DataMatrixFormat.Square, 0, 0, xDimension, ref symbol);
         }
     }
 }

@@ -238,7 +238,7 @@ internal static class CodablockFEncoder
 
             int rowCount = values.Length / rowSize;
             int width = RowWidth(columns);
-            double xDimension = options.ResolveXDimension(BarcodeSymbology.DefaultXDimension);
+            double xDimension = options.ResolveXDimension(0, BarcodeSymbology.DefaultXDimension, double.PositiveInfinity);
             float barHeight = options.ResolveBarHeight(xDimension, 0, NominalRowHeight(columns), float.PositiveInfinity);
 
             // The rows from the top: a solid edge bar, each data row with a separator below it but the last, and a solid edge bar. A separator keeps the start

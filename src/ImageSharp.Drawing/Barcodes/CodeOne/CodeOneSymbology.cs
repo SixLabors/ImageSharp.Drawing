@@ -35,6 +35,6 @@ public sealed class CodeOneSymbology : BarcodeSymbology
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        CodeOneEncoder.BuildSymbol(text, this.Version, options.ResolveXDimension(DefaultMatrixXDimension), ref symbol);
+        CodeOneEncoder.BuildSymbol(text, this.Version, options.ResolveXDimension(0, DefaultMatrixXDimension, double.PositiveInfinity), ref symbol);
     }
 }

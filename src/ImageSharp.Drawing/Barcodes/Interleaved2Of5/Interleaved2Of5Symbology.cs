@@ -100,7 +100,8 @@ public sealed class Interleaved2Of5Symbology : BarcodeSymbology
             }
 
             ReadOnlySpan<char> readable = check is null || this.PrintCheckDigit ? encoded : encoded[..^1];
-            Interleaved2Of5Encoder.BuildSymbol(encoded, readable, options, options.ResolveXDimension(DefaultXDimension), ref symbol);
+            double xDimension = options.ResolveXDimension(Interleaved2Of5Encoder.MinimumXDimension, DefaultXDimension, double.PositiveInfinity);
+            Interleaved2Of5Encoder.BuildSymbol(encoded, readable, options, xDimension, ref symbol);
         }
         finally
         {

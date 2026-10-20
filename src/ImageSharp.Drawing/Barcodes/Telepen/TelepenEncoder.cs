@@ -127,7 +127,7 @@ internal static class TelepenEncoder
     {
         // Every run is at least one module and a character is sixteen modules, so a character is at most sixteen runs. The symbol reserves that many runs and
         // keeps those it writes. The stop code ends on a bar, so the space written after it is dropped.
-        double xDimension = options.ResolveXDimension(NominalXDimension);
+        double xDimension = options.ResolveXDimension(0, NominalXDimension, double.PositiveInfinity);
         Span<int> runs = symbol.BeginLinear((values.Length + FrameCharacters) * ModulesPerCharacter, xDimension, out Span<float> heights, out _);
         int written = 0;
         Append(runs, ref written, Start);
