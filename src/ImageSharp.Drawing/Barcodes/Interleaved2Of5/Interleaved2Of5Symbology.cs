@@ -100,7 +100,10 @@ public sealed class Interleaved2Of5Symbology : BarcodeSymbology
             }
 
             ReadOnlySpan<char> readable = check is null || this.PrintCheckDigit ? encoded : encoded[..^1];
-            double xDimension = options.ResolveXDimension(Interleaved2Of5Encoder.MinimumXDimension, DefaultXDimension, double.PositiveInfinity);
+
+            // Section 4.4 of ISO/IEC 16390: the X dimension "should be defined by the application specification", and section 4.7.1 leaves the "Range of X
+            // dimension" to the application specification, so the symbology gives no limit.
+            double xDimension = options.ResolveXDimension(0, DefaultXDimension, double.PositiveInfinity);
             Interleaved2Of5Encoder.BuildSymbol(encoded, readable, options, xDimension, ref symbol);
         }
         finally

@@ -54,6 +54,7 @@ public sealed class AztecCodeCompactSymbology : BarcodeSymbology
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
+        // Clause 12 of ISO/IEC 24778: "This symbology specification places no limits on the size of X."
         AztecEncoder.BuildSymbol(
             text,
             AztecFormat.Compact,

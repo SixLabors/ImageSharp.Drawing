@@ -53,13 +53,13 @@ internal static class CodabarEncoder
     private const int WideElement = 3;
 
     /// <summary>
-    /// The bar height as a fraction of the symbol width, quiet zones excluded, when the caller sets no height. Section 4.4.1 (d) of BS EN 798 gives a minimum
-    /// of 5.0 mm or 15 per cent of the symbol width, whichever is greater.
+    /// The smallest bar height as a fraction of the symbol width, quiet zones excluded. Section 4.4.1 (e) of BS EN 798: "minimum bar code height: 5,0 mm or
+    /// 15 % of symbol width, whichever is greater".
     /// </summary>
-    private const float NominalBarHeightFraction = 0.15F;
+    private const float MinimumBarHeightFraction = 0.15F;
 
     /// <summary>
-    /// The smallest bar height in millimetres when the caller sets none, section 4.4.1 (d) of BS EN 798.
+    /// The smallest bar height in millimetres, section 4.4.1 (e) of BS EN 798.
     /// </summary>
     private const float MinimumBarHeightMillimetres = 5F;
 
@@ -147,8 +147,9 @@ internal static class CodabarEncoder
 
         int widthInModules = BarcodeSymbol.RunWidth(runs);
 
-        float nominalBarHeight = MathF.Max(widthInModules * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
-        float barHeight = options.ResolveBarHeight(xDimension, 0, nominalBarHeight, float.PositiveInfinity);
+        // The minimum of section 4.4.1 (e) is also the nominal bar height. The section gives no maximum.
+        float minimumBarHeight = MathF.Max(widthInModules * MinimumBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
+        float barHeight = options.ResolveBarHeight(xDimension, minimumBarHeight, minimumBarHeight, float.PositiveInfinity);
         heights.Fill(barHeight);
 
         if (options.Font is not null)

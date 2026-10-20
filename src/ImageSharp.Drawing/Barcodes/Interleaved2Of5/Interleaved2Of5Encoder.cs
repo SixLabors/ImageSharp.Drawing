@@ -80,13 +80,6 @@ internal static class Interleaved2Of5Encoder
     private const float MinimumBarHeightMillimetres = 6.35F;
 
     /// <summary>
-    /// The smallest X dimension in millimetres. Section 3.2 of AIM USS-I 2/5: "The nominal narrow element width for the USS-I 2/5 symbology has a minimum
-    /// standard value of 0.0075 inches (0.191 mm)". Appendix F permits a smaller X dimension only in a closed system, as a deviation "from standard
-    /// tolerances". The specification gives no largest X dimension.
-    /// </summary>
-    public const double MinimumXDimension = 0.0075 * 25.4;
-
-    /// <summary>
     /// Gets the element widths of every digit, one bit per element, most significant element first: a set bit is a wide element and a clear bit a narrow one.
     /// These are the patterns of Table 2 of AIM USS-I 2/5 and of Table 5-23 of the GS1 General Specifications, indexed by digit. Section 2.2 weights the
     /// positions 1, 2, 4, 7 and parity and gives every digit "exactly two non-zero weights".

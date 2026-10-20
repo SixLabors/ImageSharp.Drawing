@@ -30,6 +30,7 @@ public sealed class AztecRuneSymbology : BarcodeSymbology
             throw new ArgumentException($"An Aztec Rune carries a value of 0 to 255; got {value}.", nameof(text));
         }
 
+        // Clause 12 of ISO/IEC 24778: "This symbology specification places no limits on the size of X."
         AztecEncoder.BuildRune(value, options.ResolveXDimension(0, DefaultMatrixXDimension, double.PositiveInfinity), ref symbol);
     }
 }

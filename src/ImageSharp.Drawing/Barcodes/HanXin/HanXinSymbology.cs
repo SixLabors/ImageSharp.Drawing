@@ -59,6 +59,7 @@ public sealed class HanXinSymbology : BarcodeSymbology
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
+        // Section 6.1 of ISO/IEC 20830: "the width of a module shall be specified by the application", so the symbology gives no limit.
         double xDimension = options.ResolveXDimension(0, DefaultMatrixXDimension, double.PositiveInfinity);
         HanXinEncoder.BuildSymbol(text, this.ErrorCorrectionLevel, this.Version ?? 0, xDimension, ref symbol);
     }

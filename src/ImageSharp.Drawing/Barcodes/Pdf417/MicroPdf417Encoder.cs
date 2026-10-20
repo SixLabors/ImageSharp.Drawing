@@ -22,7 +22,8 @@ internal static class MicroPdf417Encoder
     public const int MaximumColumns = 4;
 
     /// <summary>
-    /// The nominal row height in modules.
+    /// The row height in modules, nominal and smallest. Section 5.8.2 of ISO/IEC 24728: "The row height (Y) shall conform to: Y ≥ 2X". The section gives no
+    /// largest row height.
     /// </summary>
     private const float NominalRowHeight = 2F;
 
@@ -217,8 +218,9 @@ internal static class MicroPdf417Encoder
                 : $"The data takes {data.Length} codewords and does not fit in a MicroPDF417 symbol.");
         }
 
+        // Section 5.8.1: the X dimension "should be defined by the application specification", so the symbology gives no limit.
         double xDimension = options.ResolveXDimension(0, BarcodeSymbology.DefaultXDimension, double.PositiveInfinity);
-        float rowHeight = options.ResolveBarHeight(xDimension, 0, NominalRowHeight, float.PositiveInfinity);
+        float rowHeight = options.ResolveBarHeight(xDimension, NominalRowHeight, NominalRowHeight, float.PositiveInfinity);
         BuildMatrix(data, new SymbolSize(sizes.Slice(offset, SymbolSize.Length)), xDimension, rowHeight, QuietZone, ref symbol);
     }
 

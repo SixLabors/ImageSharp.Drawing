@@ -97,6 +97,19 @@ public class CodabarSymbologyTests
             static (ref symbol) => Assert.Equal(0.191, symbol.XDimension, 1e-9));
 
     /// <summary>
+    /// Section 4.4.1 (e) of BS EN 798: "minimum bar code height: 5,0 mm or 15 % of symbol width, whichever is greater". A40156B is two start and stop
+    /// characters of three wide elements, 13 modules each, five digits of two wide elements, 11 modules each, and six gaps: 87 modules. At a 1 mm X dimension
+    /// 15 % of that is 13.05 modules, more than the 5 modules of 5 mm, so a bar height of 1 mm draws at 13.05 modules.
+    /// </summary>
+    [Fact]
+    public void ClampsTheBarHeightToTheMinimumOfSectionFourFourOne()
+        => SymbolEncoder.Encode(
+            new CodabarSymbology(),
+            "A40156B",
+            new BarcodeOptions { Dpi = SymbolEncoder.MillimetreDpi, XDimension = 1, BarHeight = 1 },
+            static (ref symbol) => Assert.All(symbol.BarHeights.ToArray(), height => Assert.Equal(13.05F, height, 1e-4F)));
+
+    /// <summary>
     /// The encoder rejects text without data between a start character and a stop character. It also rejects a start or stop character inside the data,
     /// a space, a small letter and a character that is not ASCII.
     /// </summary>

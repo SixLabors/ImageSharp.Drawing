@@ -12,6 +12,20 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 public class MicroPdf417SymbologyTests
 {
     /// <summary>
+    /// Section 5.8.2 of ISO/IEC 24728: "The row height (Y) shall conform to: Y ≥ 2X". At a 0.3 mm module 2X is 0.6 mm, so a bar height of 0.3 mm draws every
+    /// row at 2X.
+    /// </summary>
+    [Fact]
+    public void DrawsARowUnderTwoModulesAtTwoModules()
+    {
+        BarcodeOptions under = new() { Dpi = SymbolEncoder.MillimetreDpi, XDimension = 0.3, BarHeight = 0.3 };
+
+        float[] heights = SymbolEncoder.Read(new MicroPdf417Symbology(), "MicroPDF417", under, SymbolEncoder.RowHeights);
+
+        Assert.All(heights, height => Assert.Equal(2F, height));
+    }
+
+    /// <summary>
     /// A row is the left row address pattern, the symbol characters, the right row address pattern and a single module bar, with a centre row address pattern
     /// in a symbol of three or four columns: 38, 55, 82 and 99 modules for one to four columns. The quiet zone is one module on all four sides and the row
     /// height two modules.

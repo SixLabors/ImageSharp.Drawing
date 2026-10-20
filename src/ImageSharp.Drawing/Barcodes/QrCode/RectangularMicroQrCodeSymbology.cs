@@ -64,6 +64,7 @@ public sealed class RectangularMicroQrCodeSymbology : BarcodeSymbology
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
+        // Section 8.1 of ISO/IEC 23941: "the width of a module shall be specified by the application", so the symbology gives no limit.
         QrEncoder.BuildSymbol(
             text,
             false,

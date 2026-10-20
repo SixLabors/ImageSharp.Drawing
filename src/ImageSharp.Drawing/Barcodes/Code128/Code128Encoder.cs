@@ -231,7 +231,8 @@ internal static class Code128Encoder
     {
         // The bars of a GS1 symbol are 31.75 millimetres at any X dimension. The module draws at a whole number of pixels. The notes of Tables 5-47 and 5-51
         // of the GS1 General Specifications: "There is no maximum for the height". The notes of Tables 5-50 and 5-51: "In no case SHALL the bar height be less
-        // than 5.08 millimetres".
+        // than 5.08 millimetres". Section 4.4 of ISO/IEC 15417 gives Code 128 itself no bar height, and section 4.4.1 leaves the X dimension to "the
+        // application specification".
         double xDimension = options.ResolveXDimension(minimumXDimension, gs1 ? NominalXDimension : BarcodeSymbology.DefaultXDimension, maximumXDimension);
         Code128Layout layout = new()
         {

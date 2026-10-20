@@ -47,20 +47,14 @@ public sealed class DataMatrixSymbology : BarcodeSymbology
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
+        // Clause 8 of ISO/IEC 16022: "the width of a module shall be specified by the application", so the symbology gives no limit.
+        double xDimension = options.ResolveXDimension(0, DefaultMatrixXDimension, double.PositiveInfinity);
         if (this.Rows.HasValue)
         {
-            DataMatrixEncoder.BuildSymbol(
-                text,
-                false,
-                DataMatrixFormat.SquareOrRectangular,
-                this.Rows.Value,
-                this.Columns!.Value,
-                options.ResolveXDimension(0, DefaultMatrixXDimension, double.PositiveInfinity),
-                ref symbol);
+            DataMatrixEncoder.BuildSymbol(text, false, DataMatrixFormat.SquareOrRectangular, this.Rows.Value, this.Columns!.Value, xDimension, ref symbol);
         }
         else
         {
-            double xDimension = options.ResolveXDimension(0, DefaultMatrixXDimension, double.PositiveInfinity);
             DataMatrixEncoder.BuildSymbol(text, false, DataMatrixFormat.Square, 0, 0, xDimension, ref symbol);
         }
     }

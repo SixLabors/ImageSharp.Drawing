@@ -82,7 +82,7 @@ internal static class DeutschePostData
     /// <param name="symbol">The symbol to write.</param>
     public static void BuildSymbol(ReadOnlySpan<char> encoded, ReadOnlySpan<char> readable, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        double xDimension = options.ResolveXDimension(Interleaved2Of5Encoder.MinimumXDimension, NominalXDimension, double.PositiveInfinity);
+        double xDimension = options.ResolveXDimension(0, NominalXDimension, double.PositiveInfinity);
         Interleaved2Of5Layout layout = new()
         {
             XDimension = xDimension,
