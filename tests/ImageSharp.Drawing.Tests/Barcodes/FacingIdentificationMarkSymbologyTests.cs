@@ -42,8 +42,10 @@ public class FacingIdentificationMarkSymbologyTests
 
         SymbolEncoder.Encode(new FacingIdentificationMarkSymbology(), text, options, static (ref symbol) =>
         {
+            // The module is a whole number of pixels. Thus the bar height in modules is 5/8 inch divided by the X dimension of the symbol.
+            float barHeight = (float)(25.4 * 5 / 8 / symbol.XDimension);
             Assert.Equal(17F, symbol.WidthInModules);
-            Assert.All(symbol.BarHeights.ToArray(), height => Assert.Equal(20F, height));
+            Assert.All(symbol.BarHeights.ToArray(), height => Assert.Equal(barHeight, height, 1e-4F));
             Assert.Equal(0, symbol.LeadingQuietZone);
             Assert.Equal(0, symbol.TrailingQuietZone);
             Assert.True(symbol.Text.IsEmpty);

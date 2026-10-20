@@ -38,18 +38,38 @@ public class LeitcodeSymbologyTests
         => Assert.ThrowsAny<ArgumentException>(() => Encode(text));
 
     /// <summary>
-    /// A symbol without an X dimension or a bar height of the caller draws at 0.5 mm, 50 pixels at 100 pixels a millimetre, with bars of 50 modules, 25 mm.
+    /// When the options set no X dimension, the narrow module is 0.495 mm. When the options set no bar height, the bars are 25 mm high. At 1000 pixels a
+    /// millimetre, the module is 495 pixels.
     /// </summary>
     [Fact]
-    public void DefaultsToTheWidestModuleAndTheLeastHeight()
-        => SymbolEncoder.Encode(new LeitcodeSymbology(), "2134807501640", new BarcodeOptions { Dpi = SymbolEncoder.MillimetreDpi }, static (ref symbol) =>
+    public void DefaultsToTheNominalModuleAndTheLeastHeight()
+        => SymbolEncoder.Encode(new LeitcodeSymbology(), "2134807501640", new BarcodeOptions { Dpi = SymbolEncoder.MicrometreDpi }, static (ref symbol) =>
         {
-            Assert.Equal(0.5, symbol.XDimension);
-            Assert.Equal(25.0, symbol.BarHeights[0] * symbol.XDimension);
+            Assert.Equal(0.495, symbol.XDimension, 1e-9);
+            Assert.Equal(25.0, symbol.BarHeights[0] * symbol.XDimension, 1e-4);
         });
 
     /// <summary>
-    /// Encodes the text at the nominal 0.5 mm module, 50 pixels at 100 pixels a millimetre.
+    /// Deutsche Post gives a narrow module of 0.375 mm to 0.5 mm and bars at least 25 mm high. An X dimension or a bar height outside that range draws at
+    /// the nearest limit.
+    /// </summary>
+    /// <param name="xDimension">The X dimension the caller sets, in millimetres.</param>
+    /// <param name="expected">The X dimension the symbol draws at, in millimetres.</param>
+    [Theory]
+    [InlineData(0.2, 0.375)]
+    [InlineData(0.8, 0.5)]
+    public void ClampsToTheDeutschePostRange(double xDimension, double expected)
+    {
+        BarcodeOptions options = new() { Dpi = SymbolEncoder.MicrometreDpi, XDimension = xDimension, BarHeight = 10 };
+        SymbolEncoder.Encode(new LeitcodeSymbology(), "2134807501640", options, (ref symbol) =>
+        {
+            Assert.Equal(expected, symbol.XDimension, 1e-9);
+            Assert.Equal(25.0, symbol.BarHeights[0] * symbol.XDimension, 1e-4);
+        });
+    }
+
+    /// <summary>
+    /// Encodes the text with the default X dimension at 100 pixels a millimetre.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     /// <returns>The run widths of the symbol.</returns>

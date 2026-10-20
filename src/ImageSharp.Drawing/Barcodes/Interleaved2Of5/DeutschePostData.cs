@@ -11,12 +11,22 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal static class DeutschePostData
 {
     /// <summary>
-    /// The X dimension in millimetres a symbol takes when the caller sets none: a narrow module of 0.5 mm.
+    /// The smallest X dimension in millimetres. Deutsche Post: "Breite des schmalen Moduls minimal 0,375 mm".
     /// </summary>
-    private const double NominalXDimension = 0.5;
+    private const double MinimumXDimension = 0.375;
 
     /// <summary>
-    /// The bar height in millimetres a symbol takes when the caller sets none.
+    /// The default X dimension in millimetres. The value is inside the range that Deutsche Post gives.
+    /// </summary>
+    private const double NominalXDimension = 0.495;
+
+    /// <summary>
+    /// The largest X dimension in millimetres. Deutsche Post: "maximal 0,5 mm".
+    /// </summary>
+    private const double MaximumXDimension = 0.5;
+
+    /// <summary>
+    /// The default bar height in millimetres, which is also the smallest bar height. Deutsche Post: "Barcodehöhe mindestens 25 mm".
     /// </summary>
     private const double BarHeight = 25;
 
@@ -82,12 +92,12 @@ internal static class DeutschePostData
     /// <param name="symbol">The symbol to write.</param>
     public static void BuildSymbol(ReadOnlySpan<char> encoded, ReadOnlySpan<char> readable, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        double xDimension = options.ResolveXDimension(0, NominalXDimension, double.PositiveInfinity);
+        double xDimension = options.ResolveXDimension(MinimumXDimension, NominalXDimension, MaximumXDimension);
         Interleaved2Of5Layout layout = new()
         {
             XDimension = xDimension,
             NominalBarHeight = (float)(BarHeight / xDimension),
-            MinimumBarHeight = 0F,
+            MinimumBarHeight = (float)(BarHeight / xDimension),
             MaximumBarHeight = float.PositiveInfinity,
             QuietZone = MathF.Max(Interleaved2Of5Encoder.QuietZone, (float)(QuietZone / xDimension)),
             TextClearance = BarcodeTextPlacement.Clearance,

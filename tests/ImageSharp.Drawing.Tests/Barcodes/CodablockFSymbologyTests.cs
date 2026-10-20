@@ -26,8 +26,10 @@ public class CodablockFSymbologyTests
         BarcodeOptions options = new() { BarHeight = 12F * BarcodeSymbology.DefaultXDimension };
         SymbolEncoder.Encode(new CodablockFSymbology(), "A", options, (ref symbol) =>
         {
-            Assert.All(SymbolEncoder.RowBarHeights(ref symbol, symbol.Rows[1]), height => Assert.Equal(12F, height, comparer));
-            Assert.Equal(27F, symbol.HeightInModules, comparer);
+            // The module is a whole number of pixels. Thus the row height in modules is the bar height divided by the X dimension of the symbol.
+            float rowHeight = (float)(options.BarHeight.Value / symbol.XDimension);
+            Assert.All(SymbolEncoder.RowBarHeights(ref symbol, symbol.Rows[1]), height => Assert.Equal(rowHeight, height, comparer));
+            Assert.Equal((2 * rowHeight) + 3, symbol.HeightInModules, comparer);
         });
     }
 

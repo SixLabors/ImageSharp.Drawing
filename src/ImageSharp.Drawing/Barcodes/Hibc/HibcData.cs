@@ -37,6 +37,18 @@ internal static class HibcData
     public const double MinimumLinearXDimension = 0.0067 * 25.4;
 
     /// <summary>
+    /// The default X dimension in millimetres of a Code 128 or Code 39 symbol: 0.010 inch. Section 5.1: "Labelers should use an X-dimension of 0.010 inches
+    /// (0.25 mm)."
+    /// </summary>
+    public const double NominalLinearXDimension = 0.010 * 25.4;
+
+    /// <summary>
+    /// The default X dimension in millimetres of an Aztec Code, Data Matrix or QR Code symbol: 0.015 inch. Section 5.2: "Labelers should use an X-dimension
+    /// of 0.015 inches (0.37 mm)."
+    /// </summary>
+    public const double NominalMatrixXDimension = 0.015 * 25.4;
+
+    /// <summary>
     /// The delimiter that opens and closes the human readable interpretation. Section 4.1: the interpretation "should be bounded in the beginning and at the
     /// end of the data string by an asterisk".
     /// </summary>

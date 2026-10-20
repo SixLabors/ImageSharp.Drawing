@@ -208,8 +208,10 @@ public class Pdf417SymbologyTests
 
         SymbolEncoder.Encode(new Pdf417Symbology(), "PDF417", options, (ref symbol) =>
         {
-            Assert.All(symbol.BarHeights.ToArray(), height => Assert.Equal(5F, height, comparer));
-            Assert.Equal(5F * symbol.Rows.Length, symbol.HeightInModules, comparer);
+            // The module is a whole number of pixels. Thus the row height in modules is the bar height divided by the X dimension of the symbol.
+            float rowHeight = (float)(options.BarHeight.Value / symbol.XDimension);
+            Assert.All(symbol.BarHeights.ToArray(), height => Assert.Equal(rowHeight, height, comparer));
+            Assert.Equal(rowHeight * symbol.Rows.Length, symbol.HeightInModules, comparer);
         });
     }
 

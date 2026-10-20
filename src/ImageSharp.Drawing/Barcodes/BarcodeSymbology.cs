@@ -13,15 +13,18 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 public abstract class BarcodeSymbology
 {
     /// <summary>
-    /// The X dimension in millimetres of a symbology whose specification gives none: 2 pixels at the default 96 dots per inch, 2 x 25.4 / 96.
+    /// The default X dimension in millimetres of a linear or stacked symbol: 0.330. When the specification of a symbology gives no X dimension, the symbology
+    /// uses this value. GS1 General Specifications release 26.0 gives this target X dimension to linear symbols in Table 5-44.
     /// </summary>
-    public const double DefaultXDimension = 2 * 25.4 / 96;
+    public const double DefaultXDimension = 0.330;
 
     /// <summary>
-    /// The X dimension in millimetres of an Aztec Code, Code One, Data Matrix, DotCode, Han Xin Code, QR Code or Ultracode symbol whose specification gives
-    /// none: twice <see cref="DefaultXDimension"/>, 4 pixels at the default 96 dots per inch.
+    /// The default X dimension in millimetres of a 2D matrix symbol: 0.495. The specifications of Aztec Code, Code One, Data Matrix, DotCode, Han Xin Code,
+    /// QR Code and Ultracode give no X dimension. Thus these symbologies use this value. GS1 General Specifications release 26.0 gives this target X
+    /// dimension to 2D symbols in Table 5-45 and Table 5-46. The notes to those tables give the reason. Because of optical effects in image capture, the X
+    /// dimension of a 2D symbol must be 1.5 times the X dimension of a linear symbol.
     /// </summary>
-    public const double DefaultMatrixXDimension = 2 * DefaultXDimension;
+    public const double DefaultMatrixXDimension = 0.495;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BarcodeSymbology"/> class.

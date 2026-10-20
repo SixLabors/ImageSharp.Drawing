@@ -5,8 +5,9 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
 /// The Deutsche Post Leitcode, the routing code of a mail item. An Interleaved 2 of 5 symbol carries it. The code is fourteen digits: the five digit postal
-/// code, the three digit street code, the three digit house number, the two digit product code and the check digit. The symbol draws at a narrow module of
-/// 0.5 mm with bars 25 mm high when the caller sets neither. The quiet zones are 5 mm on each side, and at least the ten modules of Interleaved 2 of 5.
+/// code, the three digit street code, the three digit house number, the two digit product code and the check digit. The default narrow module is 0.495 mm.
+/// The default bars are 25 mm high. The narrow module is always 0.375 mm to 0.5 mm. The bars are always at least 25 mm high. The quiet zones are 5 mm on
+/// each side, and at least the ten modules of Interleaved 2 of 5.
 /// <para>
 /// The input is the thirteen data digits, or those digits and the check digit. This class always calculates the check digit. When the input carries one, this
 /// class compares the two.

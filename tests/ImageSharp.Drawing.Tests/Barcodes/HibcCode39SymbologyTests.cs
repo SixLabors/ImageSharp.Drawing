@@ -110,11 +110,14 @@ public class HibcCode39SymbologyTests
 
     /// <summary>
     /// The data already carries the HIBC check character, so Code 39 adds no check character. The symbol is the start character, the flag character, the
-    /// data, the one check character and the stop character. Each Code 39 character is 16 modules wide with its gap, and the last gap is not drawn.
+    /// data, the one check character and the stop character. Each Code 39 character is 16 modules wide with its gap, and the last gap is not drawn. At 96
+    /// dots per inch, a module draws at 1 pixel and a wide element at 3 pixels. Thus the sum of the runs in pixels is the width in modules.
     /// </summary>
     [Fact]
     public void AddsNoCode39CheckCharacter()
-        => Assert.Equal(((1 + 7 + 1 + 2) * 16) - 1, SymbolEncoder.Read(new HibcCode39Symbology(), "$A1234G", new BarcodeOptions(), SymbolEncoder.RunSum));
+        => Assert.Equal(
+            ((1 + 7 + 1 + 2) * 16) - 1,
+            SymbolEncoder.Read(new HibcCode39Symbology(), "$A1234G", new BarcodeOptions { Dpi = 96 }, SymbolEncoder.RunSum));
 
     /// <summary>
     /// Encodes the text with the default options.

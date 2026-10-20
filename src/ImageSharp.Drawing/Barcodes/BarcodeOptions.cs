@@ -22,13 +22,13 @@ public sealed class BarcodeOptions
     /// </summary>
     internal const double LimitTolerance = 1E-9;
 
-    private float dpi = 96F;
+    private float dpi = 300F;
     private double? xDimension;
     private double? barHeight;
 
     /// <summary>
-    /// Gets or sets the resolution in dots per inch. One module draws <see cref="XDimension"/> / 25.4 x <see cref="Dpi"/> pixels wide, and text renders at
-    /// this resolution. The default is 96, the CSS reference pixel: "1px = 1/96th of 1in".
+    /// Gets or sets the resolution in dots per inch. A module is <see cref="XDimension"/> / 25.4 x <see cref="Dpi"/> pixels wide. The text also uses this
+    /// resolution. Set this value to the resolution of the device that prints or shows the image. The default is 300. Many printers use this resolution.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">The value is not greater than zero.</exception>
     public float Dpi
@@ -44,9 +44,10 @@ public sealed class BarcodeOptions
     /// <summary>
     /// Gets or sets the X dimension in millimetres: the width of the narrowest element of the symbology, which is one module. Set <see langword="null"/> to
     /// take the nominal X dimension the specification of the symbology gives. Where the specification fixes the width of the whole symbol, as for
-    /// <see cref="SwissQrCodeSymbology"/>, the nominal X dimension is that width divided by the module count of the symbol. Where the specification gives no X
-    /// dimension, it is <see cref="BarcodeSymbology.DefaultMatrixXDimension"/> for Aztec Code, Code One, Data Matrix, DotCode, Han Xin Code, QR Code and
-    /// Ultracode, 4 pixels at the default <see cref="Dpi"/>, and <see cref="BarcodeSymbology.DefaultXDimension"/> for the other symbologies, 2 pixels.
+    /// <see cref="SwissQrCodeSymbology"/>, the nominal X dimension is that width divided by the module count of the symbol. Some specifications give no X
+    /// dimension. Aztec Code, Code One, Data Matrix, DotCode, Han Xin Code, QR Code and Ultracode then use
+    /// <see cref="BarcodeSymbology.DefaultMatrixXDimension"/>, 0.495 millimetres. The other symbologies then use
+    /// <see cref="BarcodeSymbology.DefaultXDimension"/>, 0.330 millimetres.
     /// <para>
     /// A symbol draws at the X dimension of the nearest whole number of pixels at <see cref="Dpi"/>, at least one pixel, so every module of the symbol is
     /// the same number of pixels wide. The symbol can then be slightly larger or smaller than this X dimension gives. Where the specification of the symbology

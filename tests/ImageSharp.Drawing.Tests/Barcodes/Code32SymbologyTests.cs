@@ -7,7 +7,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
 /// Encoder tests for <see cref="Code32Symbology"/>. The check digit, the base 32 alphabet and the printed line come from Allegato A of the Italian decree of
-/// 18 July 2014. At the default 96 dots per inch the 0.25 mm module draws at 1 pixel, and the wide element of 2.5 modules rounds half up to 3 pixels.
+/// 18 July 2014. At 96 dots per inch, the 0.25 mm module draws at 1 pixel. The wide element of 2.5 modules rounds half up to 3 pixels.
 /// </summary>
 public class Code32SymbologyTests
 {
@@ -54,7 +54,7 @@ public class Code32SymbologyTests
     [InlineData("00000000", "000000")]
     [InlineData("09999999", "2ZCS7T")]
     public void CarriesSixBase32Characters(string text, string expected)
-        => Assert.Equal(SymbolEncoder.Read(new Code39Symbology(), expected, new BarcodeOptions(), SymbolEncoder.RunString), Encode(text));
+        => Assert.Equal(SymbolEncoder.Read(new Code39Symbology(), expected, new BarcodeOptions { Dpi = 96 }, SymbolEncoder.RunString), Encode(text));
 
     /// <summary>
     /// Area 3 prints the letter A and then the nine digits. That letter is the field identifier for automatic reading equipment. The symbol carries the six
@@ -70,23 +70,23 @@ public class Code32SymbologyTests
     }
 
     /// <summary>
-    /// The symbol carries six characters between the start and stop characters, and Code 39 adds no check character of its own. At 1 pixel a module the
-    /// wide element is 3 modules, so a character and its gap are 3 x 3 + 6 + 1 = 16 modules, and the stop character has no gap.
+    /// The symbol carries six characters between the start and stop characters, and Code 39 adds no check character of its own. At 96 dots per inch, a
+    /// module is 1 pixel and the wide element is 3 modules. Thus a character and its gap are 3 x 3 + 6 + 1 = 16 modules. The stop character has no gap.
     /// </summary>
     [Fact]
     public void AddsNoCode39CheckCharacter()
         => Assert.Equal(
             ((6 + 2) * 16) - 1,
-            SymbolEncoder.Read(new Code32Symbology(), "012345676", new BarcodeOptions(), static (ref symbol) => symbol.WidthInModules));
+            SymbolEncoder.Read(new Code32Symbology(), "012345676", new BarcodeOptions { Dpi = 96 }, static (ref symbol) => symbol.WidthInModules));
 
     /// <summary>
     /// Allegato A: "lo spessore nominale delle barre e degli spazi stretti è di mm 0,250", so a symbol without an X dimension of the caller draws its modules
-    /// at 0.25 mm. At the default 96 dots per inch 0.25 mm is 0.94 pixels, so the module draws at 1 pixel, 25.4 / 96 mm.
+    /// at 0.25 mm. At the default 300 dots per inch, 0.25 mm is 2.95 pixels. Thus the module draws at 3 pixels, 3 x 25.4 / 300 mm.
     /// </summary>
     [Fact]
     public void DefaultsTheModuleWidthToTheNominalWidth()
         => Assert.Equal(
-            25.4 / 96,
+            3 * 25.4 / 300,
             SymbolEncoder.Read(new Code32Symbology(), "012345676", new BarcodeOptions(), static (ref symbol) => symbol.XDimension),
             1e-12);
 
@@ -98,10 +98,10 @@ public class Code32SymbologyTests
         => Assert.Equal(Encode("012345676"), Encode("01234567"));
 
     /// <summary>
-    /// Encodes the text with the default options.
+    /// Encodes the text at 96 dots per inch, where a module draws at 1 pixel.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     /// <returns>The run widths of the symbol.</returns>
     private static string Encode(string text)
-        => SymbolEncoder.Read(new Code32Symbology(), text, new BarcodeOptions(), SymbolEncoder.RunString);
+        => SymbolEncoder.Read(new Code32Symbology(), text, new BarcodeOptions { Dpi = 96 }, SymbolEncoder.RunString);
 }

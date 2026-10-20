@@ -24,10 +24,10 @@ internal static class TelepenEncoder
     public const int QuietZone = 10;
 
     /// <summary>
-    /// The X dimension in millimetres a symbol takes when the caller sets none, 0.0125 inch. The Telepen history of SB Electronic Systems: "For normal
-    /// applications the recommended value of x should be between 0.010 inch an 0.0125".
+    /// The default X dimension in millimetres: 0.01125 inch. The Telepen history of SB Electronic Systems recommends 0.010 inch to 0.0125 inch: "For normal
+    /// applications the recommended value of x should be between 0.010 inch an 0.0125". The default is the middle of that range.
     /// </summary>
-    private const double NominalXDimension = 0.0125 * 25.4;
+    private const double NominalXDimension = 0.01125 * 25.4;
 
     /// <summary>
     /// The smallest X dimension in millimetres, 0.0075 inch. The Telepen history of SB Electronic Systems: "For open systems the minimum value of x is 0.0075

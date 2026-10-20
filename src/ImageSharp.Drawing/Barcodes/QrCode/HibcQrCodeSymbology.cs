@@ -11,8 +11,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// with "/", each with any supplemental data fields.
 /// <para>
 /// When a font is set, that same string prints below the symbol between delimiters, with a space printed as an underscore and a zero as "Ø". Primary and
-/// secondary data that the symbol joins with "/" print on two lines, broken after the "/". When the options set no X dimension, the symbol prints at
-/// <see cref="BarcodeSymbology.DefaultMatrixXDimension"/>.
+/// secondary data that the symbol joins with "/" print on two lines, broken after the "/". When the options set no X dimension, the X dimension
+/// is 0.015 inch, from section 5.2 of ANSI/HIBC 2.6.
 /// </para>
 /// </summary>
 public sealed class HibcQrCodeSymbology : BarcodeSymbology
@@ -94,7 +94,7 @@ public sealed class HibcQrCodeSymbology : BarcodeSymbology
                 QrFormat.Full,
                 this.ErrorCorrectionLevel,
                 this.Version ?? 0,
-                options.ResolveXDimension(HibcData.MinimumMatrixXDimension, DefaultMatrixXDimension, double.PositiveInfinity),
+                options.ResolveXDimension(HibcData.MinimumMatrixXDimension, HibcData.NominalMatrixXDimension, double.PositiveInfinity),
                 ref symbol);
 
             if (options.Font is not null)
