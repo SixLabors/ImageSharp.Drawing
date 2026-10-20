@@ -50,6 +50,17 @@ public class CodablockFSymbologyTests
     }
 
     /// <summary>
+    /// The quiet zones before and after the rows are at least 10X wide.
+    /// </summary>
+    [Fact]
+    public void CodablockF_QuietZonesAreTenModules()
+        => Encode("Codablock F", 8, static (ref symbol) =>
+        {
+            Assert.Equal(10F, symbol.LeadingQuietZone);
+            Assert.Equal(10F, symbol.TrailingQuietZone);
+        });
+
+    /// <summary>
     /// The column count is 4 to 62, the characters are ASCII 0 to 127, and 44 rows are the most a symbol holds.
     /// </summary>
     [Fact]
