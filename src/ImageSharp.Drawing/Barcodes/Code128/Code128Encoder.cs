@@ -191,6 +191,7 @@ internal static class Code128Encoder
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="symbol">The symbol to write.</param>
     /// <exception cref="ArgumentException">The text carries a character the symbology cannot encode.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A GS1 symbol has a bar height under <see cref="Gs1Data.MinimumTruncatedBarHeight"/>.</exception>
     public static void BuildSymbol(
         ReadOnlySpan<char> text,
         bool gs1,
@@ -217,6 +218,7 @@ internal static class Code128Encoder
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="symbol">The symbol to write.</param>
     /// <exception cref="ArgumentException">The text carries a character the symbology cannot encode.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A GS1 symbol has a bar height under <see cref="Gs1Data.MinimumTruncatedBarHeight"/>.</exception>
     public static void BuildSymbol(
         ReadOnlySpan<char> text,
         bool gs1,
@@ -264,6 +266,7 @@ internal static class Code128Encoder
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="symbol">The symbol to write.</param>
     /// <exception cref="ArgumentException">The text carries a character the symbology cannot encode.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A GS1 symbol has a bar height under <see cref="Gs1Data.MinimumTruncatedBarHeight"/>.</exception>
     public static void BuildSymbol(
         ReadOnlySpan<char> text,
         bool gs1,
@@ -278,6 +281,14 @@ internal static class Code128Encoder
     {
         double xDimension = layout.XDimension;
         Guard.MustBeLessThanOrEqualTo(text.Length, MaximumLength, nameof(text));
+
+        if (gs1 && options.IsBarHeightUnder(Gs1Data.MinimumTruncatedBarHeight))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                options.BarHeight,
+                $"A GS1-128 symbol has bars at least {Gs1Data.MinimumTruncatedBarHeight} mm high; the bar height is {options.BarHeight:0.##} mm.");
+        }
 
         // The code sets carry ASCII 0 to 127 between them, and clause 4.3.4.2 d) of ISO/IEC 15417 adds the byte values 128 to 255 with FNC4, so anything above
         // U+00FF is rejected. The message decodes the code point at the first such unit, so a surrogate pair reports as the one character it is.

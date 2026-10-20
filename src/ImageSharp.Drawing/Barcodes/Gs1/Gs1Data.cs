@@ -69,6 +69,13 @@ internal static class Gs1Data
     public const double SsccMaximumXDimension = 0.940;
 
     /// <summary>
+    /// The smallest bar height in millimetres of a GS1-128 or ITF-14 symbol. A small item or package can truncate the bars below the minimum symbol height of
+    /// its table, but note (****) of Table 5-47 sets "no less than 5.08 millimetres", and the notes of Table 5-50 and Table 5-51: "In no case SHALL the bar
+    /// height be less than 5.08 millimetres".
+    /// </summary>
+    public const double MinimumTruncatedBarHeight = 5.08;
+
+    /// <summary>
     /// The smallest X dimension in millimetres of an ITF-14 symbol, the smallest minimum of the tables that list ITF-14: 0.170 in Table 5-52.
     /// </summary>
     public const double Itf14MinimumXDimension = 0.170;

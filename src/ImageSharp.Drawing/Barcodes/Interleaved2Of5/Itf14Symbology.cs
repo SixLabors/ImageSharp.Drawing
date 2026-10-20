@@ -130,6 +130,13 @@ public sealed class Itf14Symbology : BarcodeSymbology
         }
 
         double xDimension = options.ResolveXDimension(Gs1Data.Itf14MinimumXDimension, XDimension, Gs1Data.Itf14MaximumXDimension);
+        if (options.IsBarHeightUnder(Gs1Data.MinimumTruncatedBarHeight))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                options.BarHeight,
+                $"An ITF-14 symbol has bars at least {Gs1Data.MinimumTruncatedBarHeight} mm high; the bar height is {options.BarHeight:0.##} mm.");
+        }
 
         // The runs count pixels, so every element draws at a whole number of pixels. A wide element is WideElement / NarrowElement modules, rounded half up
         // to a whole pixel: at an odd number of pixels a module the ratio of 2.5 becomes 3.0 at one pixel and 2.67 at three, and every wide element takes the

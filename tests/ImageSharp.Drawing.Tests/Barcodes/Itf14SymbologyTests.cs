@@ -37,6 +37,17 @@ public class Itf14SymbologyTests
         => Assert.Throws<ArgumentException>(() => Encode("15400141288764"));
 
     /// <summary>
+    /// The note of Table 5-50 of the GS1 General Specifications lets a small package truncate the bars of an ITF-14 symbol, but "In no case SHALL the bar
+    /// height be less than 5.08 millimetres". A bar height of 5.08 mm encodes, and 5.07 mm throws.
+    /// </summary>
+    [Fact]
+    public void RejectsABarHeightUnderTheTruncationMinimum()
+    {
+        Assert.Null(Record.Exception(() => SymbolEncoder.Encode(new Itf14Symbology(), "15400141288763", new BarcodeOptions { BarHeight = 5.08 })));
+        Assert.Throws<ArgumentOutOfRangeException>(() => SymbolEncoder.Encode(new Itf14Symbology(), "15400141288763", new BarcodeOptions { BarHeight = 5.07 }));
+    }
+
+    /// <summary>
     /// Figure 5-32 prints the number both as "1 54 00141 28876 3" and as "15400141288763". Section 4.14 rule 2.a.v permits the spaces, so the printed line
     /// keeps the spaces of the input, and a calculated check digit follows a space only when the input has spaces. Section 5.3.2.2: "A minimum space of 1.02
     /// millimetre (0.040 inch) between the bottom line of the bearer bar and the top of the human readable characters is required", which is 1.02 / 0.495
