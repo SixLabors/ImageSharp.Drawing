@@ -95,6 +95,37 @@ public class CodabarSymbologyTests
         Assert.Equal((12 * text.Length) + (2 * wideDataCharacters) + 3, widthInModules);
     }
 
+    /// <summary>
+    /// Section 4.4.1 (d) of BS EN 798: "minimum width of quiet zone: 10X or 2,54 mm, whichever is greater". At an X dimension of 0.2 mm, 10X is 2 mm, so each
+    /// quiet zone is 2.54 mm. At 0.5 mm, 10X is 5 mm and wider than 2.54 mm.
+    /// </summary>
+    /// <param name="xDimension">The X dimension in millimetres.</param>
+    /// <param name="expected">The width of each quiet zone in millimetres.</param>
+    [Theory]
+    [InlineData(0.2, 2.54)]
+    [InlineData(0.5, 5.0)]
+    public void KeepsTheQuietZoneOfSectionFourFourOne(double xDimension, double expected)
+        => SymbolEncoder.Encode(
+            new CodabarSymbology(),
+            "A40156B",
+            new BarcodeOptions { Dpi = SymbolEncoder.MillimetreDpi, XDimension = xDimension },
+            (ref symbol) =>
+            {
+                Assert.Equal(expected, symbol.LeadingQuietZone * symbol.XDimension, 1e-4);
+                Assert.Equal(expected, symbol.TrailingQuietZone * symbol.XDimension, 1e-4);
+            });
+
+    /// <summary>
+    /// Section 4.4.1 (a) of BS EN 798: "minimum width of narrow element (X): 0,191 mm", so a smaller X dimension draws at that minimum.
+    /// </summary>
+    [Fact]
+    public void ClampsTheXDimensionToTheMinimumOfSectionFourFourOne()
+        => SymbolEncoder.Encode(
+            new CodabarSymbology(),
+            "A40156B",
+            new BarcodeOptions { Dpi = SymbolEncoder.MicrometreDpi, XDimension = 0.1 },
+            static (ref symbol) => Assert.Equal(0.191, symbol.XDimension, 1e-9));
+
     [Theory]
     [InlineData("")]
     [InlineData("A")]

@@ -8,7 +8,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// <summary>
 /// Encoder tests for <see cref="Code32Symbology"/>. Each expected run string is the alternating bar and space module widths, starting with a bar, taken from an
 /// independent reference implementation through its raw encoding API, less the gap it emits after the stop character. The check digit, the base 32 alphabet and
-/// the printed line come from Allegato A of the Italian decree of 18 July 2014.
+/// the printed line come from Allegato A of the Italian decree of 18 July 2014. The reference draws a wide element three modules wide. At the default 96 dots
+/// per inch the 0.25 mm module draws at 1 pixel, and the wide element of 2.5 modules rounds half up to 3 pixels, so the runs are the reference runs.
 /// </summary>
 public class Code32SymbologyTests
 {
@@ -50,7 +51,8 @@ public class Code32SymbologyTests
 
     /// <summary>
     /// Table 1 gives the base 32 alphabet as the digits and the English letters without A, E, I and O. The symbol carries six of those characters. The lowest
-    /// AIC code carries six zeros. The highest is 099999993, whose base 32 places are 2, 31, 11, 24, 7 and 25.
+    /// AIC code carries six zeros. The highest is 099999993, whose base 32 places are 2, 31, 11, 24, 7 and 25. A Code 39 symbol of those characters draws its
+    /// wide elements three modules wide, as a Code 32 symbol does at 1 pixel a module.
     /// </summary>
     [Theory]
     [InlineData("00000000", "000000")]
@@ -72,19 +74,25 @@ public class Code32SymbologyTests
     }
 
     /// <summary>
-    /// The symbol carries six characters between the start and stop characters, and Code 39 adds no check character of its own.
+    /// The symbol carries six characters between the start and stop characters, and Code 39 adds no check character of its own. At 1 pixel a module the
+    /// wide element is 3 modules, so a character and its gap are 3 x 3 + 6 + 1 = 16 modules, and the stop character has no gap.
     /// </summary>
     [Fact]
     public void AddsNoCode39CheckCharacter()
-        => Assert.Equal(((6 + 2) * 16) - 1, SymbolEncoder.Read(new Code32Symbology(), "012345676", new BarcodeOptions(), SymbolEncoder.RunSum));
+        => Assert.Equal(
+            ((6 + 2) * 16) - 1,
+            SymbolEncoder.Read(new Code32Symbology(), "012345676", new BarcodeOptions(), static (ref symbol) => symbol.WidthInModules));
 
     /// <summary>
     /// Allegato A: "lo spessore nominale delle barre e degli spazi stretti è di mm 0,250", so a symbol without an X dimension of the caller draws its modules
-    /// at 0.25 mm.
+    /// at 0.25 mm. At the default 96 dots per inch 0.25 mm is 0.94 pixels, so the module draws at 1 pixel, 25.4 / 96 mm.
     /// </summary>
     [Fact]
     public void DefaultsTheModuleWidthToTheNominalWidth()
-        => Assert.Equal(0.25, SymbolEncoder.Read(new Code32Symbology(), "012345676", new BarcodeOptions(), static (ref symbol) => symbol.XDimension));
+        => Assert.Equal(
+            25.4 / 96,
+            SymbolEncoder.Read(new Code32Symbology(), "012345676", new BarcodeOptions(), static (ref symbol) => symbol.XDimension),
+            1e-12);
 
     /// <summary>
     /// Encodes the text with the default options.

@@ -14,6 +14,11 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal static class AustraliaPostEncoder
 {
     /// <summary>
+    /// The largest size of the text representation in points: it "should appear above the barcode in 8 point type or less".
+    /// </summary>
+    public const float MaximumTextSize = 8F;
+
+    /// <summary>
     /// The number of digits in the format control code and the sorting code together.
     /// </summary>
     public const int FixedDigits = 10;
@@ -40,7 +45,7 @@ internal static class AustraliaPostEncoder
     /// "1.0" to "1.6", an ascender or descender bar of 3.15 mm from "2.6" to "3.7", so an extender of 1.85 mm, and a bar density of 23.5 bars per 25.4 mm from
     /// "22 to 25 bars per 25.4mm", so a pitch of 1.08 mm. A run unit of 0.01 mm is 1/50 module, a bar is 50 units and a space 58, inside the bar gap of "0.4"
     /// to "0.7". Diagram 14 gives a quiet zone of 6 mm at each end and 2 mm above and below, and the text representation "should appear above the barcode" and
-    /// "must be outside of the barcode's minimum Quiet Zone".
+    /// "must be outside of the barcode's minimum Quiet Zone". The bar width the symbol draws at is clamped to the "0.4" to "0.6" mm of the table on page 12.
     /// </summary>
     public static readonly FourStateMetrics Metrics = new(
         0.5,
@@ -54,7 +59,11 @@ internal static class AustraliaPostEncoder
         (float)(2 / 0.5),
         BarcodeTextSide.AboveBars,
         (float)(2 / 0.5),
-        BarcodeTextAlignment.Centered);
+        BarcodeTextAlignment.Centered)
+    {
+        MinimumXDimension = 0.4,
+        MaximumXDimension = 0.6,
+    };
 
     /// <summary>
     /// The field of the parity symbols: GF(64) with the primitive polynomial 1 + x + x^6.
@@ -86,7 +95,7 @@ internal static class AustraliaPostEncoder
     /// <returns>37 for the Standard Customer Barcode and the Null Customer Barcode, 52 for Customer Barcode 2, 67 for Customer Barcode 3.</returns>
     public static int BarCount(ReadOnlySpan<char> formatControlCode) => formatControlCode switch
     {
-        "00" or "11" or "45" or "87" or "92" => 37,
+        "00" or "11" => 37,
         "59" => 52,
         "62" => 67,
         _ => 0,
@@ -213,6 +222,9 @@ internal static class AustraliaPostEncoder
         Span<char> line = lineStorage;
         int lineLength = options.Font is null ? 0 : TextRepresentation(text, parity, line);
         FourStateEncoder.BuildSymbol(states, Metrics, line[..lineLength], options, ref symbol);
+
+        // The text representation "should appear above the barcode in 8 point type or less".
+        symbol.SetTextSize(0F, MaximumTextSize);
     }
 
     /// <summary>

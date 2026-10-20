@@ -10,20 +10,21 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// not zero, its remainder modulo 3 picks the bar in the lowest position left, 1 a lower bar, 2 an upper bar and 0 a full bar, and the value less the bar's
 /// weight is divided by 3.
 /// <para>
-/// Section 1.4 gives the standard dimensions: bars and gaps of 1 mm, the two half bars of 4 mm and the full bar of 8 mm, so at the 1 mm module bars and gaps
-/// are 1 module and the heights 4 and 8 modules, or half and the whole of the height the caller sets. The quiet zone of 6 mm is 6 modules. The printed line
-/// shows the number as given.
+/// Section 1.4 gives the standard dimensions: bars and gaps of 1 mm, the two half bars of 4 mm and the full bar of 8 mm for a 4 mm two-track sensor head. Bars
+/// and gaps are 1 module, the X dimension, which section 1.4 allows from 0.8 mm to 2 mm. The full bar is 8 mm high when the caller sets no height, and the
+/// half bars are half the full bar. The symbol keeps 6 mm clear on either side, the gap section 2.2.4 gives between the first or last code bar and other
+/// print. The guide defines no text line, so a font prints none.
 /// </para>
 /// </summary>
 public sealed class TwoTrackPharmacodeSymbology : BarcodeSymbology
 {
     /// <summary>
-    /// The smallest value, two lower bars.
+    /// The smallest value, two lower bars. Section 4.9.2: "coding that is only one bar wide should never be used".
     /// </summary>
     public const int MinimumValue = 4;
 
     /// <summary>
-    /// The largest value, sixteen full bars.
+    /// The largest value, sixteen full bars, the last count of the table of section 4.1.
     /// </summary>
     public const int MaximumValue = 64570080;
 
@@ -33,14 +34,25 @@ public sealed class TwoTrackPharmacodeSymbology : BarcodeSymbology
     private const double XDimension = 1;
 
     /// <summary>
-    /// The quiet zone in modules on each side: 6 mm at the 1 mm module.
+    /// The smallest X dimension in millimetres, the smallest bar width of section 1.4.
     /// </summary>
-    private const int QuietZone = 6;
+    private const double MinimumXDimension = 0.8;
 
     /// <summary>
-    /// The height of the full bar in modules when the caller sets none: 8 mm at the 1 mm module.
+    /// The largest X dimension in millimetres, the largest bar width of section 1.4.
     /// </summary>
-    private const float NominalBarHeight = 8F;
+    private const double MaximumXDimension = 2;
+
+    /// <summary>
+    /// The clear space in millimetres on each side. Section 2.2.4: "The gap between the first or last code bar and the extraneous print or the edges of the
+    /// paper or the start or end bar "D" should be a minimum of 6 mm."
+    /// </summary>
+    private const double QuietZone = 6;
+
+    /// <summary>
+    /// The height of the full bar in millimetres when the caller sets none, the long code bar of section 1.4 for a 4 mm two-track sensor head.
+    /// </summary>
+    private const double NominalBarHeight = 8;
 
     /// <summary>
     /// The radix of the bar weights: a bar in position n weighs 3 to the power n - 1 times its kind.
@@ -85,8 +97,9 @@ public sealed class TwoTrackPharmacodeSymbology : BarcodeSymbology
             value = (value - (int)bar) / Radix;
         }
 
-        double xDimension = options.XDimension ?? XDimension;
-        float barHeight = options.ResolveBarHeight(xDimension, NominalBarHeight);
+        double xDimension = options.ResolveXDimension(MinimumXDimension, XDimension, MaximumXDimension);
+
+        float barHeight = options.ResolveBarHeight(xDimension, (float)(NominalBarHeight / xDimension));
         float halfHeight = barHeight * 0.5F;
         Span<int> runs = symbol.BeginLinear((count * 2) - 1, xDimension, out Span<float> heights, out Span<float> tops);
         runs.Fill(1);
@@ -97,12 +110,7 @@ public sealed class TwoTrackPharmacodeSymbology : BarcodeSymbology
             tops[i] = bar == TrackBar.Lower ? halfHeight : 0F;
         }
 
-        if (options.Font is not null)
-        {
-            symbol.ReserveText(1, text.Length);
-            symbol.AddText(text, 0F, runs.Length, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);
-        }
-
-        symbol.EndLinear(QuietZone, QuietZone);
+        float quietZone = (float)(QuietZone / xDimension);
+        symbol.EndLinear(quietZone, quietZone);
     }
 }

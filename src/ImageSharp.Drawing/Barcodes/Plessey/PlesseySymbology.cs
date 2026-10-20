@@ -11,7 +11,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// which the printed line does not show.
 /// <para>
 /// Every symbol carries two check characters, which hold the eight bit remainder of the data divided by the generator polynomial x^8 + x^7 + x^6 + x^5 + x^3 +
-/// 1. The encoder calculates them, or validates the two the input ends with, and by default it prints them after the data.
+/// 1. The encoder calculates them, or validates the two the input ends with, and by default the printed line shows the data only.
 /// </para>
 /// </summary>
 public sealed class PlesseySymbology : BarcodeSymbology
@@ -20,7 +20,7 @@ public sealed class PlesseySymbology : BarcodeSymbology
     /// Initializes a new instance of the <see cref="PlesseySymbology"/> class.
     /// </summary>
     public PlesseySymbology()
-        : this(false, true)
+        : this(false, false)
     {
     }
 
@@ -30,7 +30,7 @@ public sealed class PlesseySymbology : BarcodeSymbology
     /// <param name="validateCheckCharacters"> Whether the input ends with the two check characters, which the encoder validates, rather than with data, for
     /// which the encoder calculates them. </param>
     public PlesseySymbology(bool validateCheckCharacters)
-        : this(validateCheckCharacters, true)
+        : this(validateCheckCharacters, false)
     {
     }
 

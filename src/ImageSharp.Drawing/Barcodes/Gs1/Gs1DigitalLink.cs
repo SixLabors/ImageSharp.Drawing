@@ -19,6 +19,12 @@ internal static class Gs1DigitalLink
         SearchValues.Create("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~:/?#[]@!$&'()*+,;=%");
 
     /// <summary>
+    /// The characters section 4.2 of the GS1 Digital Link Standard says "must be represented using percent-encoding" in a value, other than "#", "/", "%",
+    /// "&amp;" and "?", which end a value or start a percent-encoding before the value is read.
+    /// </summary>
+    private static readonly SearchValues<char> PercentEncodedCharacters = SearchValues.Create("!+,()*';:<=>");
+
+    /// <summary>
     /// Validates the URI.
     /// </summary>
     /// <param name="uri">The URI.</param>
@@ -85,12 +91,11 @@ internal static class Gs1DigitalLink
             throw new ArgumentException("A GS1 Digital Link URI has a host name and then a path.", nameof(uri));
         }
 
-        // The fragment ends the data, and the query string runs from "?" to the fragment.
+        // Section 4.11 builds the URI from the path and the query string with no fragment, and section 4.2 percent-encodes "#" in data, so the URI has no "#".
         ReadOnlySpan<char> path = rest[slash..];
-        int fragment = path.IndexOf('#');
-        if (fragment >= 0)
+        if (path.Contains('#'))
         {
-            path = path[..fragment];
+            throw new ArgumentException("A GS1 Digital Link URI has no fragment; percent-encode \"#\" as %23.", nameof(uri));
         }
 
         ReadOnlySpan<char> query = [];
@@ -234,7 +239,7 @@ internal static class Gs1DigitalLink
                 pairs = [];
             }
 
-            AppendElement(identifier, value, false, ref buffer, ref elements);
+            AppendElement(identifier, value, ref buffer, ref elements);
             count++;
         }
 
@@ -262,7 +267,7 @@ internal static class Gs1DigitalLink
                 continue;
             }
 
-            AppendElement(parameter[..equals], parameter[(equals + 1)..], true, ref buffer, ref elements);
+            AppendElement(parameter[..equals], parameter[(equals + 1)..], ref buffer, ref elements);
         }
     }
 
@@ -271,13 +276,11 @@ internal static class Gs1DigitalLink
     /// </summary>
     /// <param name="identifier">The Application Identifier.</param>
     /// <param name="value">The percent-encoded value.</param>
-    /// <param name="query">Whether the value is in the query string, where "+" stands for a space.</param>
     /// <param name="buffer">The buffer the decoded Application Identifier and value are written to.</param>
     /// <param name="elements">The builder the element position is written to.</param>
     private static void AppendElement(
         ReadOnlySpan<char> identifier,
         ReadOnlySpan<char> value,
-        bool query,
         ref ValueStringBuilder buffer,
         ref ValueListBuilder<Gs1Element> elements)
     {
@@ -296,13 +299,28 @@ internal static class Gs1DigitalLink
         buffer.Append(identifier);
         int dataStart = buffer.Length;
 
-        // RFC 3986 percent-encoding: "%" and two hexadecimal digits stand for one character. A "%" without two hexadecimal digits stays as it is, and the data
-        // rules then judge it.
+        // Section 4.2: the characters that have special meanings in URIs "must be represented using percent-encoding".
+        int literal = value.IndexOfAny(PercentEncodedCharacters);
+        if (literal >= 0)
+        {
+            throw new ArgumentException(
+                $"The value of Application Identifier ({identifier}) carries '{value[literal]}', which a GS1 Digital Link URI percent-encodes.",
+                nameof(value));
+        }
+
+        // Section 4.11: pct-encoded = "%" HEXDIG HEXDIG, the percent-encoding of RFC 3986, so two hexadecimal digits stand for one character.
         for (int i = 0; i < value.Length; i++)
         {
             char c = value[i];
-            if (c == '%' && i + 2 < value.Length && char.IsAsciiHexDigit(value[i + 1]) && char.IsAsciiHexDigit(value[i + 2]))
+            if (c == '%')
             {
+                if (i + 2 >= value.Length || !char.IsAsciiHexDigit(value[i + 1]) || !char.IsAsciiHexDigit(value[i + 2]))
+                {
+                    throw new ArgumentException(
+                        $"The value of Application Identifier ({identifier}) carries a \"%\" without two hexadecimal digits; percent-encode it as %25.",
+                        nameof(value));
+                }
+
                 int decoded = (HexValue(value[i + 1]) << 4) | HexValue(value[i + 2]);
                 if (decoded == 0)
                 {
@@ -314,7 +332,7 @@ internal static class Gs1DigitalLink
             }
             else
             {
-                buffer.Append(query && c == '+' ? ' ' : c);
+                buffer.Append(c);
             }
         }
 

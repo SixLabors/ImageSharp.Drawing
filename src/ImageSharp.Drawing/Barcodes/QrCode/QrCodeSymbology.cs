@@ -53,6 +53,13 @@ public sealed class QrCodeSymbology : BarcodeSymbology
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        QrEncoder.BuildSymbol(text, false, QrFormat.Full, this.ErrorCorrectionLevel, this.Version ?? 0, options.XDimension ?? PointXDimension, ref symbol);
+        QrEncoder.BuildSymbol(
+            text,
+            false,
+            QrFormat.Full,
+            this.ErrorCorrectionLevel,
+            this.Version ?? 0,
+            options.ResolveXDimension(DefaultMatrixXDimension),
+            ref symbol);
     }
 }

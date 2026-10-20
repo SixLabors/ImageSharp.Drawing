@@ -7,8 +7,10 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
 /// HIBC Code 39, a Health Industry Bar Code. A Code 39 symbol carries it. The symbol carries the flag character, the data and the modulo 43 check character.
-/// Code 39 adds no check character of its own. The human readable interpretation shows that same string between delimiters. A check character that is a space
-/// prints as an underscore.
+/// Code 39 adds no check character of its own. The human readable interpretation shows that same string between delimiters, with a space printed as an
+/// underscore and a zero as "Ø". When the options set no X dimension, the symbol prints at <see cref="BarcodeSymbology.DefaultXDimension"/>.
+/// The text follows a data structure of ANSI/HIBC 2.6: primary data, secondary data that ends with its link character, or primary and secondary data joined
+/// with "/", each with any supplemental data fields.
 /// </summary>
 public sealed class HibcCode39Symbology : BarcodeSymbology
 {
@@ -44,15 +46,15 @@ public sealed class HibcCode39Symbology : BarcodeSymbology
             HibcData.Prepare(text, this.ValidateCheckCharacter, ref encoded);
 
             ReadOnlySpan<char> data = encoded.AsSpan();
-            Code39Encoder.BuildSymbol(
-                data,
-                null,
-                HibcData.ReadableOpening,
-                HibcData.ReadableBody(data),
-                [HibcData.PrintedCheck(data), HibcData.ReadableClosing],
-                options,
-                options.XDimension ?? PointXDimension,
-                ref symbol);
+
+            // The interpretation is the encoded data between two delimiters, so a buffer three characters longer holds it, and longer data rents it once.
+            InlineArray64<char> readableStorage = default;
+            int readableCapacity = HibcData.ReadableCapacity(data.Length);
+            using PooledBuffer<char> rented = readableCapacity <= HibcData.InlineBufferLength ? default : new(readableCapacity);
+            Span<char> readable = readableCapacity <= HibcData.InlineBufferLength ? ((Span<char>)readableStorage)[..readableCapacity] : rented.Span;
+            int written = HibcData.WriteReadable(data, readable);
+            double xDimension = options.ResolveXDimension(HibcData.MinimumLinearXDimension, DefaultXDimension, double.PositiveInfinity);
+            Code39Encoder.BuildSymbol(data, null, [], readable[..written], [], options, xDimension, ref symbol);
         }
         finally
         {

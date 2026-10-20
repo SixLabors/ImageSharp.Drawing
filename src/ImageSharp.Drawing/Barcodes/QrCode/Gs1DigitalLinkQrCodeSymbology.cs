@@ -6,12 +6,16 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// A GS1 Digital Link URI in a QR Code symbol, section 5.9 of the GS1 General Specifications. The symbol carries the URI as plain data. The URI follows the GS1
-/// Digital Link Standard: URI Syntax: a primary identification key and its key qualifiers in the path, data attributes in the query string, and every
+/// A GS1 Digital Link URI in a QR Code symbol, section 5.10 of the GS1 General Specifications. The symbol carries the URI as plain data. The URI follows the
+/// GS1 Digital Link Standard: URI Syntax: a primary identification key and its key qualifiers in the path, data attributes in the query string, and every
 /// Application Identifier with valid data.
 /// <para>
 /// When a font is set, the element strings that the URI carries print below the symbol, one on each line, with the Application Identifiers in parentheses, in
 /// the order of the URI. The URI does not print.
+/// </para>
+/// <para>
+/// Table 5-46, symbol specification table 1 addendum 2, gives an X dimension of 0.396 to 0.990 millimetres with a target of 0.495, and an X dimension outside
+/// that range is clamped to it.
 /// </para>
 /// </summary>
 public sealed class Gs1DigitalLinkQrCodeSymbology : BarcodeSymbology
@@ -63,10 +67,23 @@ public sealed class Gs1DigitalLinkQrCodeSymbology : BarcodeSymbology
         // The URI encodes as plain data, so no URI longer than the largest symbol holds is parsed.
         Guard.MustBeLessThanOrEqualTo(text.Length, QrEncoder.MaximumLength, nameof(text));
         int version = this.Version ?? 0;
+        double xDimension = options.ResolveXDimension(
+            Gs1Data.DigitalLinkMinimumXDimension,
+            Gs1Data.DigitalLinkXDimension,
+            Gs1Data.DigitalLinkMaximumXDimension);
+
         if (options.Font is null)
         {
             Gs1DigitalLink.Validate(text);
-            QrEncoder.BuildSymbol(text, false, QrFormat.Full, this.ErrorCorrectionLevel, version, options.XDimension ?? PointXDimension, ref symbol);
+            QrEncoder.BuildSymbol(
+                text,
+                false,
+                QrFormat.Full,
+                this.ErrorCorrectionLevel,
+                version,
+                xDimension,
+                ref symbol);
+
             return;
         }
 
@@ -81,7 +98,15 @@ public sealed class Gs1DigitalLinkQrCodeSymbology : BarcodeSymbology
         try
         {
             int written = Gs1DigitalLink.Validate(text, readable);
-            QrEncoder.BuildSymbol(text, false, QrFormat.Full, this.ErrorCorrectionLevel, version, options.XDimension ?? PointXDimension, ref symbol);
+            QrEncoder.BuildSymbol(
+                text,
+                false,
+                QrFormat.Full,
+                this.ErrorCorrectionLevel,
+                version,
+                xDimension,
+                ref symbol);
+
             symbol.AddMatrixText(readable[..written], BarcodeTextAlignment.Left, Gs1Data.TextScale(options.Font));
         }
         finally

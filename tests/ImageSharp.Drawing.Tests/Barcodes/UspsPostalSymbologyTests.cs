@@ -13,6 +13,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 public class UspsPostalSymbologyTests
 {
     /// <summary>
+    /// The millimetres in an inch.
+    /// </summary>
+    private const double Inch = 25.4;
+
+    /// <summary>
     /// The five digit symbol 01234 is a frame bar, the digits 0 to 4, the correction digit 0, which makes the sum 10, and a frame bar: 32 bars. The nine and
     /// eleven digit symbols carry 52 and 62 bars.
     /// </summary>
@@ -38,38 +43,64 @@ public class UspsPostalSymbologyTests
         => Assert.Equal(bars, Encode(new PlanetSymbology(), text));
 
     /// <summary>
-    /// Section 708.4.2.5 of the Domestic Mail Manual: bars 0.020 inch wide at 22 bars per inch, full bars 0.125 inch high and half bars 0.050 inch high. At the
-    /// 0.020 inch module a bar is 11 run units, a space is 14, the run unit is 1/11 module, a full bar is 6.25 modules and a half bar 2.5, with the half bars
-    /// standing on the baseline.
+    /// Section 708.4.2.5 of the Domestic Mail Manual: "A full bar must be 0.125 ±0.010 inch high", "A half bar must be 0.050 ±0.010 inch high", "All bars
+    /// must be 0.020 ±0.005 inch wide", the "pitch (a bar and a space) must average at least 0.0416 inch but no more than 0.05 inch" and "The clear vertical
+    /// space between bars must not be less than 0.012 inch or more than 0.04 inch". The half bars stand on the baseline of the full bars.
     /// </summary>
     [Fact]
     public void DrawsTheDimensionsOfSectionSevenZeroEightFourTwoFive()
         => SymbolEncoder.Encode(new PostnetSymbology(), "01234", new BarcodeOptions(), static (ref symbol) =>
         {
-            Assert.Equal(1F / 11F, symbol.RunUnit);
             Assert.Equal(63, symbol.Runs.Length);
-            for (int i = 0; i < symbol.Runs.Length; i++)
+            double unit = symbol.RunUnit * symbol.XDimension / Inch;
+            for (int i = 0; i < symbol.Runs.Length; i += 2)
             {
-                Assert.Equal((i & 1) == 0 ? 11 : 14, symbol.Runs[i]);
+                Assert.InRange(symbol.Runs[i] * unit, 0.015, 0.025);
             }
 
+            for (int i = 1; i < symbol.Runs.Length; i += 2)
+            {
+                Assert.InRange(symbol.Runs[i] * unit, 0.012, 0.04);
+                Assert.InRange((symbol.Runs[i - 1] + symbol.Runs[i]) * unit, 0.0416, 0.05);
+            }
+
+            float fullBar = MaximumBarHeight(ref symbol);
+            Assert.InRange(fullBar * symbol.XDimension / Inch, 0.115, 0.135);
             for (int i = 0; i < symbol.BarHeights.Length; i++)
             {
-                bool full = symbol.BarHeights[i] == 6.25F;
-                Assert.True(full || symbol.BarHeights[i] == 2.5F);
-                Assert.Equal(full ? 0F : 3.75F, symbol.BarTops[i]);
-            }
+                if (symbol.BarHeights[i] != fullBar)
+                {
+                    Assert.InRange(symbol.BarHeights[i] * symbol.XDimension / Inch, 0.040, 0.060);
+                }
 
-            Assert.Equal(6.25F, symbol.LeadingQuietZone);
-            Assert.Equal(6.25F, symbol.TrailingQuietZone);
+                Assert.Equal(fullBar, symbol.BarTops[i] + symbol.BarHeights[i], 1e-4F);
+            }
         });
 
+    /// <summary>
+    /// Section 202.5.7 c of the Domestic Mail Manual: "The clearance between the leftmost and rightmost bars and any adjacent printing must be at least 1/8
+    /// inch", and "The minimum clearance between the barcode and any information line above or below it within the address block must be at least 1/25 inch".
+    /// </summary>
     [Fact]
-    public void PrintsTheDigitsAsGiven()
+    public void KeepsTheClearanceAroundTheBars()
+        => SymbolEncoder.Encode(new PostnetSymbology(), "01234", new BarcodeOptions(), static (ref symbol) =>
+        {
+            Assert.True(symbol.LeadingQuietZone * symbol.XDimension >= (Inch / 8) - 1e-4);
+            Assert.True(symbol.TrailingQuietZone * symbol.XDimension >= (Inch / 8) - 1e-4);
+            Assert.True(symbol.TopQuietZone * symbol.XDimension >= (Inch / 25) - 1e-4);
+            Assert.True(symbol.BottomQuietZone * symbol.XDimension >= (Inch / 25) - 1e-4);
+        });
+
+    /// <summary>
+    /// The Domestic Mail Manual defines no text line for POSTNET or PLANET, so a font prints none.
+    /// </summary>
+    [Fact]
+    public void PrintsNoText()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        string[] texts = SymbolEncoder.Read(new PostnetSymbology(), "01234", options, SymbolEncoder.Texts);
-        Assert.Equal("01234", Assert.Single(texts));
+
+        Assert.Empty(SymbolEncoder.Read(new PostnetSymbology(), "01234", options, SymbolEncoder.Texts));
+        Assert.Empty(SymbolEncoder.Read(new PlanetSymbology(), "01234567890", options, SymbolEncoder.Texts));
     }
 
     [Theory]
@@ -102,18 +133,35 @@ public class UspsPostalSymbologyTests
         => SymbolEncoder.Read(symbology, text, new BarcodeOptions(), Kinds);
 
     /// <summary>
-    /// Reads the bar kinds of a symbol from the bar heights: F for a full bar and H for a half bar.
+    /// Reads the bar kinds of a symbol from the bar heights: F for a full bar, the tallest bar of the symbol, and H for a half bar.
     /// </summary>
     /// <param name="symbol">The encoded symbol.</param>
     /// <returns>The bar kinds.</returns>
     private static string Kinds(ref BarcodeSymbol symbol)
     {
+        float fullBar = MaximumBarHeight(ref symbol);
         char[] kinds = new char[symbol.BarHeights.Length];
         for (int i = 0; i < kinds.Length; i++)
         {
-            kinds[i] = symbol.BarHeights[i] == 6.25F ? 'F' : 'H';
+            kinds[i] = symbol.BarHeights[i] == fullBar ? 'F' : 'H';
         }
 
         return new string(kinds);
+    }
+
+    /// <summary>
+    /// Returns the height of the tallest bar of a symbol, in modules. The frame bars of POSTNET and PLANET are always full bars.
+    /// </summary>
+    /// <param name="symbol">The encoded symbol.</param>
+    /// <returns>The full bar height in modules.</returns>
+    private static float MaximumBarHeight(ref BarcodeSymbol symbol)
+    {
+        float height = 0F;
+        foreach (float bar in symbol.BarHeights)
+        {
+            height = MathF.Max(height, bar);
+        }
+
+        return height;
     }
 }

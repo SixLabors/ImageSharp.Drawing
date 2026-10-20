@@ -37,6 +37,6 @@ public sealed class UltracodeSymbology : BarcodeSymbology
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        UltracodeEncoder.BuildSymbol(text, this.ErrorCorrectionLevel, options.XDimension ?? PointXDimension, ref symbol);
+        UltracodeEncoder.BuildSymbol(text, this.ErrorCorrectionLevel, options.ResolveXDimension(DefaultMatrixXDimension), ref symbol);
     }
 }

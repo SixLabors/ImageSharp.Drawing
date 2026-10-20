@@ -13,9 +13,15 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 public abstract class BarcodeSymbology
 {
     /// <summary>
-    /// The X dimension in millimetres of a symbology whose specification gives none: one point, 25.4 / 72.
+    /// The X dimension in millimetres of a symbology whose specification gives none: 2 pixels at the default 96 dots per inch, 2 x 25.4 / 96.
     /// </summary>
-    public const double PointXDimension = 25.4 / 72;
+    public const double DefaultXDimension = 2 * 25.4 / 96;
+
+    /// <summary>
+    /// The X dimension in millimetres of an Aztec Code, Code One, Data Matrix, DotCode, Han Xin Code, QR Code or Ultracode symbol whose specification gives
+    /// none: twice <see cref="DefaultXDimension"/>, 4 pixels at the default 96 dots per inch.
+    /// </summary>
+    public const double DefaultMatrixXDimension = 2 * DefaultXDimension;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BarcodeSymbology"/> class.

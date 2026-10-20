@@ -206,7 +206,7 @@ public class Gs1DataBarExpandedStackedSymbologyTests
     [Fact]
     public void Gs1DataBarExpandedStacked_BarHeightOptionSetsEachRow()
     {
-        BarcodeOptions options = new() { BarHeight = 40F * DataBarExpandedEncoder.NominalXDimension };
+        BarcodeOptions options = new() { Dpi = SymbolEncoder.MillimetreDpi, BarHeight = 40F * DataBarExpandedEncoder.NominalXDimension };
         float height = SymbolEncoder.Read(
             new Gs1DataBarExpandedStackedSymbology(),
             "(01)90614141000015(3202)000150",

@@ -6,8 +6,9 @@ using System.Globalization;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The input handling the one-track and two-track Pharmacode symbologies share. Both carry one number, given in decimal, whose range the Laetus Pharmacode
-/// Guide sets in section 4.1.
+/// The input handling the one-track and two-track Pharmacode symbologies share. Both carry one number, given in decimal. The Laetus Pharmacode Guide counts
+/// the codes of up to sixteen bars in section 4.1, and section 4.9.2 says that "coding that is only one bar wide should never be used", which sets the
+/// range.
 /// </summary>
 internal static class PharmacodeEncoder
 {

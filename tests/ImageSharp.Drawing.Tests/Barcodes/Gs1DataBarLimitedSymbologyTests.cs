@@ -23,6 +23,21 @@ public class Gs1DataBarLimitedSymbologyTests
         => Encode(text, (ref symbol) => Assert.Equal(expected, SymbolEncoder.RunString(ref symbol)));
 
     /// <summary>
+    /// Section 5.5.2.2 of the GS1 General Specifications: "The minimum height SHALL be 10X", so a bar height under 10X is rejected. At the nominal 0.33 mm
+    /// module 10X is 3.3 mm.
+    /// </summary>
+    [Fact]
+    public void Gs1DataBarLimited_RejectsABarHeightUnderTenModules()
+    {
+        Gs1DataBarLimitedSymbology symbology = new();
+        BarcodeOptions minimum = new() { Dpi = SymbolEncoder.MillimetreDpi, BarHeight = 3.3 };
+        BarcodeOptions under = new() { Dpi = SymbolEncoder.MillimetreDpi, BarHeight = 3.29 };
+
+        Assert.Null(Record.Exception(() => SymbolEncoder.Encode(symbology, "(01)15012345678907", minimum)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => SymbolEncoder.Encode(symbology, "(01)15012345678907", under));
+    }
+
+    /// <summary>
     /// Section 5.5.2.2 of the GS1 General Specifications: "79X wide, starting with a 1X space and ending with a 5X space, by 10X high", 47 elements, and no
     /// quiet zone.
     /// </summary>

@@ -170,7 +170,7 @@ public class Code49SymbologyTests
             Assert.All(SymbolEncoder.RowBarHeights(ref symbol, symbol.Rows[0]), height => Assert.Equal(8F, height));
         });
 
-        BarcodeOptions options = new() { BarHeight = 12F * BarcodeSymbology.PointXDimension };
+        BarcodeOptions options = new() { BarHeight = 12F * BarcodeSymbology.DefaultXDimension };
         ApproximateFloatComparer comparer = new(1e-4F);
         SymbolEncoder.Encode(new Code49Symbology(), "A", options, (ref symbol) =>
         {

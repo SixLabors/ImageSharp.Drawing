@@ -29,6 +29,16 @@ public sealed class Mailmark2DSymbology : BarcodeSymbology
     private const double NominalXDimension = 0.5;
 
     /// <summary>
+    /// The smallest module size in millimetres. Section 2.4: "The module size of 2D Mailmark barcodes must be in the range of 0.5mm - 0.7mm."
+    /// </summary>
+    private const double MinimumXDimension = 0.5;
+
+    /// <summary>
+    /// The largest module size in millimetres, section 2.4.
+    /// </summary>
+    private const double MaximumXDimension = 0.7;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="Mailmark2DSymbology"/> class.
     /// </summary>
     /// <param name="type">The barcode type, which sets the symbol size.</param>
@@ -72,9 +82,16 @@ public sealed class Mailmark2DSymbology : BarcodeSymbology
             throw new ArgumentException("A 2D Mailmark barcode starts with the UPU country ID \"JGB \".", nameof(text));
         }
 
-        if (fields[4] == ' ' || fields[6] == ' ')
+        // Table 2: the information type ID is "0", "1", "2", "A", "B" or "C". The class is "0" to "9" or "A" to "Z", every one listed, so only a space breaks
+        // it.
+        if (fields[4] is not ('0' or '1' or '2' or 'A' or 'B' or 'C'))
         {
-            throw new ArgumentException("The information type ID and the class of a 2D Mailmark barcode are not spaces.", nameof(text));
+            throw new ArgumentException($"The information type ID of a 2D Mailmark barcode is 0, 1, 2, A, B or C; got '{fields[4]}'.", nameof(text));
+        }
+
+        if (fields[6] == ' ')
+        {
+            throw new ArgumentException("The class of a 2D Mailmark barcode is not a space.", nameof(text));
         }
 
         if (fields[5] != '1')
@@ -122,6 +139,8 @@ public sealed class Mailmark2DSymbology : BarcodeSymbology
             _ => (16, 48),
         };
 
+        double xDimension = options.ResolveXDimension(MinimumXDimension, NominalXDimension, MaximumXDimension);
+
         DataMatrixEncoder.BuildSymbol(
             text,
             false,
@@ -130,7 +149,7 @@ public sealed class Mailmark2DSymbology : BarcodeSymbology
             columns,
             RoyalMailLength,
             ClearZone,
-            options.XDimension ?? NominalXDimension,
+            xDimension,
             ref symbol);
     }
 

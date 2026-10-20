@@ -59,7 +59,8 @@ public class BarcodeMeasuringTests
     }
 
     /// <summary>
-    /// A symbol with identification bars above the banner and below the interpretation.
+    /// A symbol with identification bars above the banner and below the interpretation, at its nominal bar height. The symbology draws the text bold, as
+    /// sections 2.4.1 and 2.4.2 of USPS2000508 require.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="provider">The image provider.</param>
@@ -67,7 +68,15 @@ public class BarcodeMeasuringTests
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void IntelligentMailPackage_WithText<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
-        => RunTest(provider, new IntelligentMailPackageSymbology("USPS TRACKING #"), "(420)123456789(92)12391234567812345670", CreateTextOptions());
+        => RunTest(
+            provider,
+            new IntelligentMailPackageSymbology("USPS TRACKING #"),
+            "(420)123456789(92)12391234567812345670",
+            new BarcodeOptions
+            {
+                Background = Brushes.Solid(Color.LightYellow),
+                Font = BarcodeFonts.OcrB.CreateFont(10.75F),
+            });
 
     /// <summary>
     /// A symbol inside a bearer bar, which runs around the quiet zones.
@@ -89,7 +98,7 @@ public class BarcodeMeasuringTests
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void Pdf417<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
-        => RunTest(provider, new Pdf417Symbology(), "PDF417 Symbology Standard", CreateOptions(3F));
+        => RunTest(provider, new Pdf417Symbology(), "PDF417 Symbology Standard", CreateOptions());
 
     /// <summary>
     /// A matrix symbol with its interpretation below the modules.
@@ -112,7 +121,7 @@ public class BarcodeMeasuringTests
     public void MaxiCode<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        BarcodeOptions options = new() { Dpi = 7F * 25.4F / 0.88F, Background = Brushes.Solid(Color.LightYellow) };
+        BarcodeOptions options = new() { Background = Brushes.Solid(Color.LightYellow) };
         RunTest(provider, new MaxiCodeSymbology(), "THIS IS A 93 CHARACTER CODE SET A MESSAGE THAT FILLS A MODE 4, UNAPPENDED, MAXICODE SYMBOL...", options);
     }
 
@@ -173,39 +182,33 @@ public class BarcodeMeasuringTests
             appendSourceFileOrDescription: false);
 
     /// <summary>
-    /// Draws at 144 dots per inch with a one point X dimension, so a module is 2 px, on a light yellow background.
+    /// Draws at the default options on a light yellow background.
     /// </summary>
-    /// <param name="barHeight">The bar height in modules.</param>
     /// <returns>The options.</returns>
-    private static BarcodeOptions CreateOptions(float barHeight)
+    private static BarcodeOptions CreateOptions()
         => new()
         {
-            Dpi = 144F,
-            XDimension = BarcodeSymbology.PointXDimension,
-            BarHeight = barHeight * BarcodeSymbology.PointXDimension,
             Background = Brushes.Solid(Color.LightYellow),
         };
 
     /// <summary>
-    /// Draws the linear symbols with a 50 module bar height and the OCR-B font at 10.75 points, the size of the linear goldens.
+    /// Draws the linear symbols at the default options with the OCR-B font at 10.75 points, the size of the linear goldens.
     /// </summary>
     /// <returns>The options.</returns>
     private static BarcodeOptions CreateTextOptions()
     {
-        BarcodeOptions options = CreateOptions(50F);
+        BarcodeOptions options = CreateOptions();
         options.Font = BarcodeFonts.OcrB.CreateFont(10.75F);
         return options;
     }
 
     /// <summary>
-    /// Draws the matrix symbols at 144 dots per inch with a two point X dimension, so a module is 4 px.
+    /// Draws the matrix symbols at the default options on a light yellow background.
     /// </summary>
     /// <returns>The options.</returns>
     private static BarcodeOptions CreateMatrixOptions()
         => new()
         {
-            Dpi = 144F,
-            XDimension = 2 * BarcodeSymbology.PointXDimension,
             Background = Brushes.Solid(Color.LightYellow),
         };
 

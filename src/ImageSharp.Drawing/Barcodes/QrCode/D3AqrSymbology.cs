@@ -71,7 +71,7 @@ public sealed class D3AqrSymbology : BarcodeSymbology
             _ => (3, 2),
         };
 
-        double xDimension = options.XDimension ?? PointXDimension;
+        double xDimension = options.ResolveXDimension(DefaultXDimension);
         BarcodeSymbol host = default;
         try
         {

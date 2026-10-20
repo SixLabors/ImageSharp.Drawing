@@ -11,19 +11,18 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal static class AddOnLayout
 {
     /// <summary>
-    /// The quiet zone before an add-on symbol in modules: the GS1 General Specifications separate the add-on from the main symbol by at least seven modules,
-    /// plus the leading space module folded out of the add-on guard pattern.
+    /// The quiet zone before an add-on symbol in modules. Table 5-44 of the GS1 General Specifications separates an add-on from its main symbol by 7X to 12X
+    /// for EAN-13 and UPC-E and by 9X to 12X for UPC-A. The add-on symbol does not know its main symbol, so it takes the smallest separation.
     /// </summary>
-    private const int LeadingQuietZone = 8;
+    private const int LeadingQuietZone = 7;
 
     /// <summary>
-    /// The quiet zone after an add-on symbol in modules, per the GS1 General Specifications.
+    /// The quiet zone after an add-on symbol in modules. Table 5-11 of the GS1 General Specifications gives the right quiet zone of an add-on as 5 modules.
     /// </summary>
     private const int TrailingQuietZone = 5;
 
     /// <summary>
-    /// The add-on guard pattern 01011 without its leading space module, which the leading quiet zone absorbs: bar, space, then a bar two modules wide. The
-    /// module stream therefore starts on a bar, as <see cref="EanUpcEncoder.BeginRuns"/> requires.
+    /// The add-on guard bar pattern of Table 5-4 of the GS1 General Specifications: 4 modules, a bar, a space, then a bar two modules wide.
     /// </summary>
     private const int AddOnGuard = 0b1011;
 
@@ -33,7 +32,7 @@ internal static class AddOnLayout
     private const int AddOnGuardWidth = 4;
 
     /// <summary>
-    /// The delineator between two add-on characters: space, bar.
+    /// The add-on delineator of Table 5-4 of the GS1 General Specifications between two add-on characters: a space, then a bar.
     /// </summary>
     private const int Delineator = 0b01;
 
@@ -54,6 +53,8 @@ internal static class AddOnLayout
         // Five digits take 4 + (5 * 7) + (4 * 2) = 47 modules, so the stream fits the inline buffer.
         InlineArray64<byte> moduleStorage = default;
         Span<byte> modules = moduleStorage;
+        InlineArray64<sbyte> correctionStorage = default;
+        Span<sbyte> corrections = correctionStorage;
         int position = 0;
         EanUpcEncoder.AppendPattern(modules, ref position, AddOnGuard, AddOnGuardWidth);
         for (int i = 0; i < digits.Length; i++)
@@ -63,11 +64,12 @@ internal static class AddOnLayout
                 EanUpcEncoder.AppendPattern(modules, ref position, Delineator, DelineatorWidth);
             }
 
-            ReadOnlySpan<byte> numberSet = ((parity >> (digits.Length - 1 - i)) & 1) == 0 ? EanUpcEncoder.NumberSetA : EanUpcEncoder.NumberSetB;
-            EanUpcEncoder.AppendCharacter(modules, ref position, numberSet, digits[i]);
+            EanUpcNumberSet numberSet = ((parity >> (digits.Length - 1 - i)) & 1) == 0 ? EanUpcNumberSet.A : EanUpcNumberSet.B;
+            EanUpcEncoder.AppendCharacter(modules, corrections, ref position, numberSet, digits[i]);
         }
 
-        EanUpcEncoder.BeginRuns(modules[..position], options.XDimension ?? EanUpcEncoder.NominalXDimension, ref symbol, out Span<float> heights);
+        double xDimension = options.ResolveXDimension(EanUpcEncoder.MinimumXDimension, EanUpcEncoder.NominalXDimension, EanUpcEncoder.MaximumXDimension);
+        EanUpcEncoder.BeginRuns(modules[..position], corrections[..position], xDimension, ref symbol, out Span<float> heights);
         float barHeight = options.ResolveBarHeight(symbol.XDimension, EanUpcEncoder.NominalAddOnBarHeight);
         heights.Fill(barHeight);
 
@@ -79,6 +81,6 @@ internal static class AddOnLayout
             EanUpcEncoder.AddDigits(digits, 4F, 9F, BarcodeTextSide.AboveBars, -BarcodeTextPlacement.Clearance, ref symbol);
         }
 
-        symbol.EndLinear(LeadingQuietZone, TrailingQuietZone);
+        symbol.EndLinear(LeadingQuietZone, TrailingQuietZone, 0F, EanUpcEncoder.RunUnit, false);
     }
 }

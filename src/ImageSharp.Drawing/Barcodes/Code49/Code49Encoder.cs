@@ -79,7 +79,8 @@ internal static class Code49Encoder
     public const int NumericShift = 48;
 
     /// <summary>
-    /// The shortest digit run the numeric encodation method of section 2.2.2 compresses: five, the length of one block.
+    /// The shortest digit run this encoder carries in the numeric encodation method: five digits, one block of section 2.2.2. Section 2.2.2 says only that
+    /// "Long sequences of numeric digits can be compressed", and sets no shortest run.
     /// </summary>
     public const int NumericRun = 5;
 
@@ -358,7 +359,7 @@ internal static class Code49Encoder
     private static void WriteRows(ReadOnlySpan<int> codes, ReadOnlySpan<char> readable, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         int rowCount = codes.Length / CodeCharactersPerRow;
-        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        double xDimension = options.ResolveXDimension(BarcodeSymbology.DefaultXDimension);
         float barHeight = options.ResolveBarHeight(xDimension, NominalBarHeight);
         ReadOnlySpan<byte> parities = RowParity;
         ReadOnlySpan<ushort> even = Code49Patterns.Even;

@@ -39,8 +39,8 @@ internal static class DataBarExpandedEncoder
     public const int MaximumStackedSegments = 20;
 
     /// <summary>
-    /// The most data characters a symbol carries. Section 2.6.10 of the GS1 General Specifications: GS1 DataBar Expanded Versions "SHALL NOT be used when
-    /// symbols require more than 74 numeric or 41 alphabetic characters of data".
+    /// The most data characters a symbol carries. Section 5.5.1.1 of the GS1 General Specifications gives the maximum data capacity of the GS1 DataBar
+    /// Expanded variations as "74 numeric or 41 alphabetic characters".
     /// </summary>
     public const int MaximumDataCharacters = 74;
 
@@ -248,6 +248,21 @@ internal static class DataBarExpandedEncoder
     ];
 
     /// <summary>
+    /// Checks that Application Identifier (01) is the first element string when the data holds it. Section 5.5.2.3.3 of the GS1 General Specifications: "when
+    /// the data includes AI (01), it SHALL be the first element string encoded."
+    /// </summary>
+    /// <param name="text">The element strings that <see cref="Gs1Data.Prepare"/> accepted. Data ends at the next opening parenthesis, so each opening
+    /// parenthesis starts an Application Identifier.</param>
+    /// <exception cref="ArgumentException">Application Identifier (01) follows another element string.</exception>
+    public static void ValidateGtinFirst(ReadOnlySpan<char> text)
+    {
+        if (text.IndexOf("(01)", StringComparison.Ordinal) > 0)
+        {
+            throw new ArgumentException("GS1 DataBar Expanded carries Application Identifier (01) as the first element string.", nameof(text));
+        }
+    }
+
+    /// <summary>
     /// Builds GS1 DataBar Expanded, a single row.
     /// </summary>
     /// <param name="text">The prepared element strings, with a separator after every variable length element string but the last.</param>
@@ -265,7 +280,7 @@ internal static class DataBarExpandedEncoder
         // A zero width bar, the guard space and bar, the characters with a finder after every second one, and the guard space and bar. The symbol ends on a bar
         // or a space, so a zero width bar closes the runs when it ends on a space. The zero width bars are the zeros the symbol storage starts with.
         int elements = 3 + (symbolCharacters * 8) + (finders.Length * 5) + 2;
-        double xDimension = options.XDimension ?? NominalXDimension;
+        double xDimension = options.ResolveXDimension(DataBarEncoder.MinimumXDimension, NominalXDimension, DataBarEncoder.MaximumXDimension);
         Span<int> runs = symbol.BeginLinear(elements + ((elements & 1) == 0 ? 1 : 0), xDimension, out Span<float> heights, out _);
         runs[1] = 1;
         runs[2] = 1;
@@ -295,6 +310,9 @@ internal static class DataBarExpandedEncoder
             int width = 4 + (symbolCharacters * CharacterModules) + (finders.Length * FinderModules);
             symbol.ReserveText(1, caption.Length);
             symbol.AddText(caption, 0F, width, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);
+
+            // Section 4.14 rule 2.a.iii of the GS1 General Specifications: "The font size SHOULD be at least 2 mm (0.08 in) in height".
+            symbol.SetTextSize(Gs1Data.MinimumTextSize, 0F);
         }
 
         symbol.EndLinear(0, 0);
@@ -310,6 +328,8 @@ internal static class DataBarExpandedEncoder
     /// <param name="captionBody">The body of the human readable interpretation.</param>
     /// <param name="captionSuffix">The characters of the human readable interpretation after its body.</param>
     /// <param name="side">The side of the symbol the human readable interpretation prints on.</param>
+    /// <param name="minimumXDimension">The smallest X dimension the application standard permits, in millimetres.</param>
+    /// <param name="maximumXDimension">The largest X dimension the application standard permits, in millimetres.</param>
     /// <param name="options">The options that control the bar height and the text.</param>
     /// <param name="symbol">The symbol to write.</param>
     /// <exception cref="ArgumentException">The data carries a character the symbology cannot encode, or more data than 21 data characters hold.</exception>
@@ -320,13 +340,15 @@ internal static class DataBarExpandedEncoder
         ReadOnlySpan<char> captionBody,
         ReadOnlySpan<char> captionSuffix,
         BarcodeTextSide side,
+        double minimumXDimension,
+        double maximumXDimension,
         BarcodeOptions options,
         ref BarcodeSymbol symbol)
     {
         InlineArray256<int> characterStorage = default;
         Span<int> characters = ((Span<int>)characterStorage)[..(MaximumSymbolCharacters * 8)];
         int symbolCharacters = EncodeCharacters(text, segments, characters);
-        double xDimension = options.XDimension ?? NominalXDimension;
+        double xDimension = options.ResolveXDimension(minimumXDimension, NominalXDimension, maximumXDimension);
         float rowHeight = options.ResolveBarHeight(xDimension, RowHeight);
 
         // The buffer holds a row, the separator row that is its inverse, and the middle separator row, each one module wider than the widest row, since a
@@ -382,6 +404,9 @@ internal static class DataBarExpandedEncoder
                 float textEdge = side == BarcodeTextSide.AboveBars ? -BarcodeTextPlacement.Clearance : height + BarcodeTextPlacement.Clearance;
                 symbol.ReserveText(1, captionPrefix.Length + captionBody.Length + captionSuffix.Length);
                 symbol.AddText(captionPrefix, captionBody, captionSuffix, 0F, width, side, textEdge);
+
+                // Section 4.14 rule 2.a.iii of the GS1 General Specifications: "The font size SHOULD be at least 2 mm (0.08 in) in height".
+                symbol.SetTextSize(Gs1Data.MinimumTextSize, 0F);
             }
 
             symbol.EndStacked(0F, 0F, 0F);

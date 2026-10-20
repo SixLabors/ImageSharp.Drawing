@@ -9,8 +9,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// <summary>
 /// The coupon code of GS1 Application Identifier (8110), as Table C of the North American Coupon Application Guideline of GS1 US defines it. The required
 /// elements come first: the GS1 Company Prefix with its length indicator, the offer code, the save value with its length indicator, and the primary purchase
-/// requirement with its length indicator, its code and its family code. Optional data fields 1, 2, 3, 4, 5, 6 and 9 follow, each at most once and in that
-/// order, each led by its field number.
+/// requirement with its length indicator, its code and its family code. Optional data fields 1, 2, 3, 4, 5, 6 and 9 follow, each led by its field number.
+/// The guideline sets no order for them.
 /// </summary>
 internal static class NorthAmericanCouponCode
 {
@@ -45,8 +45,8 @@ internal static class NorthAmericanCouponCode
     /// </summary>
     /// <param name="data">The data of Application Identifier (8110).</param>
     /// <returns>The length of the primary GS1 Company Prefix, which follows the length indicator.</returns>
-    /// <exception cref="ArgumentException">The coupon code is not numeric, an element is missing or out of range, or an optional field is unknown or out of
-    /// order.</exception>
+    /// <exception cref="ArgumentException">The coupon code is not numeric, an element is missing or out of range, an optional field is unknown, or the start
+    /// date is later than the expiration date.</exception>
     public static int Validate(ReadOnlySpan<char> data)
     {
         BarcodeSymbology.ValidateDigits(data);
@@ -60,17 +60,16 @@ internal static class NorthAmericanCouponCode
         reader.Skip(reader.Digit(1, 5, "save value length indicator"), "save value");
         reader.PurchaseRequirement("primary");
 
-        int lastField = 0;
         int expiration = -1;
+        int start = -1;
         while (!reader.AtEnd)
         {
             int field = reader.Digit(0, 9, "optional data field number");
-            if (field <= lastField || field is 7 or 8 or 0)
+            if (field is 0 or 7 or 8)
             {
-                throw new ArgumentException("The optional data fields of a coupon code are 1, 2, 3, 4, 5, 6 and 9, in increasing order.", nameof(data));
+                throw new ArgumentException("The optional data fields of a coupon code are 1, 2, 3, 4, 5, 6 and 9.", nameof(data));
             }
 
-            lastField = field;
             switch (field)
             {
                 case 1:
@@ -91,13 +90,7 @@ internal static class NorthAmericanCouponCode
                     break;
 
                 case 4:
-                    // Table C: the start date "must be earlier than or equal to the expiration date".
-                    int start = reader.Date("start date");
-                    if (expiration >= 0 && expiration < start)
-                    {
-                        throw new ArgumentException("The start date of a coupon code is later than its expiration date.", nameof(data));
-                    }
-
+                    start = reader.Date("start date");
                     break;
 
                 case 5:
@@ -124,6 +117,13 @@ internal static class NorthAmericanCouponCode
                     _ = reader.Digit(0, 1, "do not multiply flag");
                     break;
             }
+        }
+
+        // Table C: the start date "must be earlier than or equal to the expiration date". The fields can come in any order, so the dates compare once both are
+        // read.
+        if (expiration >= 0 && start > expiration)
+        {
+            throw new ArgumentException("The start date of a coupon code is later than its expiration date.", nameof(data));
         }
 
         return prefixLength;

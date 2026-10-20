@@ -25,7 +25,7 @@ internal static class Code128Encoder
 
     /// <summary>
     /// The symbol character value of the Function 1 character. Section 5.4.2 places it directly after the start character to mark a GS1-128 symbol, and section
-    /// 5.4.3.4.2 uses it as a field separator.
+    /// 5.4.7.4 transmits it "in the third or subsequent character position" as the control character GS, the separator of section 7.8.6.2.
     /// </summary>
     public const int FunctionOne = 102;
 
@@ -35,7 +35,9 @@ internal static class Code128Encoder
     public const int MaximumLength = 500;
 
     /// <summary>
-    /// The nominal X dimension in millimetres: the 0.495 mm of logistic units scanned in general distribution, Table 5-51 of the GS1 General Specifications.
+    /// The nominal X dimension in millimetres of a GS1 symbol: the target of 0.495 mm of Table 5-51 of the GS1 General Specifications, and of most other GS1
+    /// symbol specification tables that list GS1-128. A Code 128 symbol that is not a GS1 symbol takes <see cref="BarcodeSymbology.DefaultXDimension"/>,
+    /// because section 4.4.1 of ISO/IEC 15417 gives no value: "The width of a module should be defined by the application specification".
     /// </summary>
     public const double NominalXDimension = 0.495;
 
@@ -80,7 +82,7 @@ internal static class Code128Encoder
     private const int Stop = 106;
 
     /// <summary>
-    /// The modulus of the symbol check character, section 5.4.3.6.
+    /// The modulus of the symbol check character, step 5 of section 5.4.7.5.1.
     /// </summary>
     private const int CheckModulus = 103;
 
@@ -116,6 +118,12 @@ internal static class Code128Encoder
     private const float NominalBarHeight = (float)(31.75 / NominalXDimension);
 
     /// <summary>
+    /// The bar height of a GS1 symbol in millimetres. Footnote (****) of Table 5-47 of the GS1 General Specifications: "For GS1-128 and ITF-14 symbols the
+    /// minimum symbol height for General distribution scanning is always 31.75 millimetres (1.250 inch)."
+    /// </summary>
+    private const double Gs1BarHeight = 31.75;
+
+    /// <summary>
     /// Gets the element widths of every symbol character, packed four bits per element, the first element in the highest bits. Table 5-25 of the GS1 General
     /// Specifications lists them: six elements each, three bars and three spaces of one to four modules, except the stop character, <see cref="Stop"/>, which
     /// takes seven.
@@ -141,7 +149,8 @@ internal static class Code128Encoder
     /// <summary>
     /// Encodes text and builds the symbol. The runs carry the start character, the code set switches, the check character of section 5.4.3.6 and the stop
     /// character, whose seven elements end the list on a bar. Every symbology in the family shares this step, so only the encodation differs between them. Code
-    /// 128 carries no guard bars, so every bar runs the full height, and section 5.4.7.3 prints the human readable interpretation below the symbol.
+    /// 128 carries no guard bars, so every bar runs the full height. The human readable interpretation prints below the symbol, adjacent to it as rule 1 of
+    /// section 4.14 asks.
     /// </summary>
     /// <param name="text">The text to encode. Every character must be ASCII 0 to 127.</param>
     /// <param name="gs1">Whether this is a GS1 symbol. Such a symbol carries a Function 1 character after its start character, and encodes every
@@ -160,23 +169,56 @@ internal static class Code128Encoder
         ReadOnlySpan<char> readableSuffix,
         BarcodeOptions options,
         ref BarcodeSymbol symbol)
-        => BuildSymbol(
-            text,
-            gs1,
-            readablePrefix,
-            readableBody,
-            readableSuffix,
-            [],
-            options.XDimension ?? NominalXDimension,
-            NominalBarHeight,
-            BarcodeTextPlacement.Clearance,
-            0F,
-            options,
-            ref symbol);
+        => BuildSymbol(text, gs1, readablePrefix, readableBody, readableSuffix, 0, double.PositiveInfinity, options, ref symbol);
 
     /// <summary>
-    /// Encodes text and builds the symbol at the dimensions of an application standard that sets its own X dimension, bar height and space between the bars and
-    /// the human readable interpretation, and that can print a second line above the bars.
+    /// Encodes text and builds the symbol at an X dimension clamped to the range of the application standard. The steps are those of
+    /// <see cref="BuildSymbol(ReadOnlySpan{char}, bool, ReadOnlySpan{char}, ReadOnlySpan{char}, ReadOnlySpan{char}, BarcodeOptions, ref BarcodeSymbol)"/>.
+    /// </summary>
+    /// <param name="text">The text to encode. Every character must be ASCII 0 to 127.</param>
+    /// <param name="gs1">Whether this is a GS1 symbol. Such a symbol carries a Function 1 character after its start character, and encodes every
+    /// <see cref="Gs1Data.Separator"/> in the text as another one.</param>
+    /// <param name="readablePrefix">The characters of the human readable interpretation before its body.</param>
+    /// <param name="readableBody">The body of the human readable interpretation.</param>
+    /// <param name="readableSuffix">The characters of the human readable interpretation after its body.</param>
+    /// <param name="minimumXDimension">The smallest X dimension the application standard permits, in millimetres.</param>
+    /// <param name="maximumXDimension">The largest X dimension the application standard permits, in millimetres.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    /// <exception cref="ArgumentException">The text carries a character the symbology cannot encode.</exception>
+    public static void BuildSymbol(
+        ReadOnlySpan<char> text,
+        bool gs1,
+        ReadOnlySpan<char> readablePrefix,
+        ReadOnlySpan<char> readableBody,
+        ReadOnlySpan<char> readableSuffix,
+        double minimumXDimension,
+        double maximumXDimension,
+        BarcodeOptions options,
+        ref BarcodeSymbol symbol)
+    {
+        // The bars of a GS1 symbol are 31.75 millimetres at any X dimension. The module draws at a whole number of pixels.
+        double xDimension = options.ResolveXDimension(minimumXDimension, gs1 ? NominalXDimension : BarcodeSymbology.DefaultXDimension, maximumXDimension);
+        Code128Layout layout = new()
+        {
+            XDimension = xDimension,
+            NominalBarHeight = gs1 ? (float)(Gs1BarHeight / xDimension) : NominalBarHeight,
+            TextClearance = BarcodeTextPlacement.Clearance,
+            HorizontalQuietZone = QuietZone,
+        };
+
+        BuildSymbol(text, gs1, readablePrefix, readableBody, readableSuffix, [], in layout, options, ref symbol);
+
+        // Section 4.14 rule 2.a.iii of the GS1 General Specifications: "The font size SHOULD be at least 2 mm (0.08 in) in height".
+        if (gs1)
+        {
+            symbol.SetTextSize(Gs1Data.MinimumTextSize, 0F);
+        }
+    }
+
+    /// <summary>
+    /// Encodes text and builds the symbol at the dimensions of an application standard, which can print a second line above the bars. The ink of the line
+    /// above the bars stays within the symbol and the quiet zones of <see cref="QuietZone"/>.
     /// </summary>
     /// <param name="text">The text to encode. Every character must be ASCII 0 to 127.</param>
     /// <param name="gs1">Whether this is a GS1 symbol. Such a symbol carries a Function 1 character after its start character, and encodes every
@@ -185,10 +227,7 @@ internal static class Code128Encoder
     /// <param name="readableBody">The body of the human readable interpretation.</param>
     /// <param name="readableSuffix">The characters of the human readable interpretation after its body.</param>
     /// <param name="above">The line above the bars, or empty for none.</param>
-    /// <param name="xDimension">The X dimension in millimetres.</param>
-    /// <param name="nominalBarHeight">The bar height in modules when the options set none.</param>
-    /// <param name="textClearance">The space between the bars and the human readable interpretation in modules.</param>
-    /// <param name="aboveClearance">The space between the bars and the ink of the line above them in modules.</param>
+    /// <param name="layout">The dimensions of the application standard.</param>
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="symbol">The symbol to write.</param>
     /// <exception cref="ArgumentException">The text carries a character the symbology cannot encode.</exception>
@@ -199,13 +238,11 @@ internal static class Code128Encoder
         ReadOnlySpan<char> readableBody,
         ReadOnlySpan<char> readableSuffix,
         ReadOnlySpan<char> above,
-        double xDimension,
-        float nominalBarHeight,
-        float textClearance,
-        float aboveClearance,
+        in Code128Layout layout,
         BarcodeOptions options,
         ref BarcodeSymbol symbol)
     {
+        double xDimension = layout.XDimension;
         Guard.MustBeLessThanOrEqualTo(text.Length, MaximumLength, nameof(text));
 
         // Section 5.4.3.3 gives the three code sets ASCII 0 to 127 between them, so anything above that is rejected. The message decodes the code point at the
@@ -241,23 +278,25 @@ internal static class Code128Encoder
             WriteRuns(values[..count], runs);
             int widthInModules = ((count - 1) * ModulesPerCharacter) + StopModules;
 
-            float barHeight = options.ResolveBarHeight(xDimension, nominalBarHeight);
+            float barHeight = options.ResolveBarHeight(xDimension, MathF.Max(layout.NominalBarHeight, widthInModules * layout.MinimumHeightFraction));
             heights.Fill(barHeight);
 
             int readableLength = readablePrefix.Length + readableBody.Length + readableSuffix.Length;
             if (options.Font is not null && readableLength + above.Length > 0)
             {
                 symbol.ReserveText(above.IsEmpty ? 1 : 2, readableLength + above.Length);
-                symbol.AddText(readablePrefix, readableBody, readableSuffix, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + textClearance);
+                float textEdge = barHeight + layout.TextClearance;
+                symbol.AddText(readablePrefix, readableBody, readableSuffix, 0F, widthInModules, BarcodeTextSide.BelowBars, textEdge);
 
-                // The line above the bars spans the symbol and its quiet zones, which the emitter keeps it within.
+                // The line above the bars spans the symbol and the quiet zones of QuietZone, and its ink stays within them.
                 if (!above.IsEmpty)
                 {
-                    symbol.AddText(above, -QuietZone, widthInModules + QuietZone, BarcodeTextSide.AboveBars, -aboveClearance);
+                    symbol.AddTextWithinSpan(above, -QuietZone, widthInModules + QuietZone, BarcodeTextSide.AboveBars, -layout.AboveClearance);
                 }
             }
 
-            symbol.EndLinear(QuietZone, QuietZone);
+            float horizontal = layout.HorizontalQuietZone;
+            symbol.EndLinear(horizontal, horizontal, layout.VerticalQuietZone, layout.VerticalQuietZone, 0F, 1F, false);
         }
         finally
         {
@@ -302,8 +341,8 @@ internal static class Code128Encoder
     }
 
     /// <summary>
-    /// Computes the symbol check character. Section 5.4.3.6 weights the start character by one and each following character by its position, sums the products
-    /// and takes the remainder modulo 103.
+    /// Computes the symbol check character. Section 5.4.7.5.1 weights the start character by one and each following character by its position, sums the
+    /// products and takes the remainder modulo 103.
     /// </summary>
     /// <param name="values">The symbol character values, starting with the start character.</param>
     /// <returns>The symbol check character value.</returns>

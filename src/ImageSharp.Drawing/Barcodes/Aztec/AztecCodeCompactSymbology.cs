@@ -59,7 +59,7 @@ public sealed class AztecCodeCompactSymbology : BarcodeSymbology
             AztecFormat.Compact,
             this.ErrorCorrectionPercentage,
             this.Layers ?? 0,
-            options.XDimension ?? PointXDimension,
+            options.ResolveXDimension(DefaultMatrixXDimension),
             ref symbol);
     }
 }

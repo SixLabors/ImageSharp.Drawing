@@ -21,9 +21,21 @@ internal static class CodabarEncoder
     public const int MaximumLength = 500;
 
     /// <summary>
-    /// The quiet zone in modules on each side: at least 10X.
+    /// The quiet zone in modules on each side when 10X is wider than <see cref="MinimumQuietZoneMillimetres"/>. Section 4.4.1 (d) of BS EN 798: "minimum width
+    /// of quiet zone: 10X or 2,54 mm, whichever is greater".
     /// </summary>
     public const int QuietZone = 10;
+
+    /// <summary>
+    /// The smallest quiet zone in millimetres, section 4.4.1 (d) of BS EN 798.
+    /// </summary>
+    private const double MinimumQuietZoneMillimetres = 2.54;
+
+    /// <summary>
+    /// The smallest X dimension in millimetres. Section 4.4.1 (a) of BS EN 798: "minimum width of narrow element (X): 0,191 mm". The section gives no largest X
+    /// dimension.
+    /// </summary>
+    private const double MinimumXDimension = 0.191;
 
     /// <summary>
     /// The value of the first start and stop character. Values below it are data characters.
@@ -117,7 +129,7 @@ internal static class CodabarEncoder
     public static void BuildSymbol(ReadOnlySpan<char> head, char stop, char? check, bool printCheck, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         int characters = head.Length + 1 + (check is null ? 0 : 1);
-        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        double xDimension = options.ResolveXDimension(MinimumXDimension, BarcodeSymbology.DefaultXDimension, double.PositiveInfinity);
         Span<int> runs = symbol.BeginLinear((characters * (ElementsPerCharacter + 1)) - 1, xDimension, out Span<float> heights, out _);
         int written = 0;
 
@@ -146,7 +158,8 @@ internal static class CodabarEncoder
             symbol.AddText(head, tail, [], 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);
         }
 
-        symbol.EndLinear(QuietZone, QuietZone);
+        float quietZone = MathF.Max(QuietZone, (float)(MinimumQuietZoneMillimetres / xDimension));
+        symbol.EndLinear(quietZone, quietZone);
     }
 
     /// <summary>

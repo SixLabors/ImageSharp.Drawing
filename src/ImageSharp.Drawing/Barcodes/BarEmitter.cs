@@ -1,7 +1,9 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Numerics;
 using SixLabors.Fonts;
+using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Helpers;
 using SixLabors.ImageSharp.Drawing.Processing;
 
@@ -14,12 +16,6 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal static class BarEmitter
 {
     /// <summary>
-    /// The smallest size in points that the text of a linear or stacked symbol prints at. Section 8.1 of the ISBN Users' Manual: "The ISBN should always be
-    /// printed in type large enough to be easily legible (i.e., 9-point or larger)." Section 7 of the ISMN Users' Manual gives the same floor.
-    /// </summary>
-    private const float MinimumTextPoints = 9F;
-
-    /// <summary>
     /// Measures the symbol without drawing anything.
     /// </summary>
     /// <param name="symbol">The encoded linear or stacked symbol.</param>
@@ -28,14 +24,15 @@ internal static class BarEmitter
     /// <returns>The measured layout of the symbol.</returns>
     public static BarcodeMetrics Measure(ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin)
     {
-        using PooledBuffer<MeasuredLine> lineBuffer = CreateLineBuffer(ref symbol, options);
+        using PooledBuffer<MeasuredLine> lineBuffer = BarcodeEmitter.CreateLineBuffer(ref symbol, options);
 
         // A TextBlock is a class, so the span holds object references and cannot come from the byte pool. A bar symbol has at most 14 text placements: an
         // ISBN has one for each of its 13 digits and one for its caption. The 16 stack slots hold all of them, and a larger count takes an array.
         InlineArray16<TextBlock> blockStorage = default;
         int lineCount = lineBuffer.Span.Length;
         Span<TextBlock> blocks = lineCount <= 16 ? ((Span<TextBlock>)blockStorage)[..lineCount] : new TextBlock[lineCount];
-        return new BarLayout(ref symbol, options, origin, lineBuffer.Span, blocks).Metrics;
+        Shape(ref symbol, options, lineBuffer.Span, blocks);
+        return Measure(ref symbol, options, origin, lineBuffer.Span, out _);
     }
 
     /// <summary>
@@ -46,18 +43,111 @@ internal static class BarEmitter
     /// <param name="options">The sizing and painting options.</param>
     /// <param name="origin">The top left corner of the barcode, in pixels.</param>
     /// <param name="background">The brush that fills the renderable bounds before the bars draw, or <see langword="null"/> for none.</param>
-    /// <returns>The measured layout of the symbol, the same as <see cref="Measure"/> returns.</returns>
+    /// <returns>The measured layout of the symbol, the same as <see cref="Measure(ref BarcodeSymbol, BarcodeOptions, PointF)"/> returns.</returns>
     public static BarcodeMetrics Draw(DrawingCanvas canvas, ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin, Brush? background)
     {
-        using PooledBuffer<MeasuredLine> lineBuffer = CreateLineBuffer(ref symbol, options);
+        using PooledBuffer<MeasuredLine> lineBuffer = BarcodeEmitter.CreateLineBuffer(ref symbol, options);
 
         // A TextBlock is a class, so the span holds object references and cannot come from the byte pool. A bar symbol has at most 14 text placements: an
         // ISBN has one for each of its 13 digits and one for its caption. The 16 stack slots hold all of them, and a larger count takes an array.
         InlineArray16<TextBlock> blockStorage = default;
         int lineCount = lineBuffer.Span.Length;
         Span<TextBlock> blocks = lineCount <= 16 ? ((Span<TextBlock>)blockStorage)[..lineCount] : new TextBlock[lineCount];
-        BarLayout layout = new(ref symbol, options, origin, lineBuffer.Span, blocks);
+        Shape(ref symbol, options, lineBuffer.Span, blocks);
+        return Draw(canvas, ref symbol, options, origin, lineBuffer.Span, blocks, background);
+    }
 
+    /// <summary>
+    /// Shapes the text of the symbol one time: one text block and one measured line for each text placement. The layout reads the lines and the draw renders
+    /// the blocks, so neither shapes the text again.
+    /// </summary>
+    /// <param name="symbol">The encoded linear or stacked symbol.</param>
+    /// <param name="options">The sizing and painting options.</param>
+    /// <param name="lines">The measured lines to write, one for each text placement, or empty when the options carry no font.</param>
+    /// <param name="blocks">The text blocks to write, one for each line.</param>
+    public static void Shape(ref BarcodeSymbol symbol, BarcodeOptions options, Span<MeasuredLine> lines, Span<TextBlock> blocks)
+    {
+        Font? font = options.Font;
+        if (font is null || lines.IsEmpty)
+        {
+            return;
+        }
+
+        // The text spans stretch with a bar block of whole pixel runs, so they still cover it.
+        float moduleWidth = (float)(symbol.XDimension / BarcodeOptions.MillimetresPerInch * options.Dpi);
+        float stretch = symbol.UniformBars ? BlockWidth(ref symbol, moduleWidth) / (symbol.WidthInModules * moduleWidth) : 1F;
+
+        // A bar symbol has at most 14 text placements, so the scales fit on the stack.
+        Span<float> lineScales = stackalloc float[lines.Length];
+        lineScales.Fill(1F);
+        Font digitFont = HasSizeLimits(ref symbol) ? DigitFont(ref symbol, font, options, moduleWidth, moduleWidth * stretch, lineScales) : font;
+        LineFonts fonts = new(digitFont, options.CaptionFont ?? font, symbol.CaptionMinimumSize, symbol.TextWeight, options, moduleWidth * stretch);
+
+        ReadOnlySpan<BarcodeTextPlacement> text = symbol.Text;
+        for (int i = 0; i < lines.Length; i++)
+        {
+            BarcodeTextPlacement placement = text[i];
+            ReadOnlySpan<char> characters = symbol.TextOf(in placement);
+            RichTextOptions textOptions = fonts.OptionsFor(in placement, characters, lineScales[i]);
+
+            // The rectangles of a line are anchored at its origin, so the line is measured from its top left corner and placed on the cell later. The block
+            // keeps the options it was prepared with, and the draw renders the same block at the place the layout gives it.
+            textOptions.Origin = PointF.Empty;
+            TextBlock block = new(characters, textOptions);
+            blocks[i] = block;
+            TextMetrics metrics = block.Measure(-1);
+
+            // The lines below the bars share one baseline, which the tallest of them sets, so they keep the baseline and the line height of their first line.
+            float baseline = 0;
+            float lineHeight = 0;
+            if (placement.Side != BarcodeTextSide.AboveBars)
+            {
+                LineMetrics lineMetrics = metrics.LineMetrics[0];
+                baseline = lineMetrics.Baseline;
+                lineHeight = lineMetrics.LineHeight;
+            }
+
+            lines[i] = new MeasuredLine(metrics.Advance, metrics.Bounds, metrics.RenderableBounds, baseline, lineHeight);
+        }
+    }
+
+    /// <summary>
+    /// Measures the symbol from its shaped text without drawing anything.
+    /// </summary>
+    /// <param name="symbol">The encoded linear or stacked symbol.</param>
+    /// <param name="options">The sizing and painting options.</param>
+    /// <param name="origin">The top left corner of the barcode, in pixels.</param>
+    /// <param name="lines">The lines that <see cref="Shape"/> wrote. The layout writes the position of each line.</param>
+    /// <param name="symbolOrigin">The top left corner of the first module of the symbol, in pixels, before it rounds onto the pixel grid.</param>
+    /// <returns>The measured layout of the symbol.</returns>
+    public static BarcodeMetrics Measure(ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin, Span<MeasuredLine> lines, out PointF symbolOrigin)
+    {
+        BarLayout layout = new(ref symbol, options, origin, lines);
+        symbolOrigin = layout.SymbolOrigin;
+        return layout.Metrics;
+    }
+
+    /// <summary>
+    /// Draws the symbol from its shaped text onto the canvas.
+    /// </summary>
+    /// <param name="canvas">The canvas to render onto.</param>
+    /// <param name="symbol">The encoded linear or stacked symbol.</param>
+    /// <param name="options">The sizing and painting options.</param>
+    /// <param name="origin">The top left corner of the barcode, in pixels.</param>
+    /// <param name="lines">The lines that <see cref="Shape"/> wrote. The layout writes the position of each line.</param>
+    /// <param name="blocks">The blocks that <see cref="Shape"/> wrote, one for each line.</param>
+    /// <param name="background">The brush that fills the renderable bounds before the bars draw, or <see langword="null"/> for none.</param>
+    /// <returns>The measured layout of the symbol.</returns>
+    public static BarcodeMetrics Draw(
+        DrawingCanvas canvas,
+        ref BarcodeSymbol symbol,
+        BarcodeOptions options,
+        PointF origin,
+        Span<MeasuredLine> lines,
+        ReadOnlySpan<TextBlock> blocks,
+        Brush? background)
+    {
+        BarLayout layout = new(ref symbol, options, origin, lines);
         BarcodeMetrics metrics = layout.Metrics;
 
         // The path retains the rectangles until the canvas flushes, so it owns this array.
@@ -71,41 +161,184 @@ internal static class BarEmitter
         }
 
         canvas.Fill(options.BarBrush, new BarcodePath(bars, layout.BarInk));
-        layout.DrawText(canvas, options.BarBrush);
+        layout.DrawText(canvas, blocks, options.BarBrush);
         return metrics;
     }
 
     /// <summary>
     /// Returns the x origin of a line. The line stands on the cell edges the bars actually drew on, not on the exact fractional position, so a digit stays over
     /// its own symbol character. The unrounded edges would let the text and the bars disagree by up to half a module. A centred line straddles the middle of
-    /// its span, and a left aligned line puts the left edge of its ink on the left edge of its span.
+    /// its span, a left aligned line puts the left edge of its ink on the left edge of its span, and a right aligned line puts the right edge of its ink on the
+    /// right edge of its span.
     /// </summary>
     /// <param name="placement">The placement.</param>
-    /// <param name="boundsLeft">The left edge of the ink of the measured line, from <see cref="TextMetrics.Bounds"/>.</param>
+    /// <param name="bounds">The ink of the measured line, from <see cref="TextMetrics.Bounds"/>.</param>
     /// <param name="renderableWidth">The width of the measured line, from <see cref="TextMetrics.RenderableBounds"/>.</param>
     /// <param name="symbolLeft">The x of the first bar, in pixels.</param>
     /// <param name="moduleWidth">The module width in pixels, stretched to the drawn bar block.</param>
     /// <returns>The x origin in pixels.</returns>
-    public static float TextOrigin(BarcodeTextPlacement placement, float boundsLeft, float renderableWidth, float symbolLeft, float moduleWidth)
+    public static float TextOrigin(BarcodeTextPlacement placement, FontRectangle bounds, float renderableWidth, float symbolLeft, float moduleWidth)
     {
         float left = MathF.Round(symbolLeft + (placement.Left * moduleWidth));
-        if (placement.Alignment == BarcodeTextAlignment.Left)
-        {
-            return left - boundsLeft;
-        }
-
         float right = MathF.Round(symbolLeft + (placement.Right * moduleWidth));
-        return ((left + right) * 0.5F) - (renderableWidth * 0.5F);
+        return placement.Alignment switch
+        {
+            BarcodeTextAlignment.Left => left - bounds.Left,
+            BarcodeTextAlignment.Right => right - bounds.Right,
+            _ => ((left + right) * 0.5F) - (renderableWidth * 0.5F),
+        };
     }
 
     /// <summary>
-    /// Rents the buffer that holds the measured lines of the symbol: one line for each text placement when the options carry a font, and none otherwise.
+    /// Returns whether the symbology limits the size of its digit lines: it states a size in points or the printed height of its characters, or a line must
+    /// stay within its span.
     /// </summary>
     /// <param name="symbol">The encoded symbol.</param>
+    /// <returns><see langword="true"/> when the size of the digit lines is limited.</returns>
+    private static bool HasSizeLimits(ref BarcodeSymbol symbol)
+    {
+        if (symbol.TextHeightMaximum > 0 || symbol.TextMinimumSize > 0 || symbol.TextMaximumSize > 0)
+        {
+            return true;
+        }
+
+        foreach (BarcodeTextPlacement placement in symbol.Text)
+        {
+            if (placement.WithinSpan)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Returns the font of the digit lines of a symbology that limits their size, and the scale of each line that must fit its span. A stated size in points
+    /// moves the size of the font of the options into that range, and a stated printed height of the characters moves it into that range. A line that is wider
+    /// than its span at that size then prints at the scale that fits it.
+    /// </summary>
+    /// <param name="symbol">The encoded symbol.</param>
+    /// <param name="font">The font of the options.</param>
     /// <param name="options">The sizing and painting options.</param>
-    /// <returns>The line buffer.</returns>
-    private static PooledBuffer<MeasuredLine> CreateLineBuffer(ref BarcodeSymbol symbol, BarcodeOptions options)
-        => options.Font is null || symbol.Text.IsEmpty ? default : new(symbol.Text.Length);
+    /// <param name="moduleWidth">The width of one module in pixels.</param>
+    /// <param name="spanModuleWidth">The width of one module of a text span in pixels, stretched to the drawn bar block.</param>
+    /// <param name="lineScales">The scale of each line, one for each text placement, to write.</param>
+    /// <returns>The font of the digit lines.</returns>
+    /// <exception cref="ArgumentException">A line does not fit its span at the smallest printed height of the symbology.</exception>
+    private static Font DigitFont(ref BarcodeSymbol symbol, Font font, BarcodeOptions options, float moduleWidth, float spanModuleWidth, Span<float> lineScales)
+    {
+        // A size in points needs no measure. The other limits measure the text in the font of that size.
+        float pointSize = font.Size;
+        if (symbol.TextMinimumSize > 0)
+        {
+            pointSize = MathF.Max(pointSize, symbol.TextMinimumSize);
+        }
+
+        if (symbol.TextMaximumSize > 0)
+        {
+            pointSize = MathF.Min(pointSize, symbol.TextMaximumSize);
+        }
+
+        font = pointSize == font.Size ? font : new Font(font, pointSize);
+
+        // The ink height comes from the design bounds of the glyphs, and hinting does not move a glyph on the x axis, so the measured height and widths scale
+        // with the font size. Each line gives the sizes that put it on its limits, and where the limits of two lines disagree, the minimum height wins over
+        // the maximum height. Only a line that a limit applies to is measured. A line of one character that only has to fit its span takes the width of its
+        // glyph, which needs no shaping.
+        ReadOnlySpan<BarcodeTextPlacement> text = symbol.Text;
+        float minimumHeight = symbol.TextHeightMinimum * moduleWidth;
+        float maximumHeight = symbol.TextHeightMaximum * moduleWidth;
+        float sizeAtMinimum = 0;
+        float sizeAtMaximum = float.MaxValue;
+        RichTextOptions? measureOptions = null;
+        for (int i = 0; i < text.Length; i++)
+        {
+            BarcodeTextPlacement placement = text[i];
+            if (placement.IsCaption || (maximumHeight <= 0 && !placement.WithinSpan))
+            {
+                continue;
+            }
+
+            ReadOnlySpan<char> characters = symbol.TextOf(in placement);
+            float width;
+            if (maximumHeight <= 0
+                && placement.Alignment != BarcodeTextAlignment.Centered
+                && characters.Length == 1
+                && font.TryGetGlyphs(new CodePoint(characters[0]), out Glyph? glyph)
+                && glyph is Glyph characterGlyph)
+            {
+                width = characterGlyph.BoundingBox(GlyphLayoutMode.Horizontal, Vector2.Zero, options.Dpi).Width;
+            }
+            else
+            {
+                measureOptions ??= BarcodeTextOptionsFactory.Create(font, options.Dpi, symbol.TextWeight);
+                TextMetrics metrics = TextMeasurer.Measure(characters, measureOptions);
+                float inkHeight = metrics.Bounds.Height * placement.FontScale;
+                if (maximumHeight > 0 && inkHeight > 0)
+                {
+                    sizeAtMinimum = MathF.Max(sizeAtMinimum, font.Size * minimumHeight / inkHeight);
+                    sizeAtMaximum = MathF.Min(sizeAtMaximum, font.Size * maximumHeight / inkHeight);
+                }
+
+                // A line aligned on an edge fits its ink to the span, and a centred line fits its renderable bounds, which hold its ink.
+                width = placement.Alignment == BarcodeTextAlignment.Centered ? metrics.RenderableBounds.Width : metrics.Bounds.Width;
+            }
+
+            // The width at the size of the options, until the size of the font is known.
+            lineScales[i] = placement.WithinSpan ? width * placement.FontScale : 1F;
+        }
+
+        float size = MathF.Max(MathF.Min(font.Size, sizeAtMaximum), sizeAtMinimum);
+        for (int i = 0; i < text.Length; i++)
+        {
+            BarcodeTextPlacement placement = text[i];
+            if (!placement.WithinSpan || placement.IsCaption)
+            {
+                continue;
+            }
+
+            float width = lineScales[i] * size / font.Size;
+            float span = (placement.Right - placement.Left) * spanModuleWidth;
+            float scale = width > span ? span / width : 1F;
+
+            // The smallest printed height and the span are both requirements, so a line that needs a smaller font than the height allows cannot be printed.
+            if (maximumHeight > 0 && size * scale < sizeAtMinimum)
+            {
+                throw new ArgumentException("A text line does not fit its span at the smallest printed height of its symbology.");
+            }
+
+            lineScales[i] = scale;
+        }
+
+        return size == font.Size ? font : new Font(font, size);
+    }
+
+    /// <summary>
+    /// Returns the width of the bar block in pixels. Uniform bars draw each run at a whole number of pixels, so their block is the sum of those runs on the
+    /// first row. Other bars draw at the exact width.
+    /// </summary>
+    /// <param name="symbol">The encoded linear or stacked symbol.</param>
+    /// <param name="moduleWidth">The width of one module in pixels.</param>
+    /// <returns>The width in pixels.</returns>
+    private static float BlockWidth(ref BarcodeSymbol symbol, float moduleWidth)
+    {
+        if (!symbol.UniformBars)
+        {
+            return symbol.WidthInModules * moduleWidth;
+        }
+
+        float runWidthInPixels = symbol.RunUnit * moduleWidth;
+        BarcodeRow first = symbol.Rows[0];
+        ReadOnlySpan<int> runs = symbol.Runs.Slice(first.RunStart, first.RunCount);
+        float blockWidth = 0;
+        for (int i = 0; i < runs.Length; i++)
+        {
+            blockWidth += RunPixels(runs[i], runWidthInPixels);
+        }
+
+        return blockWidth;
+    }
 
     /// <summary>
     /// Returns the pixel offset of an edge in a row of uniform bars: the sum of the whole pixel widths of the runs before the edge.
@@ -138,25 +371,34 @@ internal static class BarEmitter
 
     /// <summary>
     /// Resolves the font an ISBN, ISMN or ISSN caption prints in. Under <see cref="BarcodeOptions.FitCaptionToSymbolWidth"/> the size is the one that spans the
-    /// bars. Otherwise the font keeps its own size. The 9 point floor wins over both, because it is the one size rule the standards state, and a caption that
-    /// cannot fit at 9 point widens the drawing.
+    /// bars. Otherwise the font keeps its own size. The minimum size of the symbology wins over both, and a caption that cannot fit at that size widens the
+    /// drawing.
     /// </summary>
     /// <param name="caption">The caption text.</param>
     /// <param name="spanModules">The width the caption prints across, in modules.</param>
     /// <param name="moduleWidth">The width of one module in pixels.</param>
     /// <param name="font">The caption font of the options, or their font when they carry no caption font.</param>
+    /// <param name="minimumSize">The smallest size of the caption in points, from <see cref="BarcodeSymbol.CaptionMinimumSize"/>.</param>
+    /// <param name="weight">The font weight of the text, from <see cref="BarcodeSymbol.TextWeight"/>.</param>
     /// <param name="options">The options that carry the resolution and the fitting choice.</param>
     /// <returns>The font to print the caption with.</returns>
-    private static Font ResolveCaptionFont(ReadOnlySpan<char> caption, float spanModules, float moduleWidth, Font font, BarcodeOptions options)
+    private static Font ResolveCaptionFont(
+        ReadOnlySpan<char> caption,
+        float spanModules,
+        float moduleWidth,
+        Font font,
+        float minimumSize,
+        FontWeight? weight,
+        BarcodeOptions options)
     {
         float size = font.Size;
         if (options.FitCaptionToSymbolWidth)
         {
-            float width = TextMeasurer.Measure(caption, BarcodeTextOptionsFactory.Create(font, options.Dpi)).RenderableBounds.Width;
+            float width = TextMeasurer.Measure(caption, BarcodeTextOptionsFactory.Create(font, options.Dpi, weight)).RenderableBounds.Width;
             size = font.Size * spanModules * moduleWidth / width;
         }
 
-        size = MathF.Max(size, MinimumTextPoints);
+        size = MathF.Max(size, minimumSize);
         return size == font.Size ? font : new Font(font, size);
     }
 
@@ -168,20 +410,14 @@ internal static class BarEmitter
     private ref struct BarLayout
     {
         /// <summary>
-        /// The top left corner of the symbol and its quiet zones, in pixels. The layout box of the barcode starts at the origin, so text above the symbol or to
-        /// the left of it moves this corner down or right.
-        /// </summary>
-        private readonly PointF origin;
-
-        /// <summary>
         /// The width of one module in pixels.
         /// </summary>
         private readonly float moduleWidth;
 
         /// <summary>
-        /// The top quiet zone in modules, or zero when the quiet zones are not drawn.
+        /// The top edge of the rows in pixels, on a whole pixel.
         /// </summary>
-        private readonly float topZone;
+        private readonly float blockTop;
 
         /// <summary>
         /// The x of the first bar, in pixels.
@@ -202,6 +438,11 @@ internal static class BarEmitter
         /// The width of one run unit in pixels.
         /// </summary>
         private readonly float runWidthInPixels;
+
+        /// <summary>
+        /// The number of run units in one module of runs that are whole modules with corrections, or 0, from <see cref="BarcodeSymbol.CorrectedModuleUnits"/>.
+        /// </summary>
+        private readonly int correctedModuleUnits;
 
         /// <summary>
         /// The thickness of the frame in modules, or zero for none.
@@ -259,28 +500,16 @@ internal static class BarEmitter
         private readonly Span<MeasuredLine> lines;
 
         /// <summary>
-        /// The prepared text block of each line, which the layout measures and the draw renders.
-        /// </summary>
-        private readonly Span<TextBlock> blocks;
-
-        /// <summary>
-        /// The text options of the lines.
-        /// </summary>
-        private LineFonts fonts;
-
-        /// <summary>
         /// Initializes a new instance of the <see cref="BarLayout"/> struct. A linear symbol is one row. The rows share the width, the run unit and the bar
         /// rounding of the symbol.
         /// </summary>
         /// <param name="symbol">The encoded linear or stacked symbol.</param>
         /// <param name="options">The sizing and painting options.</param>
         /// <param name="origin">The top left corner of the barcode, in pixels.</param>
-        /// <param name="lines">The measured lines to write, one for each text placement, or empty when the options carry no font.</param>
-        /// <param name="blocks">The text blocks to write, one for each line.</param>
-        public BarLayout(ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin, Span<MeasuredLine> lines, Span<TextBlock> blocks)
+        /// <param name="lines">The shaped lines, one for each text placement, or empty when the options carry no font. The layout writes their origins.</param>
+        public BarLayout(ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin, Span<MeasuredLine> lines)
         {
             this.lines = lines;
-            this.blocks = blocks;
             float moduleWidth = (float)(symbol.XDimension / BarcodeOptions.MillimetresPerInch * options.Dpi);
             this.moduleWidth = moduleWidth;
 
@@ -297,20 +526,10 @@ internal static class BarEmitter
             // keeps that width and that pitch: Table 11 of the Mailmark barcode definition document requires that "they must be equally spaced", and page 12
             // of the Japan Post manual gives one bar width, "バー幅 0.6×a/10". Edges rounded from the accumulated exact position alternate between two widths.
             // The text spans stretch with the bar block so they still cover it.
-            BarcodeRow first = symbol.Rows[0];
             this.wholePixelRuns = symbol.UniformBars;
             this.runWidthInPixels = symbol.RunUnit * moduleWidth;
-            float blockWidth = symbol.WidthInModules * moduleWidth;
-            if (this.wholePixelRuns)
-            {
-                blockWidth = 0;
-                ReadOnlySpan<int> firstRuns = allRuns.Slice(first.RunStart, first.RunCount);
-                for (int i = 0; i < firstRuns.Length; i++)
-                {
-                    blockWidth += RunPixels(firstRuns[i], this.runWidthInPixels);
-                }
-            }
-
+            this.correctedModuleUnits = symbol.CorrectedModuleUnits;
+            float blockWidth = BlockWidth(ref symbol, moduleWidth);
             this.blockWidth = blockWidth;
             float stretch = this.wholePixelRuns ? blockWidth / (symbol.WidthInModules * moduleWidth) : 1F;
             float textModuleWidth = moduleWidth * stretch;
@@ -338,67 +557,43 @@ internal static class BarEmitter
             float sideZones = (widthInModules - symbol.WidthInModules) * moduleWidth;
             float topZone = options.IncludeQuietZones ? symbol.TopQuietZone : 0F;
             float bottomZone = options.IncludeQuietZones ? symbol.BottomQuietZone : 0F;
-            this.topZone = topZone;
 
-            // The text is measured first, because its line boxes set where the symbol stands. Every text line prints at 9 point or larger, the one size floor
-            // the standards state.
-            Font? font = options.Font;
-            this.fonts = default;
+            // Every line drawn in one font shares one rise, so the lines share a baseline and their glyphs sit level with each other. The rise is the
+            // tallest ink any of those lines carries, which a cap height metric misses for an ascender or the overshoot of a round glyph. A symbol prints one
+            // line below the bars and at most one above. The clear space is measured to the ink, so the line moves by the offset of its ink edge to put that
+            // edge on the gap whatever the font or its size.
             float aboveInk = 0;
             float aboveInkTop = float.MaxValue;
             float belowInk = float.MaxValue;
             float belowInkBottom = float.MinValue;
             float belowBaseline = 0;
+            float belowHeight = 0;
             float aboveEdge = float.NaN;
             float belowEdge = float.NaN;
-            if (font is not null && !lines.IsEmpty)
+            for (int i = 0; i < lines.Length; i++)
             {
-                Font digitFont = DigitFont(ref symbol, font, options, moduleWidth, stretch);
-                this.fonts = new LineFonts(digitFont, options.CaptionFont ?? font, options, textModuleWidth);
-
-                // Every line drawn in one font shares one rise, so the lines share a baseline and their glyphs sit level with each other. The rise is the
-                // tallest ink any of those lines carries, which a cap height metric misses for an ascender or the overshoot of a round glyph. A symbol prints
-                // one line below the bars and at most one above. The clear space is measured to the ink, so the line moves by the offset of its ink edge to
-                // put that edge on the gap whatever the font or its size.
-                float belowHeight = 0;
-                for (int i = 0; i < lines.Length; i++)
+                BarcodeTextPlacement placement = text[i];
+                MeasuredLine line = lines[i];
+                if (placement.Side == BarcodeTextSide.AboveBars)
                 {
-                    BarcodeTextPlacement placement = text[i];
-                    ReadOnlySpan<char> characters = symbol.TextOf(in placement);
-                    RichTextOptions measureOptions = this.fonts.OptionsFor(in placement, characters);
+                    aboveInk = MathF.Max(aboveInk, line.Bounds.Bottom);
+                    aboveInkTop = MathF.Min(aboveInkTop, line.Bounds.Top);
+                    aboveEdge = float.IsNaN(aboveEdge) ? placement.TextEdge : MathF.Min(aboveEdge, placement.TextEdge);
+                }
+                else
+                {
+                    belowInkBottom = MathF.Max(belowInkBottom, line.Bounds.Bottom);
+                    belowEdge = float.IsNaN(belowEdge) ? placement.TextEdge : MathF.Max(belowEdge, placement.TextEdge);
 
-                    // The rectangles of a line are anchored at its origin, so the line is measured from its top left corner and placed on the cell later. The
-                    // block shapes the line once, and the draw renders the same block at the place the layout gives it.
-                    measureOptions.Origin = PointF.Empty;
-                    TextBlock block = new(characters, measureOptions);
-                    blocks[i] = block;
-                    TextMetrics metrics = block.Measure(-1);
-                    float baseline = 0;
-                    if (placement.Side == BarcodeTextSide.AboveBars)
+                    // The quiet zone digits of a UPC symbol print smaller than the rest of the line. The tallest line sets where the line sits, and every line
+                    // on it shares that baseline.
+                    if (line.LineHeight > belowHeight)
                     {
-                        aboveInk = MathF.Max(aboveInk, metrics.Bounds.Bottom);
-                        aboveInkTop = MathF.Min(aboveInkTop, metrics.Bounds.Top);
-                        aboveEdge = float.IsNaN(aboveEdge) ? placement.TextEdge : MathF.Min(aboveEdge, placement.TextEdge);
-                    }
-                    else
-                    {
-                        belowInkBottom = MathF.Max(belowInkBottom, metrics.Bounds.Bottom);
-                        belowEdge = float.IsNaN(belowEdge) ? placement.TextEdge : MathF.Max(belowEdge, placement.TextEdge);
-
-                        // The quiet zone digits of a UPC symbol print smaller than the rest of the line. The tallest line sets where the line sits, and every
-                        // line on it shares that baseline.
-                        LineMetrics lineMetrics = metrics.LineMetrics[0];
-                        baseline = lineMetrics.Baseline;
-                        if (lineMetrics.LineHeight > belowHeight)
-                        {
-                            belowHeight = lineMetrics.LineHeight;
-                            belowBaseline = lineMetrics.Baseline;
-                        }
-
-                        belowInk = MathF.Min(belowInk, metrics.Bounds.Top);
+                        belowHeight = line.LineHeight;
+                        belowBaseline = line.Baseline;
                     }
 
-                    lines[i] = new MeasuredLine(metrics.Advance, metrics.Bounds, metrics.RenderableBounds.Width, baseline);
+                    belowInk = MathF.Min(belowInk, line.Bounds.Top);
                 }
             }
 
@@ -414,9 +609,14 @@ internal static class BarEmitter
                 BarcodeTextPlacement placement = text[i];
                 MeasuredLine line = lines[i];
                 float cellLeft = leadingOffset + (placement.Left * textModuleWidth);
-                float x = placement.Alignment == BarcodeTextAlignment.Left
-                    ? cellLeft - line.Ink.Left
-                    : ((cellLeft + leadingOffset + (placement.Right * textModuleWidth)) * 0.5F) - (line.RenderableWidth * 0.5F);
+                float cellRight = leadingOffset + (placement.Right * textModuleWidth);
+                float x = placement.Alignment switch
+                {
+                    BarcodeTextAlignment.Left => cellLeft - line.Bounds.Left,
+                    BarcodeTextAlignment.Right => cellRight - line.Bounds.Right,
+                    _ => ((cellLeft + cellRight) * 0.5F) - (line.RenderableBounds.Width * 0.5F),
+                };
+
                 float edge = (topZone + placement.TextEdge) * moduleWidth;
                 float y = placement.Side == BarcodeTextSide.AboveBars ? edge - aboveInk : edge - belowInk + belowBaseline - line.Baseline;
                 layoutLeft = MathF.Min(layoutLeft, x + line.Advance.Left);
@@ -444,34 +644,34 @@ internal static class BarEmitter
                 }
             }
 
-            // The origin is the top left corner of the layout box, as it is for text. Text above the symbol or to the left of it moves the symbol down or right.
+            // The origin is the top left corner of the layout box, as it is for text. Text above the symbol or to the left of it moves the symbol down or
+            // right.
             PointF symbolOrigin = new(origin.X - layoutLeft, origin.Y - layoutTop);
-            this.origin = symbolOrigin;
             RectangleF advance = new(origin.X, origin.Y, layoutRight - layoutLeft, layoutBottom - layoutTop);
 
-            // The whole pixel runs land on the pixel grid only when the block starts on it, whatever the fraction of a pixel the quiet zone ends on.
-            float symbolLeft = symbolOrigin.X + leadingOffset;
-            if (this.wholePixelRuns)
-            {
-                symbolLeft = MathF.Round(symbolLeft);
-            }
-
+            // The bar block starts on a whole pixel, whatever the fraction of a pixel the origin and the quiet zone end on. Each edge then rounds from a whole
+            // pixel, so a module of a whole number of pixels draws at exactly that number wherever the symbol stands. From a start on half a pixel, edges round
+            // to the even pixel and alternate, and a bar of three pixels draws as four and then two.
+            this.SymbolOrigin = new PointF(symbolOrigin.X + leadingOffset, symbolOrigin.Y + (topZone * moduleWidth));
+            float symbolLeft = MathF.Round(this.SymbolOrigin.X);
             this.symbolLeft = symbolLeft;
+            this.blockTop = MathF.Round(this.SymbolOrigin.Y);
 
-            // The edge the reader sees is what rounds onto the device pixel grid, as the bar edges do. The ink of a line below the bars starts on its text edge,
-            // and the ink of a line above the bars ends on it.
+            // The edge the reader sees is what rounds onto the device pixel grid, as the bar edges do. The ink of a line below the bars starts on its text
+            // edge, and the ink of a line above the bars ends on it.
             RectangleF textInk = RectangleF.Empty;
             for (int i = 0; i < lines.Length; i++)
             {
                 BarcodeTextPlacement placement = text[i];
                 ref MeasuredLine line = ref lines[i];
                 float textEdge = MathF.Round(symbolOrigin.Y + ((topZone + placement.TextEdge) * moduleWidth));
-                line.X = TextOrigin(placement, line.Ink.Left, line.RenderableWidth, symbolLeft, textModuleWidth);
-                line.Y = placement.Side == BarcodeTextSide.AboveBars
+                float x = TextOrigin(placement, line.Bounds, line.RenderableBounds.Width, symbolLeft, textModuleWidth);
+                float y = placement.Side == BarcodeTextSide.AboveBars
                     ? textEdge - aboveInk
                     : textEdge - belowInk + belowBaseline - line.Baseline;
 
-                RectangleF ink = new(line.X + line.Ink.X, line.Y + line.Ink.Y, line.Ink.Width, line.Ink.Height);
+                line.Origin = new Vector2(x, y);
+                RectangleF ink = new(x + line.Bounds.X, y + line.Bounds.Y, line.Bounds.Width, line.Bounds.Height);
                 textInk = i == 0 ? ink : RectangleF.Union(textInk, ink);
             }
 
@@ -482,28 +682,44 @@ internal static class BarEmitter
             if (frame > 0)
             {
                 this.frameThickness = MathF.Round(frame * moduleWidth);
-                float exactTop = symbolOrigin.Y + (topZone * moduleWidth);
-                float exactBottom = symbolOrigin.Y + ((topZone + symbol.HeightInModules) * moduleWidth);
+                float exactTop = this.blockTop;
+                float exactBottom = this.blockTop + (symbol.HeightInModules * moduleWidth);
                 this.frameTop = topZone > 0 ? MathF.Round(exactTop) : MathF.Floor(exactTop);
                 float frameBottom = bottomZone > 0 || !float.IsNaN(belowEdge) ? MathF.Round(exactBottom) : MathF.Ceiling(exactBottom);
                 this.upperBottom = this.frameTop + this.frameThickness;
                 this.lowerTop = frameBottom - this.frameThickness;
 
-                // When the quiet zones are drawn the frame reaches across them, and the quiet zones absorb the fraction of a pixel between the snapped outer
-                // edge and the exact one. Without them the frame ends on the bars.
-                this.frameLeft = frameSpansQuietZones ? MathF.Floor(symbolOrigin.X) : MathF.Round(symbolLeft);
-                this.frameRight = frameSpansQuietZones ? MathF.Ceiling(symbolOrigin.X + sideZones + blockWidth) : MathF.Round(symbolLeft + blockWidth);
+                // When the quiet zones are drawn the frame reaches across them, and its outer edges snap outward from the exact ones, so the frame fills
+                // the measured area. The quiet zones absorb the fraction of a pixel between the snapped outer edge and the exact one. The vertical sections
+                // also stand at least the quiet zone and their thickness away from the bar block, which starts and ends on whole pixels. The thickness
+                // rounds on its own, so without that limit a quiet zone could lose a pixel under its minimum. A quiet zone is a minimum, so a quiet zone of
+                // a fraction of a pixel rounds up. Without the quiet zones the frame ends on the bars.
+                if (this.sides)
+                {
+                    float leadingZone = (float)Math.Ceiling(symbol.LeadingQuietZone * (double)moduleWidth);
+                    float trailingZone = (float)Math.Ceiling(symbol.TrailingQuietZone * (double)moduleWidth);
+                    this.frameLeft = MathF.Min(MathF.Floor(symbolOrigin.X), symbolLeft - leadingZone - this.frameThickness);
+                    float blockRight = symbolLeft + blockWidth;
+                    this.frameRight = MathF.Max(MathF.Ceiling(symbolOrigin.X + sideZones + blockWidth), blockRight + trailingZone + this.frameThickness);
+                }
+                else
+                {
+                    this.frameLeft = frameSpansQuietZones ? MathF.Floor(symbolOrigin.X) : MathF.Round(symbolLeft);
+                    this.frameRight = frameSpansQuietZones ? MathF.Ceiling(symbolOrigin.X + sideZones + blockWidth) : MathF.Round(symbolLeft + blockWidth);
+                }
             }
 
             // An identification bar stands its clearance beyond the far ink edge of the line on its side, and spans the symbol and its quiet zones whether or
             // not the quiet zones are drawn, because section 2.4.3 of USPS2000508 extends the bars "at least the total combined width of the barcode and the
-            // minimum clear zones". The bars stand on the text edges the lines draw at, so the clearance holds to the drawn ink. The edge next to the text
-            // rounds away from it, and both bars share one pixel thickness.
+            // minimum clear zones". Section 4.9.2 of Publication 199: "Human-readable numbers cannot extend beyond the length of the identification bars", and
+            // section 4.9.4 lets the bars extend to "the entire width of the label", so the bars also span the ink of the text. The bars stand on the text
+            // edges the lines draw at, so the clearance holds to the drawn ink. The edge next to the text rounds away from it, and both bars share one pixel
+            // thickness.
             if (identificationThickness > 0)
             {
                 float thickness = MathF.Max(1F, MathF.Round(identificationThickness));
-                float left = MathF.Floor(symbolLeft - (symbol.LeadingQuietZone * moduleWidth));
-                float right = MathF.Ceiling(symbolLeft + blockWidth + (symbol.TrailingQuietZone * moduleWidth));
+                float left = MathF.Floor(MathF.Min(symbolLeft - (symbol.LeadingQuietZone * moduleWidth), textInk.Left));
+                float right = MathF.Ceiling(MathF.Max(symbolLeft + blockWidth + (symbol.TrailingQuietZone * moduleWidth), textInk.Right));
                 if (!float.IsNaN(aboveEdge))
                 {
                     float edge = MathF.Round(symbolOrigin.Y + ((topZone + aboveEdge) * moduleWidth));
@@ -540,6 +756,11 @@ internal static class BarEmitter
                     left = symbolLeft + PixelOffset(rowRuns, row.InkStart, this.runWidthInPixels);
                     right = symbolLeft + PixelOffset(rowRuns, row.InkEnd, this.runWidthInPixels);
                 }
+                else if (this.correctedModuleUnits > 0)
+                {
+                    left = this.CorrectedEdge(row.InkStart);
+                    right = this.CorrectedEdge(row.InkEnd);
+                }
                 else
                 {
                     left = (float)Math.Round(symbolLeft + (row.InkStart * (double)this.runWidthInPixels));
@@ -574,6 +795,11 @@ internal static class BarEmitter
         }
 
         /// <summary>
+        /// Gets the top left corner of the first module of the symbol, in pixels, before it rounds onto the pixel grid.
+        /// </summary>
+        public PointF SymbolOrigin { get; }
+
+        /// <summary>
         /// Gets the ink of the bars, the frame and the identification bars, in pixels.
         /// </summary>
         public RectangleF BarInk { get; }
@@ -602,6 +828,24 @@ internal static class BarEmitter
         }
 
         /// <summary>
+        /// Returns the pixel position of an edge of runs that are whole modules with corrections. The module edge rounds onto the pixel grid as an edge without
+        /// a correction does, and the correction rounds to its own whole number of pixels, so the edges are those of the runs without corrections until a
+        /// correction is half a pixel or more. Rounded together, a correction of a fraction of a pixel could move one edge of a bar a whole pixel and its
+        /// neighbour not, and change a bar of two pixels by half its width. The corrections of a character sum to zero and are less than half a module, so the
+        /// nearest module to an edge is the module edge it corrects.
+        /// </summary>
+        /// <param name="units">The edge in run units from the start of the row.</param>
+        /// <returns>The edge in pixels.</returns>
+        private readonly float CorrectedEdge(int units)
+        {
+            int unitsPerModule = this.correctedModuleUnits;
+            int modules = (units + (unitsPerModule >> 1)) / unitsPerModule;
+            int correction = units - (modules * unitsPerModule);
+            double edge = Math.Round(this.symbolLeft + (modules * (double)this.moduleWidth));
+            return (float)(edge + Math.Round(correction * (double)this.runWidthInPixels));
+        }
+
+        /// <summary>
         /// Writes every bar rectangle: the bars, then the frame sections, then the identification bars.
         /// </summary>
         /// <param name="symbol">The encoded symbol.</param>
@@ -625,10 +869,20 @@ internal static class BarEmitter
                 // The position adds every run before it. A double holds each product of a whole run and the run width exactly, so the sum carries no rounding
                 // error from the runs before it.
                 double x = this.symbolLeft;
+                int units = 0;
                 for (int i = 0; i < runs.Length; i++)
                 {
                     double runWidth = this.wholePixelRuns ? RunPixels(runs[i], this.runWidthInPixels) : runs[i] * (double)this.runWidthInPixels;
-                    if ((i & 1) == 0)
+                    if ((i & 1) == 0 && this.correctedModuleUnits > 0)
+                    {
+                        int bar = i >> 1;
+                        float top = rowTop + rowBarTops[bar];
+                        float bottom = top + rowHeights[bar];
+                        float barTop = frame > 0 && top == frame ? this.upperBottom : this.RowEdge(top);
+                        float barBottom = frame > 0 && bottom == symbol.HeightInModules - frame ? this.lowerTop : this.RowEdge(bottom);
+                        bars[index++] = RectangleF.FromLTRB(this.CorrectedEdge(units), barTop, this.CorrectedEdge(units + runs[i]), barBottom);
+                    }
+                    else if ((i & 1) == 0)
                     {
                         // Each bar edge rounds from its exact accumulated position onto the device pixel grid, so bars stay crisp for scanning at any module
                         // width and rounding cannot drift across the symbol, and the edge a row shares with the row below it rounds to one pixel row for both.
@@ -642,6 +896,7 @@ internal static class BarEmitter
                     }
 
                     x += runWidth;
+                    units += runs[i];
                 }
             }
 
@@ -671,71 +926,17 @@ internal static class BarEmitter
         }
 
         /// <summary>
-        /// Draws each text line where the layout put it. Each line renders its prepared block, so it is not shaped again.
+        /// Draws each text line where the layout put it. Each line renders its shaped block, so it is not shaped again.
         /// </summary>
         /// <param name="canvas">The canvas to render onto.</param>
+        /// <param name="blocks">The shaped blocks, one for each line.</param>
         /// <param name="brush">The brush of the text.</param>
-        public readonly void DrawText(DrawingCanvas canvas, Brush brush)
+        public readonly void DrawText(DrawingCanvas canvas, ReadOnlySpan<TextBlock> blocks, Brush brush)
         {
             for (int i = 0; i < this.lines.Length; i++)
             {
-                canvas.DrawText(this.blocks[i], new PointF(this.lines[i].X, this.lines[i].Y), -1, brush, null);
+                canvas.DrawText(blocks[i], this.lines[i].Origin, -1, brush, null);
             }
-        }
-
-        /// <summary>
-        /// Returns the font of the digit lines. A digit prints inside its own symbol character, so its size is capped to that cell and the text cannot run into
-        /// its neighbour. The 9 point floor wins over the cap where the two disagree.
-        /// </summary>
-        /// <param name="symbol">The encoded symbol.</param>
-        /// <param name="font">The font of the options.</param>
-        /// <param name="options">The sizing and painting options.</param>
-        /// <param name="moduleWidth">The width of one module in pixels.</param>
-        /// <param name="stretch">The factor the text spans stretch by to cover a bar block of whole pixel runs.</param>
-        /// <returns>The font of the digit lines.</returns>
-        private static Font DigitFont(ref BarcodeSymbol symbol, Font font, BarcodeOptions options, float moduleWidth, float stretch)
-        {
-            Font digitFont = font.Size >= MinimumTextPoints ? font : new Font(font, MinimumTextPoints);
-            float cap = float.MaxValue;
-
-            // A symbology that states the printed height of its characters gives a range of ink heights. Ink height scales with the font size, so each line
-            // gives the sizes that put its ink on the two limits. The caller's size is clamped into the range, and the minimum wins over the cap as the 9 point
-            // floor does.
-            float minimumHeight = symbol.TextHeightMinimum * moduleWidth;
-            float maximumHeight = symbol.TextHeightMaximum * moduleWidth;
-            float sizeAtMinimum = 0;
-            float sizeAtMaximum = float.MaxValue;
-            RichTextOptions capOptions = BarcodeTextOptionsFactory.Create(digitFont, options.Dpi);
-            ReadOnlySpan<BarcodeTextPlacement> text = symbol.Text;
-            for (int i = 0; i < text.Length; i++)
-            {
-                BarcodeTextPlacement placement = text[i];
-                if (placement.IsCaption)
-                {
-                    continue;
-                }
-
-                // What runs into a neighbour is the glyph bounds, so the cap measures those. The renderable bounds are their union with the advance, and the
-                // advance is space the glyph reserves rather than covers.
-                FontRectangle ink = TextMeasurer.MeasureBounds(symbol.TextOf(in placement), capOptions);
-                if (ink.Width <= 0)
-                {
-                    continue;
-                }
-
-                float cell = (placement.Right - placement.Left) * moduleWidth * stretch;
-                cap = MathF.Min(cap, digitFont.Size * cell / (ink.Width * placement.FontScale));
-                if (maximumHeight > 0)
-                {
-                    float inkHeight = ink.Height * placement.FontScale;
-                    sizeAtMinimum = MathF.Max(sizeAtMinimum, digitFont.Size * minimumHeight / inkHeight);
-                    sizeAtMaximum = MathF.Min(sizeAtMaximum, digitFont.Size * maximumHeight / inkHeight);
-                }
-            }
-
-            float size = MathF.Min(MathF.Max(digitFont.Size, sizeAtMinimum), sizeAtMaximum);
-            float capped = MathF.Max(MathF.Min(size, cap), MathF.Max(sizeAtMinimum, MinimumTextPoints));
-            return capped == digitFont.Size ? digitFont : new Font(digitFont, capped);
         }
 
         /// <summary>
@@ -744,58 +945,7 @@ internal static class BarEmitter
         /// <param name="modules">The position in modules from the symbol top.</param>
         /// <returns>The edge in pixels.</returns>
         private readonly float RowEdge(float modules)
-            => MathF.Round(this.origin.Y + ((this.topZone + modules) * this.moduleWidth));
-    }
-
-    /// <summary>
-    /// What the layout measured of one line and where it put the line, so the draw draws the line without measuring it again.
-    /// </summary>
-    private struct MeasuredLine
-    {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="MeasuredLine"/> struct.
-        /// </summary>
-        /// <param name="advance">The line box of the line, from <see cref="TextMetrics.Advance"/>, relative to its origin.</param>
-        /// <param name="ink">The glyph ink of the line, from <see cref="TextMetrics.Bounds"/>, relative to its origin.</param>
-        /// <param name="renderableWidth">The width of the line, from <see cref="TextMetrics.RenderableBounds"/>.</param>
-        /// <param name="baseline">The baseline of a line below the bars, or 0 for a line above them.</param>
-        public MeasuredLine(FontRectangle advance, FontRectangle ink, float renderableWidth, float baseline)
-        {
-            this.Advance = advance;
-            this.Ink = ink;
-            this.RenderableWidth = renderableWidth;
-            this.Baseline = baseline;
-        }
-
-        /// <summary>
-        /// Gets or sets the x origin of the line, in pixels. The layout sets it once the symbol has its position.
-        /// </summary>
-        public float X { get; set; }
-
-        /// <summary>
-        /// Gets or sets the y origin of the line, in pixels. The layout sets it once the symbol has its position.
-        /// </summary>
-        public float Y { get; set; }
-
-        /// <summary>
-        /// Gets the width of the line, from <see cref="TextMetrics.RenderableBounds"/>.
-        /// </summary>
-        public float RenderableWidth { get; }
-
-        /// <summary>
-        /// Gets the line box of the line, from <see cref="TextMetrics.Advance"/>, relative to its origin.
-        /// </summary>
-        public FontRectangle Advance { get; }
-
-        /// <summary>
-        /// Gets the glyph ink of the line, from <see cref="TextMetrics.Bounds"/>, relative to its origin.
-        /// </summary>
-        public FontRectangle Ink { get; }
-
-        /// <summary>
-        /// Gets the baseline of a line below the bars, or 0 for a line above them.
-        /// </summary>
-        public float Baseline { get; }
+            => MathF.Round(this.blockTop + (modules * this.moduleWidth));
     }
 
     /// <summary>
@@ -805,7 +955,7 @@ internal static class BarEmitter
     private struct LineFonts
     {
         /// <summary>
-        /// The font the digit lines render in, after the size floor and the cell cap.
+        /// The font the digit lines render in, from <see cref="DigitFont"/>.
         /// </summary>
         private readonly Font digitFont;
 
@@ -813,6 +963,16 @@ internal static class BarEmitter
         /// The font a caption starts from: the caption font of the options, or their font when they carry no caption font.
         /// </summary>
         private readonly Font captionFont;
+
+        /// <summary>
+        /// The smallest size of the caption in points, or 0 when the symbology states none.
+        /// </summary>
+        private readonly float captionMinimumSize;
+
+        /// <summary>
+        /// The font weight of the text, or <see langword="null"/> for the weight of the fonts.
+        /// </summary>
+        private readonly FontWeight? weight;
 
         /// <summary>
         /// The sizing and painting options, which carry the resolution and the fitting choice.
@@ -844,12 +1004,16 @@ internal static class BarEmitter
         /// </summary>
         /// <param name="digitFont">The font the digit lines render in.</param>
         /// <param name="captionFont">The font a caption starts from.</param>
+        /// <param name="captionMinimumSize">The smallest size of the caption in points, or 0 when the symbology states none.</param>
+        /// <param name="weight">The font weight of the text, from <see cref="BarcodeSymbol.TextWeight"/>.</param>
         /// <param name="options">The sizing and painting options.</param>
         /// <param name="moduleWidth">The width of one module in pixels, stretched to the drawn bar block.</param>
-        public LineFonts(Font digitFont, Font captionFont, BarcodeOptions options, float moduleWidth)
+        public LineFonts(Font digitFont, Font captionFont, float captionMinimumSize, FontWeight? weight, BarcodeOptions options, float moduleWidth)
         {
             this.digitFont = digitFont;
             this.captionFont = captionFont;
+            this.captionMinimumSize = captionMinimumSize;
+            this.weight = weight;
             this.options = options;
             this.moduleWidth = moduleWidth;
         }
@@ -860,28 +1024,42 @@ internal static class BarEmitter
         /// </summary>
         /// <param name="placement">The placement to resolve for.</param>
         /// <param name="characters">The characters of the placement.</param>
+        /// <param name="lineScale">The scale of a line that must fit its span, or 1.</param>
         /// <returns>The text options for the placement.</returns>
-        public RichTextOptions OptionsFor(in BarcodeTextPlacement placement, ReadOnlySpan<char> characters)
+        public RichTextOptions OptionsFor(in BarcodeTextPlacement placement, ReadOnlySpan<char> characters, float lineScale)
         {
             float dpi = this.options.Dpi;
             if (placement.IsCaption)
             {
-                return this.captionOptions ??= BarcodeTextOptionsFactory.Create(
-                    ResolveCaptionFont(characters, placement.Right - placement.Left, this.moduleWidth, this.captionFont, this.options),
-                    dpi);
+                // The caption font resolves once for the symbol, so that the measure and the draw use one size.
+                if (this.captionOptions is null)
+                {
+                    Font caption = ResolveCaptionFont(
+                        characters,
+                        placement.Right - placement.Left,
+                        this.moduleWidth,
+                        this.captionFont,
+                        this.captionMinimumSize,
+                        this.weight,
+                        this.options);
+
+                    this.captionOptions = BarcodeTextOptionsFactory.Create(caption, dpi, this.weight);
+                }
+
+                return this.captionOptions;
             }
 
-            if (placement.FontScale == 1F)
+            float scale = placement.FontScale * lineScale;
+            if (scale == 1F)
             {
-                return this.digitOptions ??= BarcodeTextOptionsFactory.Create(this.digitFont, dpi);
+                return this.digitOptions ??= BarcodeTextOptionsFactory.Create(this.digitFont, dpi, this.weight);
             }
 
-            // A symbol scales at most a handful of placements, and the UPC quiet zone digits all scale by the same factor, so the scaled font and its options
-            // are built once and reused while that factor holds.
-            float scaledSize = this.digitFont.Size * placement.FontScale;
+            // A symbol scales at most a handful of placements, so the scaled font and its options are built once and reused while the factor holds.
+            float scaledSize = this.digitFont.Size * scale;
             if (this.scaledOptions is null || this.scaledOptions.Font.Size != scaledSize)
             {
-                this.scaledOptions = BarcodeTextOptionsFactory.Create(new Font(this.digitFont, scaledSize), dpi);
+                this.scaledOptions = BarcodeTextOptionsFactory.Create(new Font(this.digitFont, scaledSize), dpi, this.weight);
             }
 
             return this.scaledOptions;

@@ -154,7 +154,7 @@ public class CodablockFSymbologyTests
         Encode("A", 8, (ref symbol) => Assert.All(SymbolEncoder.RowBarHeights(ref symbol, symbol.Rows[1]), height => Assert.Equal(10F, height)));
         Encode("A", 20, (ref symbol) => Assert.All(SymbolEncoder.RowBarHeights(ref symbol, symbol.Rows[1]), height => Assert.Equal(14F, height, comparer)));
 
-        BarcodeOptions options = new() { BarHeight = 12F * BarcodeSymbology.PointXDimension };
+        BarcodeOptions options = new() { BarHeight = 12F * BarcodeSymbology.DefaultXDimension };
         SymbolEncoder.Encode(new CodablockFSymbology(), "A", options, (ref symbol) =>
         {
             Assert.All(SymbolEncoder.RowBarHeights(ref symbol, symbol.Rows[1]), height => Assert.Equal(12F, height, comparer));

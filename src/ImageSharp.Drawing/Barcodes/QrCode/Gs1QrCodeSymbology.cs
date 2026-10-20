@@ -16,6 +16,10 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// When a font is set, the element strings print below the symbol, one on each line, with the Application Identifiers in parentheses. An element string of
 /// Application Identifier (8200) does not print.
 /// </para>
+/// <para>
+/// The X dimension is the target of 0.495 millimetre of Table 5-45, symbol specification table 1 addendum 1. The symbol specification tables of section
+/// 5.12.3 give GS1 QR Code X dimensions from 0.254 to 3.50 millimetres, and an X dimension outside that range is clamped to it.
+/// </para>
 /// </summary>
 public sealed class Gs1QrCodeSymbology : BarcodeSymbology
 {
@@ -75,7 +79,7 @@ public sealed class Gs1QrCodeSymbology : BarcodeSymbology
                 QrFormat.Full,
                 this.ErrorCorrectionLevel,
                 this.Version ?? 0,
-                options.XDimension ?? PointXDimension,
+                options.ResolveXDimension(Gs1Data.Gs1QrCodeMinimumXDimension, Gs1Data.Gs1MatrixXDimension, Gs1Data.Gs1MatrixMaximumXDimension),
                 ref symbol);
 
             if (options.Font is not null)

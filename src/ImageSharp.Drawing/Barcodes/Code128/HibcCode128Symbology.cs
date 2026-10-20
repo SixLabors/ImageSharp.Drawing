@@ -7,7 +7,10 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
 /// HIBC Code 128, a Health Industry Bar Code. A Code 128 symbol carries it. The symbol carries the flag character, the data and the check character. The human
-/// readable interpretation shows that same string between delimiters. A check character that is a space prints as an underscore.
+/// readable interpretation shows that same string between delimiters, with a space printed as an underscore and a zero as "Ø". When the options set no X
+/// dimension, the symbol prints at <see cref="BarcodeSymbology.DefaultXDimension"/>, and when they set no bar height, the bars are 15% of the symbol width.
+/// The text follows a data structure of ANSI/HIBC 2.6: primary data, secondary data that ends with its link character, or primary and secondary data joined
+/// with "/", each with any supplemental data fields.
 /// </summary>
 public sealed class HibcCode128Symbology : BarcodeSymbology
 {
@@ -42,14 +45,24 @@ public sealed class HibcCode128Symbology : BarcodeSymbology
             HibcData.Prepare(text, this.ValidateCheckCharacter, ref encoded);
 
             ReadOnlySpan<char> data = encoded.AsSpan();
-            Code128Encoder.BuildSymbol(
-                data,
-                false,
-                HibcData.ReadableOpening,
-                HibcData.ReadableBody(data),
-                [HibcData.PrintedCheck(data), HibcData.ReadableClosing],
-                options,
-                ref symbol);
+
+            // The interpretation is the encoded data between two delimiters, so a buffer three characters longer holds it, and longer data rents it once.
+            InlineArray64<char> readableStorage = default;
+            int readableCapacity = HibcData.ReadableCapacity(data.Length);
+            using PooledBuffer<char> rented = readableCapacity <= HibcData.InlineBufferLength ? default : new(readableCapacity);
+            Span<char> readable = readableCapacity <= HibcData.InlineBufferLength ? ((Span<char>)readableStorage)[..readableCapacity] : rented.Span;
+            int written = HibcData.WriteReadable(data, readable);
+
+            // Section 5.1 of ANSI/HIBC 2.6 gives a bar height of at least 15% of the symbol length.
+            Code128Layout layout = new()
+            {
+                XDimension = options.ResolveXDimension(HibcData.MinimumLinearXDimension, DefaultXDimension, double.PositiveInfinity),
+                MinimumHeightFraction = HibcData.MinimumBarHeightFraction,
+                TextClearance = BarcodeTextPlacement.Clearance,
+                HorizontalQuietZone = Code128Encoder.QuietZone,
+            };
+
+            Code128Encoder.BuildSymbol(data, false, [], readable[..written], [], [], in layout, options, ref symbol);
         }
         finally
         {

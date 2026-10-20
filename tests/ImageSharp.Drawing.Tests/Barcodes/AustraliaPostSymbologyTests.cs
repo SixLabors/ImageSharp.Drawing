@@ -53,17 +53,27 @@ public class AustraliaPostSymbologyTests
     }
 
     /// <summary>
-    /// The other 37-bar format control codes encode like the Standard Customer Barcode. The expected bars are from the reference implementation's raw encoding
-    /// API.
+    /// The specification lists the customer format control codes 00, 11, 59 and 62. Codes 45 and 92 "must not be used by customers unless authorised by
+    /// Australia Post" and have no bar count, and 87 is not defined.
     /// </summary>
     /// <param name="text">The text to encode.</param>
-    /// <param name="bars">The bar values from the left.</param>
     [Theory]
-    [InlineData("4554516251", "1311121211120120021201320132012223013")]
-    [InlineData("8754516251", "1322211211120120021201320300031333213")]
-    [InlineData("9254516251", "1330021211120120021201330203101201213")]
-    public void EncodesTheOtherStandardFormatControlCodes(string text, string bars)
-        => Assert.Equal(bars, Encode(text, AustraliaPostEncodingTable.Character));
+    [InlineData("4554516251")]
+    [InlineData("8754516251")]
+    [InlineData("9254516251")]
+    public void RejectsFormatControlCodesWithoutACustomerFormat(string text)
+        => Assert.Throws<ArgumentException>(() => Encode(text, AustraliaPostEncodingTable.Character));
+
+    /// <summary>
+    /// The text representation "should appear above the barcode in 8 point type or less".
+    /// </summary>
+    [Fact]
+    public void LimitsTheTextToEightPoints()
+        => SymbolEncoder.Encode(
+            new AustraliaPostSymbology(),
+            "1196184209",
+            new BarcodeOptions { Font = BarcodeFonts.OcrB.CreateFont(12F) },
+            static (ref symbol) => Assert.Equal(8F, symbol.TextMaximumSize));
 
     /// <summary>
     /// Diagram 14: the text representation of the barcode of 1196184209 is "11 96184209 32 57 38 54", above the bars and outside the 2 mm quiet zone.
@@ -77,7 +87,7 @@ public class AustraliaPostSymbologyTests
             BarcodeTextPlacement placement = Assert.Single(symbol.Text.ToArray());
             Assert.Equal("11 96184209 32 57 38 54", symbol.TextOf(placement).ToString());
             Assert.Equal(BarcodeTextSide.AboveBars, placement.Side);
-            Assert.Equal(-4F, placement.TextEdge);
+            Assert.True(-placement.TextEdge * symbol.XDimension >= 2 - 1e-4);
         });
 
         string[] withCustomer = SymbolEncoder.Read(new AustraliaPostSymbology(), "6254516251ABC123", options, SymbolEncoder.Texts);
@@ -85,40 +95,44 @@ public class AustraliaPostSymbologyTests
     }
 
     /// <summary>
-    /// The dimensions at the 0.5 mm module: bars of 50 run units of 0.01 mm, spaces of 58, a tracker of 1.3 mm, extenders of 1.85 mm, a full bar of 5 mm and a
-    /// quiet zone of 6 mm at each end.
+    /// The bar type table of the dimensions section: T 1.0 to 1.6 mm, A and D 2.6 to 3.7 mm, H 4.2 to 5.8 mm, a bar gap of 0.4 to 0.7 mm and a bar width of
+    /// 0.4 to 0.6 mm. Bar density: "a bar density of 22 to 25 bars per 25.4mm", and a 37 bar barcode 37.0 to 42.2 mm long. Quiet zones: "the smallest
+    /// allowable Quiet Zone on the left and right of a barcode is 6 mm" and "the smallest allowable Quiet Zone above and below the barcode is 2mm".
     /// </summary>
     [Fact]
     public void DrawsTheDimensionsOfTheSpecification()
         => SymbolEncoder.Encode(new AustraliaPostSymbology(AustraliaPostEncodingTable.Character), "1154516251", new BarcodeOptions(), static (ref symbol) =>
         {
-            Assert.Equal(1F / 50F, symbol.RunUnit);
             Assert.Equal(73, symbol.Runs.Length);
-            for (int i = 0; i < symbol.Runs.Length; i++)
+            double unit = symbol.RunUnit * symbol.XDimension;
+            int leadToLead = 0;
+            for (int i = 0; i < symbol.Runs.Length - 1; i++)
             {
-                Assert.Equal((i & 1) == 0 ? 50 : 58, symbol.Runs[i]);
+                Assert.InRange(symbol.Runs[i] * unit, 0.4, (i & 1) == 0 ? 0.6 : 0.7);
+                leadToLead += symbol.Runs[i];
             }
 
-            float extender = (float)(1.85 / 0.5);
-            float tracker = (float)(1.3 / 0.5);
+            Assert.InRange(symbol.Runs[^1] * unit, 0.4, 0.6);
+            Assert.InRange(36 * 25.4 / (leadToLead * unit), 22, 25);
+            Assert.InRange((leadToLead + symbol.Runs[^1]) * unit, 37.0, 42.2);
+
             string values = Values(ref symbol);
-            ApproximateFloatComparer comparer = new(1e-4F);
             for (int i = 0; i < values.Length; i++)
             {
-                float expectedTop = values[i] is '0' or '1' ? 0F : extender;
-                float expectedHeight = values[i] switch
+                (double minimum, double maximum) = values[i] switch
                 {
-                    '3' => tracker,
-                    '0' => extender + tracker + extender,
-                    _ => extender + tracker,
+                    '3' => (1.0, 1.6),
+                    '0' => (4.2, 5.8),
+                    _ => (2.6, 3.7),
                 };
 
-                Assert.Equal(expectedTop, symbol.BarTops[i], comparer);
-                Assert.Equal(expectedHeight, symbol.BarHeights[i], comparer);
+                Assert.InRange(symbol.BarHeights[i] * symbol.XDimension, minimum, maximum);
             }
 
-            Assert.Equal(12F, symbol.LeadingQuietZone);
-            Assert.Equal(12F, symbol.TrailingQuietZone);
+            Assert.True(symbol.LeadingQuietZone * symbol.XDimension >= 6 - 1e-4);
+            Assert.True(symbol.TrailingQuietZone * symbol.XDimension >= 6 - 1e-4);
+            Assert.True(symbol.TopQuietZone * symbol.XDimension >= 2 - 1e-4);
+            Assert.True(symbol.BottomQuietZone * symbol.XDimension >= 2 - 1e-4);
         });
 
     [Theory]
@@ -156,20 +170,23 @@ public class AustraliaPostSymbologyTests
         => SymbolEncoder.Read(new AustraliaPostSymbology(table), text, new BarcodeOptions(), Values);
 
     /// <summary>
-    /// Reads the bar values of a symbol from the bar tops and heights: 0 for a full bar, 1 for an ascender, 2 for a descender and 3 for a tracker.
+    /// Reads the bar values of a symbol from its bar states, with the values of the bar type table: 0 for a full bar H, 1 for an ascender A, 2 for a descender
+    /// D and 3 for a tracker T.
     /// </summary>
     /// <param name="symbol">The encoded symbol.</param>
     /// <returns>The bar values.</returns>
     private static string Values(ref BarcodeSymbol symbol)
     {
-        float extender = (float)(1.85 / 0.5);
-        float tracker = (float)(1.3 / 0.5);
-        char[] values = new char[symbol.BarHeights.Length];
+        char[] values = SymbolEncoder.FourStates(ref symbol).ToCharArray();
         for (int i = 0; i < values.Length; i++)
         {
-            bool up = symbol.BarTops[i] == 0F;
-            bool down = symbol.BarTops[i] + symbol.BarHeights[i] > extender + tracker + 0.001F;
-            values[i] = up && down ? '0' : up ? '1' : down ? '2' : '3';
+            values[i] = values[i] switch
+            {
+                'F' => '0',
+                'A' => '1',
+                'D' => '2',
+                _ => '3',
+            };
         }
 
         return new string(values);

@@ -9,9 +9,29 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// The GS1 DotCode symbology: DotCode carrying GS1 element strings, section 5.8 of the GS1 General Specifications. The text is the element strings with their
 /// Application Identifiers in parentheses, for example <c>(01)09521234543213(10)ABC123</c>. The human readable interpretation is drawn below the symbol when
 /// <see cref="BarcodeOptions.Font"/> is set.
+/// <para>
+/// Section 5.8.2.4: "GS1 DotCode SHALL only be used to meet the requirements of the EU tobacco traceability regulation EU 2018/574". Table 5-58, symbol
+/// specification table 12 for that regulation, gives the unit pack an X dimension of 0.380 to 0.990 millimetres with a target of 0.380, and an X dimension
+/// outside that range is clamped to it.
+/// </para>
 /// </summary>
 public sealed class Gs1DotCodeSymbology : BarcodeSymbology
 {
+    /// <summary>
+    /// The nominal X dimension in millimetres, the target of Table 5-58 for a unit pack.
+    /// </summary>
+    private const double XDimension = 0.380;
+
+    /// <summary>
+    /// The smallest X dimension in millimetres, the minimum of Table 5-58 for a unit pack.
+    /// </summary>
+    private const double MinimumXDimension = 0.380;
+
+    /// <summary>
+    /// The largest X dimension in millimetres, the maximum of Table 5-58 for a unit pack.
+    /// </summary>
+    private const double MaximumXDimension = 0.990;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="Gs1DotCodeSymbology"/> class. The symbol takes the smallest size near a width to height ratio of 3:2 that
     /// holds the data.
@@ -68,7 +88,13 @@ public sealed class Gs1DotCodeSymbology : BarcodeSymbology
         try
         {
             Gs1Data.Prepare(text, ref encoded);
-            DotCodeEncoder.BuildSymbol(encoded.AsSpan(), true, this.Columns ?? 0, this.Rows ?? 0, options.XDimension ?? PointXDimension, ref symbol);
+            DotCodeEncoder.BuildSymbol(
+                encoded.AsSpan(),
+                true,
+                this.Columns ?? 0,
+                this.Rows ?? 0,
+                options.ResolveXDimension(MinimumXDimension, XDimension, MaximumXDimension),
+                ref symbol);
 
             if (options.Font is not null)
             {

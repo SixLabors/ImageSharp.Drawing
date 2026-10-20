@@ -8,9 +8,12 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// <summary>
 /// HIBC Data Matrix, a Health Industry Bar Code carried by a Data Matrix symbol in a square size. The symbol carries the flag character, the data and the
 /// modulo 43 check character.
+/// The text follows a data structure of ANSI/HIBC 2.6: primary data, secondary data that ends with its link character, or primary and secondary data joined
+/// with "/", each with any supplemental data fields.
 /// <para>
-/// When a font is set, that same string prints below the symbol between delimiters, and a check character that is a space prints as an underscore. Primary and
-/// secondary data that the symbol joins with "/" print on two lines, broken after the "/".
+/// When a font is set, that same string prints below the symbol between delimiters, with a space printed as an underscore and a zero as "Ø". Primary and
+/// secondary data that the symbol joins with "/" print on two lines, broken after the "/". When the options set no X dimension, the symbol prints at
+/// <see cref="BarcodeSymbology.DefaultMatrixXDimension"/>.
 /// </para>
 /// </summary>
 public sealed class HibcDataMatrixSymbology : BarcodeSymbology
@@ -45,7 +48,14 @@ public sealed class HibcDataMatrixSymbology : BarcodeSymbology
         try
         {
             HibcData.Prepare(text, this.ValidateCheckCharacter, ref encoded);
-            DataMatrixEncoder.BuildSymbol(encoded.AsSpan(), false, DataMatrixFormat.Square, 0, 0, options.XDimension ?? PointXDimension, ref symbol);
+            DataMatrixEncoder.BuildSymbol(
+                encoded.AsSpan(),
+                false,
+                DataMatrixFormat.Square,
+                0,
+                0,
+                options.ResolveXDimension(HibcData.MinimumMatrixXDimension, DefaultMatrixXDimension, double.PositiveInfinity),
+                ref symbol);
             if (options.Font is not null)
             {
                 HibcData.AddMatrixReadable(encoded.AsSpan(), ref symbol);

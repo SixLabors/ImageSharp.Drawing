@@ -109,7 +109,7 @@ internal enum Gs1Linter
     Latitude,
 
     /// <summary>
-    /// A longitude of ten digits, at most 3600000000.
+    /// A longitude of ten digits, at most 3599999999.
     /// </summary>
     Longitude,
 

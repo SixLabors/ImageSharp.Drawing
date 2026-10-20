@@ -6,8 +6,8 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The ISBN data layer over EAN-13. An International Standard Book Number (ISO 2108) draws as an EAN-13 symbol in the GS1 978 or 979 prefix range. The ISBN
-/// itself prints above the bars.
+/// The ISBN data layer over EAN-13. An International Standard Book Number (ISO 2108) draws as an EAN-13 symbol in the GS1 978 or 979 prefix range, except
+/// the 979-0 prefix of the ISMN. The ISBN itself prints above the bars.
 /// <para>
 /// The input is an ISBN-13, with or without hyphens, or an ISBN-10. This class compares the modulus 11 check digit of an ISBN-10, where X stands for ten, and
 /// then converts the number to its 978 prefixed EAN-13 form. The check digit is optional in either form, and this class calculates it when the input carries
@@ -16,6 +16,12 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// </summary>
 public sealed class IsbnSymbology : BarcodeSymbology
 {
+    /// <summary>
+    /// The smallest size of the caption in points. Section 8.1 of the ISBN Users' Manual, 7th edition: "The ISBN should always be printed in type large
+    /// enough to be easily legible (i.e., 9-point or larger)."
+    /// </summary>
+    private const float MinimumCaptionSize = 9F;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="IsbnSymbology"/> class.
     /// </summary>
@@ -61,6 +67,12 @@ public sealed class IsbnSymbology : BarcodeSymbology
             if (!compact.StartsWith("978", StringComparison.Ordinal) && !compact.StartsWith("979", StringComparison.Ordinal))
             {
                 throw new ArgumentException("An ISBN-13 must start with the 978 or 979 prefix.", nameof(text));
+            }
+
+            // The GS1 General Specifications: "Within GS1 Prefix 979 a subset 9790 has been allocated to the International ISMN Agency for notated music."
+            if (compact.StartsWith("9790", StringComparison.Ordinal))
+            {
+                throw new ArgumentException("The 979-0 prefix belongs to the ISMN, not the ISBN.", nameof(text));
             }
 
             if (compact.Length == 13 && compact[12] - '0' != Gs1Data.ComputeCheckDigit(compact[..12]))
@@ -111,6 +123,7 @@ public sealed class IsbnSymbology : BarcodeSymbology
         else
         {
             EanUpcEncoder.BuildEan13(digits, options, captionPrefix, captionBody, ['-', digits[12]], ref symbol);
+            symbol.SetCaptionMinimumSize(MinimumCaptionSize);
         }
     }
 }

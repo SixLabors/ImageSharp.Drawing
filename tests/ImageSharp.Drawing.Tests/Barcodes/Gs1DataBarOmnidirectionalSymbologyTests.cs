@@ -30,13 +30,29 @@ public class Gs1DataBarOmnidirectionalSymbologyTests
         => Assert.Equal(Runs("(01)00012345678905"), Runs("(01)0001234567890"));
 
     /// <summary>
+    /// Section 5.5.2.1.1 of the GS1 General Specifications: "33X is the minimum height of the symbol", so a bar height under 33X is rejected. At the nominal
+    /// 0.33 mm module 33X is 10.89 mm.
+    /// </summary>
+    [Fact]
+    public void Gs1DataBarOmnidirectional_RejectsABarHeightUnderThirtyThreeModules()
+    {
+        Gs1DataBarOmnidirectionalSymbology symbology = new();
+        BarcodeOptions minimum = new() { Dpi = SymbolEncoder.MillimetreDpi, BarHeight = 10.89 };
+        BarcodeOptions under = new() { Dpi = SymbolEncoder.MillimetreDpi, BarHeight = 10.88 };
+
+        Assert.Null(Record.Exception(() => SymbolEncoder.Encode(symbology, "(01)09521234543213", minimum)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => SymbolEncoder.Encode(symbology, "(01)09521234543213", under));
+    }
+
+    /// <summary>
     /// Section 5.5.2.1.1 of the GS1 General Specifications: "Its dimensions are 96X wide, starting with a 1X space and ending with a 1X bar". No quiet zone is
-    /// required, and the nominal height is the 46X of Table 5-44.
+    /// required, and the nominal height is the 46X of Table 5-44. The nominal X dimension of 0.33 mm is 33 pixels at 100 pixels a millimetre.
     /// </summary>
     [Fact]
     public void Gs1DataBarOmnidirectional_IsNinetySixModulesWideAndFortySixHigh()
     {
-        SymbolEncoder.Encode(new Gs1DataBarOmnidirectionalSymbology(), "(01)09521234543213", new BarcodeOptions(), static (ref symbol) =>
+        BarcodeOptions options = new() { Dpi = SymbolEncoder.MillimetreDpi };
+        SymbolEncoder.Encode(new Gs1DataBarOmnidirectionalSymbology(), "(01)09521234543213", options, static (ref symbol) =>
         {
             Assert.Equal(96F, symbol.WidthInModules);
             Assert.Equal(0, symbol.Runs[0]);

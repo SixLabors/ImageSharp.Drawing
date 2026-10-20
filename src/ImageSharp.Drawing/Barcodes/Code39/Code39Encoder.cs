@@ -47,9 +47,8 @@ internal static class Code39Encoder
 
     /// <summary>
     /// The width of a wide element in modules. Section 4.4 b) allows a wide to narrow ratio of "2,0 : 1 to 3,0 : 1", and this is the widest of that range, so a
-    /// symbol character and its gap take the sixteen modules at the top of the range section 4.1 h) gives. An application standard may name a nominal ratio
-    /// inside that range which is not a whole number, as IFA does for the PZN at 1:2.5, and a run width is a whole number of modules, so a wide element is the
-    /// permitted 3.
+    /// symbol character and its gap take the sixteen modules at the top of the range section 4.1 h) gives. An application standard that names a nominal ratio
+    /// inside that range builds the symbol with a <see cref="Code39Layout"/>.
     /// </summary>
     private const int WideElement = 3;
 
@@ -144,9 +143,19 @@ internal static class Code39Encoder
         ref BarcodeSymbol symbol)
     {
         int widthInModules = SymbolWidth(CharacterCount(data.Length, check));
-        float nominalBarHeight = MathF.Max(widthInModules * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
+        float nominalBarHeight = ProportionalBarHeight(widthInModules, xDimension);
         BuildSymbol(data, check, readablePrefix, readableBody, readableSuffix, options, xDimension, nominalBarHeight, ref symbol);
     }
+
+    /// <summary>
+    /// Returns the bar height in modules that section 4.4 e) recommends when the caller sets none: 15 % of the symbol width, quiet zones excluded, and at
+    /// least 5 mm.
+    /// </summary>
+    /// <param name="widthInModules">The width of the symbol in modules, quiet zones excluded.</param>
+    /// <param name="xDimension">The X dimension in millimetres.</param>
+    /// <returns>The bar height in modules.</returns>
+    public static float ProportionalBarHeight(float widthInModules, double xDimension)
+        => MathF.Max(widthInModules * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
 
     /// <summary>
     /// Builds the symbol at a bar height an application standard fixes rather than the proportional recommendation of section 4.4 e). The runs carry the start
@@ -174,24 +183,62 @@ internal static class Code39Encoder
         float nominalBarHeight,
         ref BarcodeSymbol symbol)
     {
+        Code39Layout layout = new()
+        {
+            XDimension = xDimension,
+            NominalBarHeight = nominalBarHeight,
+            NarrowElement = 1,
+            WideElement = WideElement,
+        };
+
+        BuildSymbol(data, check, readablePrefix, readableBody, readableSuffix, in layout, options, ref symbol);
+    }
+
+    /// <summary>
+    /// Builds the symbol at the dimensions of an application standard, which can name a wide to narrow ratio that is not a whole number. The runs count run
+    /// units of a module divided by the narrow width.
+    /// </summary>
+    /// <param name="data">The data to encode, already validated against the character set.</param>
+    /// <param name="check">The check character to carry after the data, or <see langword="null"/>.</param>
+    /// <param name="readablePrefix">The characters of the human readable interpretation before its body.</param>
+    /// <param name="readableBody">The body of the human readable interpretation.</param>
+    /// <param name="readableSuffix">The characters of the human readable interpretation after its body.</param>
+    /// <param name="layout">The dimensions of the application standard.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildSymbol(
+        ReadOnlySpan<char> data,
+        char? check,
+        ReadOnlySpan<char> readablePrefix,
+        ReadOnlySpan<char> readableBody,
+        ReadOnlySpan<char> readableSuffix,
+        in Code39Layout layout,
+        BarcodeOptions options,
+        ref BarcodeSymbol symbol)
+    {
+        int narrow = layout.NarrowElement;
+        int wide = layout.WideElement;
         int characters = CharacterCount(data.Length, check);
-        Span<int> runs = symbol.BeginLinear((characters * ElementsPerCharacter) - 1, xDimension, out Span<float> heights, out _);
+        Span<int> runs = symbol.BeginLinear((characters * ElementsPerCharacter) - 1, layout.XDimension, out Span<float> heights, out _);
         int written = 0;
 
-        AppendElements(runs, ref written, StartStop, ElementsPerCharacter);
+        AppendElements(runs, ref written, StartStop, ElementsPerCharacter, narrow, wide);
         foreach (char character in data)
         {
-            AppendElements(runs, ref written, AlphanumericCharacterSet.Value(character), ElementsPerCharacter);
+            AppendElements(runs, ref written, AlphanumericCharacterSet.Value(character), ElementsPerCharacter, narrow, wide);
         }
 
         if (check is not null)
         {
-            AppendElements(runs, ref written, AlphanumericCharacterSet.Value(check.Value), ElementsPerCharacter);
+            AppendElements(runs, ref written, AlphanumericCharacterSet.Value(check.Value), ElementsPerCharacter, narrow, wide);
         }
 
-        AppendElements(runs, ref written, StartStop, ElementsPerCharacter - 1);
+        AppendElements(runs, ref written, StartStop, ElementsPerCharacter - 1, narrow, wide);
 
-        float barHeight = options.ResolveBarHeight(xDimension, nominalBarHeight);
+        // Every character has three wide and six narrow elements and a narrow gap, and the stop character carries no gap.
+        float runUnit = 1F / narrow;
+        float widthInModules = ((characters * ((3 * wide) + (7 * narrow))) - narrow) * runUnit;
+        float barHeight = options.ResolveBarHeight(layout.XDimension, layout.NominalBarHeight);
         heights.Fill(barHeight);
 
         if (options.Font is not null)
@@ -202,12 +249,12 @@ internal static class Code39Encoder
                 readableBody,
                 readableSuffix,
                 0F,
-                SymbolWidth(characters),
+                widthInModules,
                 BarcodeTextSide.BelowBars,
                 barHeight + BarcodeTextPlacement.Clearance);
         }
 
-        symbol.EndLinear(QuietZone, QuietZone);
+        symbol.EndLinear(QuietZone, QuietZone, 0F, runUnit, false);
     }
 
     /// <summary>
@@ -233,12 +280,14 @@ internal static class Code39Encoder
     /// <param name="written">The write position, advanced by the element count.</param>
     /// <param name="index">The pattern index, which is the character value.</param>
     /// <param name="count">The number of elements to write.</param>
-    private static void AppendElements(Span<int> runs, ref int written, int index, int count)
+    /// <param name="narrow">The width of a narrow element in run units.</param>
+    /// <param name="wide">The width of a wide element in run units.</param>
+    private static void AppendElements(Span<int> runs, ref int written, int index, int count, int narrow, int wide)
     {
         ushort pattern = Patterns[index];
         for (int element = ElementsPerCharacter - 1; element >= ElementsPerCharacter - count; element--)
         {
-            runs[written++] = ((pattern >> element) & 1) == 1 ? WideElement : 1;
+            runs[written++] = ((pattern >> element) & 1) == 1 ? wide : narrow;
         }
     }
 }

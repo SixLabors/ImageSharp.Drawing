@@ -106,7 +106,6 @@ public class Gs1SyntaxDictionaryTests
         Assert.Equal(dataAttribute, entry.DataAttribute);
 
         List<string> components = [];
-        List<string> requisites = [];
         List<string> exclusions = [];
         string keyQualifiers = null;
         for (int t = next; t < tokens.Length; t++)
@@ -118,7 +117,8 @@ public class Gs1SyntaxDictionaryTests
             }
             else if (token.StartsWith("req=", StringComparison.Ordinal))
             {
-                requisites.Add(token[4..]);
+                // The requisite rules hold over all carriers of an item, so the table leaves them out.
+                continue;
             }
             else if (token.StartsWith("ex=", StringComparison.Ordinal))
             {
@@ -137,7 +137,6 @@ public class Gs1SyntaxDictionaryTests
 
         // Each part compares in the dictionary's own notation, so a difference reads as the line does.
         Assert.Equal(components, entry.Components.Select(Describe));
-        Assert.Equal(requisites, entry.Requisites.Select(rule => string.Join(',', rule.Select(group => string.Join('+', group)))));
         Assert.Equal(exclusions, entry.Exclusions);
         Assert.Equal(keyQualifiers, entry.KeyQualifiers is null ? null : string.Join('|', entry.KeyQualifiers.Select(sequence => string.Join(',', sequence))));
     }

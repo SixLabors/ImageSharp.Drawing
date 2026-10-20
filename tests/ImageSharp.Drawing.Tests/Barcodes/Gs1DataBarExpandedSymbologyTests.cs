@@ -150,7 +150,7 @@ public class Gs1DataBarExpandedSymbologyTests
     [Fact]
     public void Gs1DataBarExpanded_LeavesTheUrlOfApplicationIdentifier8200OutOfTheText()
     {
-        const string text = "(8200)http://www.abc.net(01)09520123456788";
+        const string text = "(01)09520123456788(8200)http://www.abc.net";
         const string expected = "(01)09520123456788";
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
 
@@ -160,7 +160,8 @@ public class Gs1DataBarExpandedSymbologyTests
 
     /// <summary>
     /// The compressed methods carry the GTIN of Application Identifier (01) without its check digit, so a wrong check digit is refused. A character outside the
-    /// general purpose field and data longer than 21 data characters are refused too.
+    /// general purpose field and data longer than 21 data characters are refused too. Section 5.5.2.3.3 of the GS1 General Specifications: "when the data
+    /// includes AI (01), it SHALL be the first element string encoded", so (01) after (10) is refused.
     /// </summary>
     [Theory]
     [InlineData("(01)90614141000016(3202)000150")]
@@ -168,8 +169,12 @@ public class Gs1DataBarExpandedSymbologyTests
     [InlineData("(21)AB#")]
     [InlineData("(21)ABCDEFGHIJKLMNOPQRST(22)ABCDEFGHIJKLMNOPQRST(240)ABCDEFGHIJ")]
     [InlineData("01095212345432")]
+    [InlineData("(10)ABC123(01)09521234543213")]
     public void Gs1DataBarExpanded_RejectsInvalidInput(string text)
-        => Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new Gs1DataBarExpandedSymbology(), text, new BarcodeOptions()));
+    {
+        Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new Gs1DataBarExpandedSymbology(), text, new BarcodeOptions()));
+        Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new Gs1DataBarExpandedStackedSymbology(), text, new BarcodeOptions()));
+    }
 
     /// <summary>
     /// Encodes the text with the default options and checks the symbol.

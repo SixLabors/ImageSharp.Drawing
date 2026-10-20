@@ -39,47 +39,49 @@ public class JapanPostSymbologyTests
     }
 
     /// <summary>
-    /// The dimensions of page 12 of the manual at the 0.6 mm module: bars and spaces of one module, a timing bar of 1.2 mm, extenders of 1.2 mm, a long bar of
-    /// 3.6 mm and a clear space of 2 mm.
+    /// Page 12 of the manual gives every size as a multiple of a/10 for a size of a points, "8≦ａ≦11.5": a long bar of 3.40 to 3.60, a timing bar of 1.05 to
+    /// 1.35, a bar pitch of 0.95 to 1.30, a bar width of 0.50 to 0.70 and a bar space of 0.45 to 0.60 millimetres. The bar width is 0.6 × a/10 at the base
+    /// size, so the drawn bar width gives a. Page 13: "カスタマバーコードの上下左右には、2mm以上の空白を設けるものとします".
     /// </summary>
     [Fact]
     public void DrawsTheDimensionsOfTheManual()
         => SymbolEncoder.Encode(new JapanPostSymbology(), "1234567", new BarcodeOptions(), static (ref symbol) =>
         {
-            Assert.Equal(1F, symbol.RunUnit);
             Assert.Equal(133, symbol.Runs.Length);
-            Assert.All(symbol.Runs.ToArray(), width => Assert.Equal(1, width));
-
-            string states = States(ref symbol);
-            for (int i = 0; i < states.Length; i++)
+            double unit = symbol.RunUnit * symbol.XDimension;
+            double size = symbol.Runs[0] * unit / 0.6;
+            Assert.InRange(size * 10, 8, 11.5);
+            for (int i = 0; i < symbol.Runs.Length; i += 2)
             {
-                float expectedTop = states[i] is 'A' or 'F' ? 0F : 2F;
-                float expectedHeight = states[i] switch
-                {
-                    'T' => 2F,
-                    'F' => 6F,
-                    _ => 4F,
-                };
-
-                Assert.Equal(expectedTop, symbol.BarTops[i]);
-                Assert.Equal(expectedHeight, symbol.BarHeights[i]);
+                Assert.InRange(symbol.Runs[i] * unit / size, 0.50, 0.70);
             }
 
-            Assert.Equal((float)(2 / 0.6), symbol.LeadingQuietZone);
-            Assert.Equal((float)(2 / 0.6), symbol.TrailingQuietZone);
+            for (int i = 1; i < symbol.Runs.Length; i += 2)
+            {
+                Assert.InRange(symbol.Runs[i] * unit / size, 0.45, 0.60);
+                Assert.InRange((symbol.Runs[i - 1] + symbol.Runs[i]) * unit / size, 0.95, 1.30);
+            }
+
+            string states = SymbolEncoder.FourStates(ref symbol);
+            int timing = states.IndexOf('T');
+            Assert.InRange(symbol.BarHeights[timing] * symbol.XDimension / size, 1.05, 1.35);
+            Assert.InRange(SymbolEncoder.BarBottom(ref symbol) * symbol.XDimension / size, 3.40, 3.60);
+
+            Assert.True(symbol.LeadingQuietZone * symbol.XDimension >= 2 - 1e-4);
+            Assert.True(symbol.TrailingQuietZone * symbol.XDimension >= 2 - 1e-4);
+            Assert.True(symbol.TopQuietZone * symbol.XDimension >= 2 - 1e-4);
+            Assert.True(symbol.BottomQuietZone * symbol.XDimension >= 2 - 1e-4);
         });
 
+    /// <summary>
+    /// Page 13 of the Japan Post manual prints the barcode alone, "単独で", and defines no text line, so a font prints none.
+    /// </summary>
     [Fact]
-    public void PrintsTheTextAsGivenBelowTheClearSpace()
+    public void PrintsNoText()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        SymbolEncoder.Encode(new JapanPostSymbology(), "15400233-16-4-205", options, static (ref symbol) =>
-        {
-            BarcodeTextPlacement placement = Assert.Single(symbol.Text.ToArray());
-            Assert.Equal("15400233-16-4-205", symbol.TextOf(placement).ToString());
-            Assert.Equal(BarcodeTextSide.BelowBars, placement.Side);
-            Assert.Equal(6F + (float)(2 / 0.6), placement.TextEdge, new ApproximateFloatComparer(1e-4F));
-        });
+
+        Assert.Empty(SymbolEncoder.Read(new JapanPostSymbology(), "15400233-16-4-205", options, SymbolEncoder.Texts));
     }
 
     [Theory]
@@ -98,23 +100,5 @@ public class JapanPostSymbologyTests
     /// <param name="text">The text to encode.</param>
     /// <returns>The bar states of the symbol.</returns>
     private static string Encode(string text)
-        => SymbolEncoder.Read(new JapanPostSymbology(), text, new BarcodeOptions(), States);
-
-    /// <summary>
-    /// Reads the bar states of a symbol from the bar tops and heights: F for a full bar, A for an ascender, D for a descender and T for a tracker.
-    /// </summary>
-    /// <param name="symbol">The encoded symbol.</param>
-    /// <returns>The bar states.</returns>
-    private static string States(ref BarcodeSymbol symbol)
-    {
-        char[] states = new char[symbol.BarHeights.Length];
-        for (int i = 0; i < states.Length; i++)
-        {
-            bool up = symbol.BarTops[i] == 0F;
-            bool down = symbol.BarTops[i] + symbol.BarHeights[i] > 4.001F;
-            states[i] = up && down ? 'F' : up ? 'A' : down ? 'D' : 'T';
-        }
-
-        return new string(states);
-    }
+        => SymbolEncoder.Read(new JapanPostSymbology(), text, new BarcodeOptions(), SymbolEncoder.FourStates);
 }

@@ -493,7 +493,7 @@ internal static class Code16KEncoder
     private static void WriteRows(ReadOnlySpan<int> values, ReadOnlySpan<char> readable, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         int rowCount = values.Length / CharactersPerRow;
-        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        double xDimension = options.ResolveXDimension(BarcodeSymbology.DefaultXDimension);
         float barHeight = options.ResolveBarHeight(xDimension, NominalBarHeight);
 
         // Section 2.1: start, guard bar, five characters and stop, 4 + 1 + 30 + 4 elements, on a bar at both ends. A separator between two rows is one bar

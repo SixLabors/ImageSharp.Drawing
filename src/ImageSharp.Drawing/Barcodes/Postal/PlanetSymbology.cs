@@ -6,7 +6,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// <summary>
 /// The PLANET symbology, the Postal Alpha Numeric Encoding Technique of the United States Postal Service. It carries 11 or 13 digits with the bars of POSTNET
 /// inverted: every digit is five bars of which two are half bars, the symbol carries a correction digit that makes the digit sum a multiple of 10, and a full
-/// frame bar stands at each end. The dimensions are those of section 708.4.2.5 of the Domestic Mail Manual. The printed line shows the digits as given.
+/// frame bar stands at each end. The dimensions are those of section 708.4.2.5 of the Domestic Mail Manual. The symbol prints no text line, because the
+/// Domestic Mail Manual defines none.
 /// </summary>
 public sealed class PlanetSymbology : BarcodeSymbology
 {
@@ -25,6 +26,6 @@ public sealed class PlanetSymbology : BarcodeSymbology
         Span<char> digits = ((Span<char>)digitStorage)[..(text.Length + 1)];
         text.CopyTo(digits);
         digits[^1] = (char)('0' + UspsPostalEncoder.CorrectionDigit(text));
-        UspsPostalEncoder.BuildSymbol(digits, text, options, false, ref symbol);
+        UspsPostalEncoder.BuildSymbol(digits, options, false, ref symbol);
     }
 }

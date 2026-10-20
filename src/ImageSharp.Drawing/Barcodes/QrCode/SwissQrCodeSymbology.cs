@@ -17,8 +17,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// message. The symbol carries the data in UTF-8.
 /// </para>
 /// <para>
-/// <see cref="BarcodeOptions.XDimension"/> left <see langword="null"/> draws the symbol 46 mm wide. An X dimension the caller sets draws the modules at that
-/// width, and the cross keeps its share of the symbol.
+/// The symbol is always 46 mm wide. Section 6.4: "The measurements of the Swiss QR Code for printing must always be 46 x 46 mm (without surrounding quiet
+/// space) regardless of the Swiss QR Code version." So <see cref="BarcodeOptions.XDimension"/> must be <see langword="null"/>.
 /// </para>
 /// </summary>
 public sealed class SwissQrCodeSymbology : BarcodeSymbology
@@ -33,6 +33,12 @@ public sealed class SwissQrCodeSymbology : BarcodeSymbology
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
+        // Section 6.4: the symbol "must always be 46 x 46 mm", so its X dimension follows from its version.
+        if (options.XDimension is not null)
+        {
+            throw new ArgumentException("A Swiss QR Code is always 46 x 46 mm, so its X dimension is not set.", nameof(options));
+        }
+
         Guard.MustBeLessThanOrEqualTo(text.Length, SwissQrBill.MaximumLength, nameof(text));
         SwissQrBill.Validate(text);
 
@@ -63,7 +69,7 @@ public sealed class SwissQrCodeSymbology : BarcodeSymbology
             }
 
             // Sections 6.1 and 6.4: level M and the smallest version, drawn 46 mm wide with the 7 mm cross at the same scale.
-            QrEncoder.BuildSymbol(bytes[..written], false, QrFormat.Full, QrErrorCorrectionLevel.M, 0, options.XDimension, SwissCross.SymbolWidth, ref symbol);
+            QrEncoder.BuildSymbol(bytes[..written], false, QrFormat.Full, QrErrorCorrectionLevel.M, 0, null, SwissCross.SymbolWidth, ref symbol);
             symbol.AddOverlay((float)(SwissCross.Width / SwissCross.SymbolWidth * symbol.Columns), SwissCross.Side, SwissCross.DarkEdges);
         }
         finally

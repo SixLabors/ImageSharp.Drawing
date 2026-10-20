@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Barcodes;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
@@ -154,6 +155,152 @@ public class BarcodeLayoutTests
     }
 
     /// <summary>
+    /// A matrix symbol at a one point X dimension draws each module as a square of the module width in pixels, 1 pixel at 72 dots per inch, 2 at 144 and 3 at
+    /// 216. Every square is dark for a dark module and light for a light one, wherever the symbol starts between two pixels, so the drawing is the module
+    /// matrix of the symbol. The symbol starts on the nearest whole pixel.
+    /// </summary>
+    /// <param name="kind">The symbology.</param>
+    /// <param name="dpi">The resolution.</param>
+    /// <param name="fraction">The fractional part of the draw origin.</param>
+    [Theory]
+    [InlineData("AztecCode", 72F, 0F)]
+    [InlineData("AztecCode", 72F, 0.3F)]
+    [InlineData("AztecCode", 144F, 0.7F)]
+    [InlineData("DataMatrix", 72F, 0.3F)]
+    [InlineData("DataMatrix", 144F, 0F)]
+    [InlineData("DataMatrix", 144F, 0.7F)]
+    [InlineData("QrCode", 72F, 0.7F)]
+    [InlineData("QrCode", 216F, 0.3F)]
+    public void DrawsEveryModuleAsASquareOfWholePixels(string kind, float dpi, float fraction)
+    {
+        BarcodeSymbology symbology = kind switch
+        {
+            "AztecCode" => new AztecCodeSymbology(),
+            "DataMatrix" => new DataMatrixSymbology(),
+            _ => new QrCodeSymbology(),
+        };
+
+        const string text = "HELLO WORLD 12345";
+        BarcodeOptions options = new() { Dpi = dpi, XDimension = SymbolEncoder.PointXDimension, IncludeQuietZones = false };
+        (int columns, int rows, bool[] modules) = SymbolEncoder.Read(
+            symbology,
+            text,
+            options,
+            static (ref symbol) => (symbol.Columns, symbol.MatrixRows, symbol.Modules.ToArray()));
+
+        int size = (int)(dpi / 72F);
+        PointF origin = new(Margin + fraction, Margin + fraction);
+        using Image<L8> image = new((columns * size) + (2 * Margin), (rows * size) + (2 * Margin), new L8(255));
+        image.Mutate(x => x.Paint(canvas => canvas.DrawBarcode(symbology, options, origin, text)));
+
+        int left = (int)MathF.Round(origin.X);
+        int top = (int)MathF.Round(origin.Y);
+        for (int y = 0; y < image.Height; y++)
+        {
+            for (int x = 0; x < image.Width; x++)
+            {
+                int column = (x - left) / size;
+                int row = (y - top) / size;
+                bool inside = x >= left && y >= top && column < columns && row < rows;
+                bool expected = inside && modules[(row * columns) + column];
+                Assert.True(expected == image[x, y].PackedValue < 128, $"The pixel {x}, {y} does not match its module.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// A postal symbol draws every bar at one width and every space at one width in whole pixels, so the bars keep one pitch: Table 11 of the Mailmark barcode
+    /// definition document requires that "they must be equally spaced", and page 12 of the Japan Post manual gives one bar width, "バー幅 0.6×a/10". A column of
+    /// the drawing is dark when any of its pixels is dark, so a run of dark columns is a bar whatever its height. The symbol draws at its nominal size at each
+    /// resolution, wherever it starts between two pixels.
+    /// </summary>
+    /// <param name="kind">The symbology.</param>
+    [Theory]
+    [InlineData("AustraliaPost")]
+    [InlineData("RoyalMail")]
+    [InlineData("Kix")]
+    [InlineData("Daft")]
+    [InlineData("FourStateMailmark")]
+    [InlineData("JapanPost")]
+    [InlineData("IntelligentMail")]
+    [InlineData("Postnet")]
+    [InlineData("Planet")]
+    public void DrawsEveryPostalBarAtOneWidthAndOnePitch(string kind)
+    {
+        (BarcodeSymbology symbology, string text) = kind switch
+        {
+            "AustraliaPost" => ((BarcodeSymbology)new AustraliaPostSymbology(), "6254516251ABC123"),
+            "RoyalMail" => (new RoyalMailSymbology(), "LE28HS9Z"),
+            "Kix" => (new KixSymbology(), "1231FZ13XHS"),
+            "Daft" => (new DaftSymbology(), "FATDAFTDAD"),
+            "FourStateMailmark" => (new FourStateMailmarkSymbology(), "21B2254800659JW5O9QA6Y"),
+            "JapanPost" => (new JapanPostSymbology(), "15400233-16-4-205"),
+            "IntelligentMail" => (new IntelligentMailSymbology(), "0123456709498765432101234567891"),
+            "Postnet" => (new PostnetSymbology(), "01234"),
+            _ => (new PlanetSymbology(), "01234567890"),
+        };
+
+        // Every failing case is collected, so a failure shows every resolution and origin it happens at.
+        List<string> failures = [];
+        foreach (float dpi in (ReadOnlySpan<float>)[72F, 96F, 144F, 150F, 203.2F, 300F, 600F])
+        {
+            foreach (float fraction in (ReadOnlySpan<float>)[0F, 0.3F, 0.5F, 0.7F])
+            {
+                BarcodeOptions options = new() { Dpi = dpi, IncludeQuietZones = false };
+                PointF origin = new(Margin + fraction, Margin + fraction);
+                RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(symbology, options, origin, text);
+                using Image<L8> image = new((int)MathF.Ceiling(bounds.Right) + Margin, (int)MathF.Ceiling(bounds.Bottom) + Margin, new L8(255));
+                image.Mutate(x => x.Paint(canvas => canvas.DrawBarcode(symbology, options, origin, text)));
+
+                // One pass over the rows marks every column that holds a dark pixel.
+                bool[] darkColumns = new bool[image.Width];
+                image.ProcessPixelRows(accessor =>
+                {
+                    for (int y = 0; y < accessor.Height; y++)
+                    {
+                        Span<L8> row = accessor.GetRowSpan(y);
+                        for (int x = 0; x < row.Length; x++)
+                        {
+                            darkColumns[x] |= row[x].PackedValue < 128;
+                        }
+                    }
+                });
+
+                HashSet<int> bars = [];
+                HashSet<int> spaces = [];
+                int run = 0;
+                bool? dark = null;
+                foreach (bool column in darkColumns)
+                {
+                    if (column != dark)
+                    {
+                        if (dark == true)
+                        {
+                            bars.Add(run);
+                        }
+                        else if (dark == false && bars.Count > 0 && column)
+                        {
+                            spaces.Add(run);
+                        }
+
+                        dark = column;
+                        run = 0;
+                    }
+
+                    run++;
+                }
+
+                if (bars.Count != 1 || spaces.Count != 1)
+                {
+                    failures.Add($"{dpi} dpi at {fraction}: bars {string.Join('/', bars)} px, spaces {string.Join('/', spaces)} px");
+                }
+            }
+        }
+
+        Assert.True(failures.Count == 0, string.Join("; ", failures));
+    }
+
+    /// <summary>
     /// The ink bounds hold every pixel the bars, the frame, the identification bars and the text draw. The symbol draws with no background, so every pixel
     /// that is not transparent is ink.
     /// </summary>
@@ -169,19 +316,23 @@ public class BarcodeLayoutTests
     [InlineData("DotCode")]
     public void InkStaysInsideTheMeasuredInkBounds(string name)
     {
-        (BarcodeSymbology symbology, string text) = name switch
+        Font ocrB = BarcodeFonts.OcrB.CreateFont(10.75F);
+        (BarcodeSymbology symbology, string text, Font font) = name switch
         {
-            "IntelligentMailPackage" => ((BarcodeSymbology)new IntelligentMailPackageSymbology("USPS TRACKING #"), "(420)123456789(92)12391234567812345670"),
-            "AustraliaPost" => (new AustraliaPostSymbology(), "6254516251ABC123"),
-            "Ean5" => (new Ean5Symbology(), "52495"),
-            "Isbn" => (new IsbnSymbology(), "978-0-306-40615-7"),
-            "Itf14" => (new Itf14Symbology(), "15400141288763"),
-            "Gs1DataMatrix" => (new Gs1DataMatrixSymbology(), "(01)09521234543213(17)120508(10)ABCD1234"),
-            "MaxiCode" => (new MaxiCodeSymbology(), "THIS IS A MAXICODE SYMBOL"),
-            _ => (new DotCodeSymbology(), "This is DotCode"),
+            "IntelligentMailPackage" => (
+                (BarcodeSymbology)new IntelligentMailPackageSymbology("USPS TRACKING #"),
+                "(420)123456789(92)12391234567812345670",
+                ocrB),
+            "AustraliaPost" => (new AustraliaPostSymbology(), "6254516251ABC123", ocrB),
+            "Ean5" => (new Ean5Symbology(), "52495", ocrB),
+            "Isbn" => (new IsbnSymbology(), "978-0-306-40615-7", ocrB),
+            "Itf14" => (new Itf14Symbology(), "15400141288763", ocrB),
+            "Gs1DataMatrix" => (new Gs1DataMatrixSymbology(), "(01)09521234543213(17)120508(10)ABCD1234", ocrB),
+            "MaxiCode" => (new MaxiCodeSymbology(), "THIS IS A MAXICODE SYMBOL", ocrB),
+            _ => (new DotCodeSymbology(), "This is DotCode", ocrB),
         };
 
-        BarcodeOptions options = new() { Dpi = 144F, Font = BarcodeFonts.OcrB.CreateFont(10.75F) };
+        BarcodeOptions options = new() { Dpi = 144F, Font = font };
         PointF origin = new(Margin + 0.3F, Margin + 0.3F);
         BarcodeMetrics metrics = BarcodeMeasurer.Measure(symbology, options, origin, text);
         RectangleF renderable = metrics.RenderableBounds;
@@ -307,8 +458,8 @@ public class BarcodeLayoutTests
         => new()
         {
             Dpi = 72F * moduleWidth,
-            XDimension = BarcodeSymbology.PointXDimension,
-            BarHeight = 50F * BarcodeSymbology.PointXDimension,
+            XDimension = BarcodeSymbology.DefaultXDimension,
+            BarHeight = 50F * BarcodeSymbology.DefaultXDimension,
             Background = Brushes.Solid(Color.White),
         };
 

@@ -17,9 +17,21 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal static class DataBarEncoder
 {
     /// <summary>
-    /// The nominal X dimension in millimetres, the target X dimension of Table 5-44 of the GS1 General Specifications.
+    /// The nominal X dimension in millimetres, the target X dimension of Tables 5-44, 5-50 and 5-56 of the GS1 General Specifications. GS1 DataBar Truncated
+    /// and GS1 DataBar Stacked are in Tables 5-50 and 5-56 only.
     /// </summary>
     public const double NominalXDimension = 0.33;
+
+    /// <summary>
+    /// The smallest X dimension in millimetres of every GS1 DataBar symbol, the smallest minimum of the symbol specification tables of section 5.12.3 that list
+    /// them: 0.170 in Table 5-52.
+    /// </summary>
+    public const double MinimumXDimension = 0.170;
+
+    /// <summary>
+    /// The largest X dimension in millimetres of every GS1 DataBar symbol, the maximum of every symbol specification table that lists them.
+    /// </summary>
+    public const double MaximumXDimension = 0.660;
 
     /// <summary>
     /// The nominal height of GS1 DataBar Omnidirectional in modules. Table 5-44 gives 15.19 millimetres at the target X dimension, and its note (****) requires
@@ -28,13 +40,19 @@ internal static class DataBarEncoder
     public const float OmnidirectionalHeight = 46F;
 
     /// <summary>
+    /// The minimum height of GS1 DataBar Omnidirectional in modules. Section 5.5.2.1.1 of the GS1 General Specifications: "33X is the minimum height of the
+    /// symbol".
+    /// </summary>
+    public const float OmnidirectionalMinimumHeight = 33F;
+
+    /// <summary>
     /// The height of GS1 DataBar Truncated in modules. Section 5.5.2.1.2 of the GS1 General Specifications gives "96X wide by 13X high".
     /// </summary>
     public const float TruncatedHeight = 13F;
 
     /// <summary>
-    /// The height of the upper row of GS1 DataBar Stacked in modules. With the lower row and the separator it makes the "50X wide by 13X high" of section
-    /// 5.5.2.1.3.
+    /// The height of the upper row of GS1 DataBar Stacked in modules. With the lower row and the 1X separator it makes the 13X height of the "50X wide by 13X
+    /// high" of section 5.5.2.1.3, which gives no height for each row.
     /// </summary>
     public const float StackedUpperRowHeight = 5F;
 
@@ -48,6 +66,12 @@ internal static class DataBarEncoder
     /// and section 5.5.2.1.4 places a 3X separator between the two rows.
     /// </summary>
     public const float StackedOmnidirectionalRowHeight = 46F;
+
+    /// <summary>
+    /// The minimum height of each row of GS1 DataBar Stacked Omnidirectional in modules. Section 5.5.2.1.4: "69X is the minimum height of the symbol", and
+    /// "The height of 69X includes a 3X high separator pattern between two rows of 33X each".
+    /// </summary>
+    private const float StackedOmnidirectionalMinimumRowHeight = 33F;
 
     /// <summary>
     /// The width of a single row symbol in modules, section 5.5.2.1.1: "Its dimensions are 96X wide".
@@ -134,12 +158,23 @@ internal static class DataBarEncoder
     /// </summary>
     /// <param name="gtin">The 14 digit GTIN.</param>
     /// <param name="nominalHeight">The nominal height of the variation in modules.</param>
+    /// <param name="minimumHeight">The minimum height that the variation requires in modules, or 0 for none.</param>
     /// <param name="options">The options that control the bar height and the text.</param>
     /// <param name="symbol">The symbol to write.</param>
-    public static void BuildLinear(ReadOnlySpan<char> gtin, float nominalHeight, BarcodeOptions options, ref BarcodeSymbol symbol)
+    /// <exception cref="ArgumentOutOfRangeException">The bar height is under the minimum height.</exception>
+    public static void BuildLinear(ReadOnlySpan<char> gtin, float nominalHeight, float minimumHeight, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         // The element widths start with the guard space, so a zero width bar leads the runs and the widths follow it.
-        double xDimension = options.XDimension ?? NominalXDimension;
+        double xDimension = options.ResolveXDimension(MinimumXDimension, NominalXDimension, MaximumXDimension);
+        if (options.IsBarHeightUnder(minimumHeight * xDimension))
+        {
+            double minimum = minimumHeight * xDimension;
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                options.BarHeight,
+                $"The symbol is at least {minimumHeight}X high, {minimum:0.##} mm at its X dimension; the bar height is {options.BarHeight:0.##} mm.");
+        }
+
         Span<int> runs = symbol.BeginLinear(ElementCount + 1, xDimension, out Span<float> heights, out _);
         _ = EncodeWidths(gtin, runs[1..]);
 
@@ -181,7 +216,7 @@ internal static class DataBarEncoder
 
         separator[1..4].Clear();
 
-        double xDimension = options.XDimension ?? NominalXDimension;
+        double xDimension = options.ResolveXDimension(MinimumXDimension, NominalXDimension, MaximumXDimension);
         float lowerHeight = options.ResolveBarHeight(xDimension, StackedLowerRowHeight);
         float upperHeight = lowerHeight * StackedUpperRowHeight / StackedLowerRowHeight;
         int upperRuns = DataBarRows.RunCount(upper);
@@ -244,7 +279,16 @@ internal static class DataBarEncoder
             middleSeparator[i] = 1;
         }
 
-        double xDimension = options.XDimension ?? NominalXDimension;
+        double xDimension = options.ResolveXDimension(MinimumXDimension, NominalXDimension, MaximumXDimension);
+        if (options.IsBarHeightUnder(StackedOmnidirectionalMinimumRowHeight * xDimension))
+        {
+            double minimum = StackedOmnidirectionalMinimumRowHeight * xDimension;
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                options.BarHeight,
+                $"Each row is at least 33X high, {minimum:0.##} mm at its X dimension; the bar height is {options.BarHeight:0.##} mm.");
+        }
+
         float rowHeight = options.ResolveBarHeight(xDimension, StackedOmnidirectionalRowHeight);
         int runCount = 0;
         int barCount = 0;
@@ -447,7 +491,7 @@ internal static class DataBarEncoder
 
     /// <summary>
     /// Adds the human readable interpretation below the symbol: the application identifier in parentheses and the 14 digits, as section 4.14 of the GS1 General
-    /// Specifications prints an element string. A symbol without a font carries no text.
+    /// Specifications prints an element string, at the size of <see cref="Gs1Data.MinimumTextSize"/> or larger. A symbol without a font carries no text.
     /// </summary>
     /// <param name="gtin">The 14 digit GTIN.</param>
     /// <param name="width">The symbol width in modules.</param>
@@ -464,5 +508,6 @@ internal static class DataBarEncoder
         const string identifier = "(01)";
         symbol.ReserveText(1, identifier.Length + gtin.Length);
         symbol.AddText(identifier, gtin, [], 0F, width, BarcodeTextSide.BelowBars, height + BarcodeTextPlacement.Clearance);
+        symbol.SetTextSize(Gs1Data.MinimumTextSize, 0F);
     }
 }

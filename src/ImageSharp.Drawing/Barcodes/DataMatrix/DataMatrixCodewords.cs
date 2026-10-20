@@ -161,7 +161,8 @@ internal static class DataMatrixCodewords
     private const int NoSymbol = int.MaxValue;
 
     /// <summary>
-    /// The number of characters before the look-ahead test may end early, while it still reads data.
+    /// The number of characters the look-ahead test reads before it may end early, while it still reads data. Annex J of ISO/IEC 16022:2024, step r): "If
+    /// at least 4 data characters have been processed in this test loop".
     /// </summary>
     private const int MinimumLookAhead = 4;
 
@@ -1112,7 +1113,7 @@ internal static class DataMatrixCodewords
             // The test reads the data in three stages. Each stage ends the test when a scheme wins early. The index is the number of characters read, so the
             // counts stand after the character before it.
             //
-            // Stage 1 reads one character at a time. The test cannot end early before the fifth character. The ASCII count does not follow its running sum
+            // Stage 1 reads one character at a time. The test cannot end early before the fourth character. The ASCII count does not follow its running sum
             // where the position is inside a digit run of odd length, because ASCII rounds its count up to a whole codeword before a character that is not a
             // digit. So this stage keeps the ASCII count itself and sets the ASCII offset from it after each character, and goes on until the ASCII count and
             // its running sum stand at the same part of a codeword. Rounding up keeps a difference of whole codewords, so from there the ASCII offset is fixed
@@ -1126,12 +1127,12 @@ internal static class DataMatrixCodewords
                 ascii = AddAscii(ascii, message[index]);
                 index++;
                 offsets.Ascii = ascii - asciiSums[index];
-                if (index - position > MinimumLookAhead && this.TryEarlyChoice(this.CountsAt(offsets, index), index, fnc1, out choice))
+                if (index - position >= MinimumLookAhead && this.TryEarlyChoice(this.CountsAt(offsets, index), index, fnc1, out choice))
                 {
                     return choice;
                 }
             }
-            while (index < length && (index - position <= MinimumLookAhead || offsets.Ascii % Unit != 0));
+            while (index < length && (index - position < MinimumLookAhead || offsets.Ascii % Unit != 0));
 
             // Stage 2 reads a vector of positions at a time. Lane i holds the counts after the character at index + i, which are the offsets plus the running
             // sums at index + i + 1. The vectors a, c, t, x, e and b hold the ASCII, C40, Text, X12, EDIFACT and Base 256 counts. A mask lane is all ones where
@@ -1259,7 +1260,7 @@ internal static class DataMatrixCodewords
         };
 
         /// <summary>
-        /// The early test of the look-ahead test, from the fifth character: a scheme wins when it is at least one whole codeword cheaper than every other
+        /// The early test of the look-ahead test, from the fourth character: a scheme wins when it is at least one whole codeword cheaper than every other
         /// scheme. ASCII and Base 256 win with a margin of exactly one codeword; the others need more than one.
         /// </summary>
         /// <param name="counts">The count of each scheme.</param>

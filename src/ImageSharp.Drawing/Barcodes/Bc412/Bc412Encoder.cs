@@ -37,6 +37,16 @@ internal static class Bc412Encoder
     public const double NominalXDimension = 0.12;
 
     /// <summary>
+    /// The smallest X dimension in millimetres. Table 1 of SEMI T1-95 gives the module spacing as "0.120 mm ± 0.025 mm".
+    /// </summary>
+    public const double MinimumXDimension = 0.120 - 0.025;
+
+    /// <summary>
+    /// The largest X dimension in millimetres, from the same tolerance.
+    /// </summary>
+    public const double MaximumXDimension = 0.120 + 0.025;
+
+    /// <summary>
     /// The position of the check character in the symbol: after the first data character.
     /// </summary>
     public const int CheckPosition = 1;
@@ -67,9 +77,10 @@ internal static class Bc412Encoder
     private const int CheckMultiplier = 17;
 
     /// <summary>
-    /// The bar height in modules when the caller sets none: a module height of 2.00 mm at the module spacing of 0.12 mm.
+    /// The bar height in millimetres when the caller sets none. Table 1 of SEMI T1-95: "Module Height (dot centerline to dot centerline)", 2.000 mm. The
+    /// height stays 2.000 mm at every module width, so a module that rounds to whole pixels does not change it.
     /// </summary>
-    private const float NominalBarHeight = (float)(2.00 / 0.12);
+    private const double NominalBarHeight = 2.000;
 
     /// <summary>
     /// Gets the run widths of every character, eight per character in bar and space order, in the order of <see cref="Characters"/>. Every bar is one module,
@@ -144,7 +155,7 @@ internal static class Bc412Encoder
     /// <param name="symbol">The symbol to write.</param>
     public static void BuildSymbol(ReadOnlySpan<char> carried, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        double xDimension = options.XDimension ?? NominalXDimension;
+        double xDimension = options.ResolveXDimension(MinimumXDimension, NominalXDimension, MaximumXDimension);
         Span<int> runs = symbol.BeginLinear(StartElements + (carried.Length * RunsPerCharacter) + StopElements, xDimension, out Span<float> heights, out _);
 
         // The start character is a bar and a two module space, and the stop character is a bar, a space and a bar of one module each.
@@ -165,7 +176,7 @@ internal static class Bc412Encoder
 
         int widthInModules = BarcodeSymbol.RunWidth(runs);
 
-        float barHeight = options.ResolveBarHeight(xDimension, NominalBarHeight);
+        float barHeight = options.ResolveBarHeight(xDimension, (float)(NominalBarHeight / xDimension));
         heights.Fill(barHeight);
 
         if (options.Font is not null)

@@ -51,15 +51,25 @@ internal static class IntelligentMailEncoder
         UspsPostalEncoder.NominalXDimension,
         UspsPostalEncoder.RunUnit,
         UspsPostalEncoder.BarUnits,
-        UspsPostalEncoder.SpaceUnits,
+        FourStateMetrics.SpaceUnitsForPitch(
+            UspsPostalEncoder.Pitch,
+            UspsPostalEncoder.NominalXDimension,
+            UspsPostalEncoder.RunUnit,
+            UspsPostalEncoder.BarUnits),
         (float)((0.145 - 0.048) / 2 / 0.020),
         (float)(0.048 / 0.020),
         (float)((0.145 - 0.048) / 2 / 0.020),
         UspsPostalEncoder.ClearZone,
-        UspsPostalEncoder.VerticalClearZone,
+        (float)(0.028 / 0.020),
         BarcodeTextSide.BelowBars,
         (float)(0.028 / 0.020),
-        BarcodeTextAlignment.Left);
+        BarcodeTextAlignment.Left,
+        UspsPostalEncoder.Pitch,
+        false)
+    {
+        MinimumXDimension = UspsPostalEncoder.MinimumXDimension,
+        MaximumXDimension = UspsPostalEncoder.MaximumXDimension,
+    };
 
     /// <summary>
     /// Gets Table 19, the characters with five of their 13 bits set, which a codeword below <see cref="FiveOf13Length"/> selects. The code of Table 18 orders

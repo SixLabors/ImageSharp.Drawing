@@ -81,8 +81,8 @@ public class Interleaved2Of5SymbologyTests
     }
 
     /// <summary>
-    /// Section 5.3.2.2 of the GS1 General Specifications measures a symbol as <c>(P(4N+6)+N+6)X</c> before its quiet zones, where P is the number of digit
-    /// pairs and N the wide to narrow ratio, which this library draws as 3.
+    /// Section 3.3 of AIM USS-I 2/5 measures a symbol as <c>(P(4N+6)+6+N)X</c> before its quiet zones, where P is the number of digit pairs and N the wide to
+    /// narrow ratio, which this library draws as 3.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     /// <param name="pairs">The number of digit pairs the symbol carries.</param>
@@ -92,6 +92,35 @@ public class Interleaved2Of5SymbologyTests
     [InlineData("0123456789", 5)]
     public void SpansTheWidthOfSectionFiveThreeTwoTwo(string text, int pairs)
         => Assert.Equal((pairs * ((4 * 3) + 6)) + 3 + 6, SymbolEncoder.Read(new Interleaved2Of5Symbology(), text, new BarcodeOptions(), SymbolEncoder.RunSum));
+
+    /// <summary>
+    /// Section 3.2 of AIM USS-I 2/5: "The minimum quiet zone width is ten times the X dimension or 0.10 inch (2.54 mm), whichever is greater." At the 0.191 mm
+    /// X dimension of that section the 2.54 mm is wider than ten modules.
+    /// </summary>
+    [Fact]
+    public void KeepsTheQuietZoneOfSectionThreeTwo()
+    {
+        BarcodeOptions options = new() { Dpi = SymbolEncoder.MicrometreDpi, XDimension = 0.191 };
+        SymbolEncoder.Encode(new Interleaved2Of5Symbology(), "1234", options, static (ref symbol) =>
+        {
+            Assert.Equal((float)(2.54 / 0.191), symbol.LeadingQuietZone, 1e-4F);
+            Assert.Equal((float)(2.54 / 0.191), symbol.TrailingQuietZone, 1e-4F);
+        });
+    }
+
+    /// <summary>
+    /// Section 3.2 of AIM USS-I 2/5: "the minimum bar height should be 0.25 inches (6.35 mm) or 15 percent of the bar code symbol length, whichever is
+    /// greater", and Appendix A defines the symbol length as "The distance between the outside edges of the quiet zones". Eight digits take 4 x 18 + 9 = 81
+    /// modules, and the two 10 module quiet zones make 101, so the bars are 15.15 modules high, more than the 6.35 mm, 12.7 modules, at an X dimension of
+    /// 0.5 mm.
+    /// </summary>
+    [Fact]
+    public void DrawsTheBarHeightOfSectionThreeTwo()
+        => SymbolEncoder.Encode(
+            new Interleaved2Of5Symbology(),
+            "12345678",
+            new BarcodeOptions { XDimension = 0.5 },
+            static (ref symbol) => Assert.All(symbol.BarHeights.ToArray(), height => Assert.Equal(0.15F * 101F, height, 1e-4F)));
 
     [Theory]
     [InlineData("")]

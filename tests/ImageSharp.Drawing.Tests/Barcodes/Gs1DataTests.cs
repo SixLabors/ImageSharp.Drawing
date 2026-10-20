@@ -7,7 +7,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
 /// The GS1 data rules every GS1 symbology applies to its element strings, tested through GS1-128: the format of each Application Identifier, and the invalid
-/// pairs and mandatory associations of section 4.13 of the GS1 General Specifications.
+/// pairs of section 4.13 of the GS1 General Specifications.
 /// </summary>
 public class Gs1DataTests
 {
@@ -76,16 +76,17 @@ public class Gs1DataTests
         => Assert.Throws<ArgumentException>(() => Encode(text));
 
     /// <summary>
-    /// Section 4.13.2, Table 4-5: a batch or lot number requires a GTIN, a GTIN of contained trade items, a Made-to-Order GTIN, an ITIP or an ITIP of contained
-    /// trade items, and an expiration date requires the item it dates.
+    /// Section 4.13.2, Table 4-5: a batch or lot number, an expiration date and a serial number each require a GTIN or another key on the same physical
+    /// entity. The note of section 4.13.2: "This does not necessarily mean that the element strings need to appear in the same data carrier", so a symbol
+    /// without the key is accepted.
     /// </summary>
     /// <param name="text">The element strings.</param>
     [Theory]
     [InlineData("(10)ABC123")]
     [InlineData("(17)260101")]
     [InlineData("(21)ABC")]
-    public void RejectsMissingMandatoryAssociations(string text)
-        => Assert.Throws<ArgumentException>(() => Encode(text));
+    public void AcceptsElementStringsWhoseAssociationsAreInAnotherCarrier(string text)
+        => Assert.Null(Record.Exception(() => Encode(text)));
 
     /// <summary>
     /// An element string repeated with the same value is one item of data, so it is accepted.
@@ -124,9 +125,51 @@ public class Gs1DataTests
         => Assert.Throws<ArgumentException>(() => Encode(text));
 
     /// <summary>
-    /// Encodes the text with the default options.
+    /// Section 7.13 converts a longitude to Y = 10 000 000 x ((longitude + 360) mod 360). The remainder is below 360, so Y is at most 3 599 999 999. The
+    /// example of the section converts latitude -62.0914152 and longitude -58.4702029 to 0279085848 and 3015297971.
+    /// </summary>
+    [Fact]
+    public void LimitsTheLongitudeOfSectionSevenThirteen()
+    {
+        Assert.Null(Record.Exception(() => Encode("(00)395123451234567895(4309)02790858483015297971")));
+        Assert.Null(Record.Exception(() => Encode("(00)395123451234567895(4309)02790858483599999999")));
+        Assert.Throws<ArgumentException>(() => Encode("(00)395123451234567895(4309)02790858483600000000"));
+    }
+
+    /// <summary>
+    /// Section 4.14 rule 2.a.iii: "The font size SHOULD be at least 2 mm (0.08 in) in height". A point is 1/72 inch, so a font of 2 mm is 2 * 72 / 25.4
+    /// points, and every GS1 linear symbology prints its human readable interpretation at that size or larger.
+    /// </summary>
+    /// <param name="kind">The symbology.</param>
+    /// <param name="text">The text to encode.</param>
+    [Theory]
+    [InlineData("Gs1128", "(01)09521234543213")]
+    [InlineData("DataBarOmnidirectional", "(01)09521234543213")]
+    [InlineData("DataBarLimited", "(01)15012345678907")]
+    [InlineData("DataBarExpanded", "(01)90614141000015(3202)000150")]
+    [InlineData("DataBarExpandedStacked", "(01)90614141000015(3202)000150")]
+    [InlineData("Itf14", "15400141288763")]
+    public void PrintsTheTextAtTwoMillimetresOrLarger(string kind, string text)
+    {
+        BarcodeSymbology symbology = kind switch
+        {
+            "Gs1128" => new Gs1128Symbology(),
+            "DataBarOmnidirectional" => new Gs1DataBarOmnidirectionalSymbology(),
+            "DataBarLimited" => new Gs1DataBarLimitedSymbology(),
+            "DataBarExpanded" => new Gs1DataBarExpandedSymbology(),
+            "DataBarExpandedStacked" => new Gs1DataBarExpandedStackedSymbology(),
+            _ => new Itf14Symbology(),
+        };
+
+        BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(4F) };
+        SymbolEncoder.Encode(symbology, text, options, static (ref symbol) => Assert.Equal(2F * 72F / 25.4F, symbol.TextMinimumSize, 1e-4F));
+    }
+
+    /// <summary>
+    /// Encodes the text at an X dimension of 0.25 mm. Table 5-52 of the GS1 General Specifications allows GS1-128 from 0.170 mm, and 0.25 mm keeps the longest
+    /// test data within the 165.10 mm of section 5.4.4.3.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     private static void Encode(string text)
-        => SymbolEncoder.Encode(new Gs1128Symbology(), text, new BarcodeOptions());
+        => SymbolEncoder.Encode(new Gs1128Symbology(), text, new BarcodeOptions { XDimension = 0.25 });
 }

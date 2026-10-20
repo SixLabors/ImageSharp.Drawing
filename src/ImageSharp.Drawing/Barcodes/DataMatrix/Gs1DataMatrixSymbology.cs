@@ -16,6 +16,10 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// When a font is set, the element strings print below the symbol, one on each line, with the Application Identifiers in parentheses. An element string of
 /// Application Identifier (8200) does not print.
 /// </para>
+/// <para>
+/// The X dimension is the target of 0.495 millimetre of Table 5-45, symbol specification table 1 addendum 1. The symbol specification tables of section
+/// 5.12.3 give GS1 DataMatrix X dimensions from 0.100 to 3.50 millimetres, and an X dimension outside that range is clamped to it.
+/// </para>
 /// </summary>
 public sealed class Gs1DataMatrixSymbology : BarcodeSymbology
 {
@@ -35,7 +39,15 @@ public sealed class Gs1DataMatrixSymbology : BarcodeSymbology
         try
         {
             Gs1Data.Prepare(text, ref encoded);
-            DataMatrixEncoder.BuildSymbol(encoded.AsSpan(), true, DataMatrixFormat.Square, 0, 0, options.XDimension ?? PointXDimension, ref symbol);
+            DataMatrixEncoder.BuildSymbol(
+                encoded.AsSpan(),
+                true,
+                DataMatrixFormat.Square,
+                0,
+                0,
+                options.ResolveXDimension(Gs1Data.Gs1DataMatrixMinimumXDimension, Gs1Data.Gs1MatrixXDimension, Gs1Data.Gs1MatrixMaximumXDimension),
+                ref symbol);
+
             if (options.Font is not null)
             {
                 Gs1Data.AddMatrixReadable(text, options.Font, ref symbol);

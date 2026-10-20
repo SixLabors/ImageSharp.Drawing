@@ -35,6 +35,7 @@ internal readonly struct BarcodeTextPlacement
     /// <param name="fontScale">The factor applied to the caller's font size for this placement.</param>
     /// <param name="isCaption">Whether this placement is a data layer caption rendered with the caption font.</param>
     /// <param name="alignment">Where the line stands within its span.</param>
+    /// <param name="withinSpan">Whether the ink of the line must stay within its span.</param>
     public BarcodeTextPlacement(
         int textStart,
         int textLength,
@@ -44,7 +45,8 @@ internal readonly struct BarcodeTextPlacement
         float textEdge,
         float fontScale,
         bool isCaption,
-        BarcodeTextAlignment alignment)
+        BarcodeTextAlignment alignment,
+        bool withinSpan)
     {
         this.TextStart = textStart;
         this.TextLength = textLength;
@@ -55,6 +57,7 @@ internal readonly struct BarcodeTextPlacement
         this.FontScale = fontScale;
         this.IsCaption = isCaption;
         this.Alignment = alignment;
+        this.WithinSpan = withinSpan;
     }
 
     /// <summary>
@@ -106,4 +109,10 @@ internal readonly struct BarcodeTextPlacement
     /// Gets where the line stands within its span.
     /// </summary>
     public BarcodeTextAlignment Alignment { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the line must stay within its span. The line then prints in a smaller font when it is wider than its span: its ink
+    /// for a line aligned on an edge, and its renderable bounds for a centred line.
+    /// </summary>
+    public bool WithinSpan { get; }
 }

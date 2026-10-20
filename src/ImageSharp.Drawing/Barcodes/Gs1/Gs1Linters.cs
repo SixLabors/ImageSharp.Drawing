@@ -354,10 +354,10 @@ internal static class Gs1Linters
                 break;
 
             case Gs1Linter.Longitude:
-                // Section 7.13: Y = 10 000 000 x ((longitude + 360) mod 360), so it is at most 3 600 000 000.
-                if (data.Length != 10 || long.Parse(data, CultureInfo.InvariantCulture) > 3_600_000_000)
+                // Section 7.13: Y = 10 000 000 x ((longitude + 360) mod 360). The remainder is below 360, so Y is at most 3 599 999 999.
+                if (data.Length != 10 || long.Parse(data, CultureInfo.InvariantCulture) > 3_599_999_999)
                 {
-                    ThrowInvalidData(identifier, "does not carry a longitude of ten digits up to 3600000000", nameof(data));
+                    ThrowInvalidData(identifier, "does not carry a longitude of ten digits up to 3599999999", nameof(data));
                 }
 
                 break;

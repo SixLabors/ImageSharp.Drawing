@@ -11,17 +11,19 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal static class DeutschePostData
 {
     /// <summary>
-    /// The bar height in modules a symbol takes when the caller sets none. Deutsche Post requires a height of at least 25 mm ("mindestens 25 mm") and a narrow
-    /// module of 0.375 mm to 0.5 mm, so at the widest permitted module the minimum height is 50 modules. The 5 mm quiet zone Deutsche Post requires on each
-    /// side ("links und rechts von jedem Strichcode mindestens 5 mm") is the ten modules of Interleaved 2 of 5 at that same module width.
+    /// The X dimension in millimetres a symbol takes when the caller sets none: a narrow module of 0.5 mm.
     /// </summary>
-    public const float NominalBarHeight = 50F;
+    private const double NominalXDimension = 0.5;
 
     /// <summary>
-    /// The X dimension in millimetres a symbol takes when the caller sets none: 0.5 mm, the widest narrow module Deutsche Post permits, at which
-    /// <see cref="NominalBarHeight"/> and the quiet zone are stated.
+    /// The bar height in millimetres a symbol takes when the caller sets none.
     /// </summary>
-    public const double NominalXDimension = 0.5;
+    private const double BarHeight = 25;
+
+    /// <summary>
+    /// The quiet zone in millimetres on each side, at least the ten modules of Interleaved 2 of 5.
+    /// </summary>
+    private const double QuietZone = 5;
 
     /// <summary>
     /// The modulus of the check digit.
@@ -68,5 +70,29 @@ internal static class DeutschePostData
 
         text.Slice(0, digits).CopyTo(encoded);
         encoded[digits] = (char)('0' + check);
+    }
+
+    /// <summary>
+    /// Builds the Interleaved 2 of 5 symbol of a Deutsche Post number. The default bar height and the quiet zones are in millimetres, so they hold at every
+    /// module width, and the quiet zone keeps the ten modules of Interleaved 2 of 5 too.
+    /// </summary>
+    /// <param name="encoded">The data digits and the check digit.</param>
+    /// <param name="readable">The human readable interpretation.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildSymbol(ReadOnlySpan<char> encoded, ReadOnlySpan<char> readable, BarcodeOptions options, ref BarcodeSymbol symbol)
+    {
+        double xDimension = options.ResolveXDimension(NominalXDimension);
+        Interleaved2Of5Layout layout = new()
+        {
+            XDimension = xDimension,
+            NominalBarHeight = (float)(BarHeight / xDimension),
+            QuietZone = MathF.Max(Interleaved2Of5Encoder.QuietZone, (float)(QuietZone / xDimension)),
+            TextClearance = BarcodeTextPlacement.Clearance,
+            NarrowElement = 1,
+            WideElement = Interleaved2Of5Encoder.WideElement,
+        };
+
+        Interleaved2Of5Encoder.BuildSymbol(encoded, readable, in layout, options, ref symbol);
     }
 }

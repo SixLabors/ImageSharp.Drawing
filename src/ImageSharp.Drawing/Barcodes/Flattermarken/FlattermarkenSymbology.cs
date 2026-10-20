@@ -9,7 +9,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// the digit 0 leaves its window blank. The printed line shows the digits as given.
 /// <para>
 /// A symbol that starts or ends with a blank part of a window begins or ends with a bar of zero width, so the windows keep their width. The quiet zone is
-/// "Application dependent" and is zero. The bar height when the caller sets none is 5 modules, the 10 mm height at the 2 mm module.
+/// "Application dependent" and is zero. When the caller sets no X dimension and no bar height, each bar is 2 mm wide and 10 mm high, the size print shops
+/// most often use.
 /// </para>
 /// </summary>
 public sealed class FlattermarkenSymbology : BarcodeSymbology
@@ -25,14 +26,24 @@ public sealed class FlattermarkenSymbology : BarcodeSymbology
     private const int Window = 9;
 
     /// <summary>
-    /// The nominal X dimension in millimetres: the 2 mm bar width.
+    /// The nominal X dimension in millimetres: a bar 2 mm wide, the width of the usual 2 by 10 mm mark.
     /// </summary>
     private const double XDimension = 2;
 
     /// <summary>
-    /// The bar height in modules when the caller sets none.
+    /// The smallest X dimension in millimetres, from the "Module width: 2-3 mm" of section 6.1.34 of the TEC-IT Barcode Reference.
     /// </summary>
-    private const float NominalBarHeight = 5F;
+    private const double MinimumXDimension = 2;
+
+    /// <summary>
+    /// The largest X dimension in millimetres, from the same module width.
+    /// </summary>
+    private const double MaximumXDimension = 3;
+
+    /// <summary>
+    /// The bar height in millimetres when the caller sets none: 10 mm, the height of the usual 2 by 10 mm mark.
+    /// </summary>
+    private const double NominalBarHeight = 10;
 
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
@@ -43,7 +54,7 @@ public sealed class FlattermarkenSymbology : BarcodeSymbology
         BarcodeSymbology.ValidateDigits(text);
 
         // One bar and one space per digit at most, plus a zero width bar at either end. The symbol reserves that many runs and keeps those written.
-        double xDimension = options.XDimension ?? XDimension;
+        double xDimension = options.ResolveXDimension(MinimumXDimension, XDimension, MaximumXDimension);
         Span<int> buffer = symbol.BeginLinear((text.Length * 2) + 3, xDimension, out Span<float> heights, out _);
         int written = 0;
         int space = 0;
@@ -83,7 +94,7 @@ public sealed class FlattermarkenSymbology : BarcodeSymbology
         }
 
         symbol.TrimLastRow(written);
-        float barHeight = options.ResolveBarHeight(xDimension, NominalBarHeight);
+        float barHeight = options.ResolveBarHeight(xDimension, (float)(NominalBarHeight / xDimension));
         heights[..((written + 1) >> 1)].Fill(barHeight);
 
         if (options.Font is not null)

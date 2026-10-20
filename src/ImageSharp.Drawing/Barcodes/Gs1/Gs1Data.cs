@@ -37,12 +37,92 @@ internal static class Gs1Data
     public const float MinimumTextHeight = 2F;
 
     /// <summary>
-    /// Returns the factor that lifts a font to <see cref="MinimumTextHeight"/>, or 1 for a font that is that high or higher. A point is 1/72 inch, so the em of
-    /// a font is its size times 25.4 / 72 millimetres high at any resolution.
+    /// The size in points of a font whose em is <see cref="MinimumTextHeight"/> high. A point is 1/72 inch, so the em of a font is its size times 25.4 / 72
+    /// millimetres high at any resolution.
+    /// </summary>
+    public const float MinimumTextSize = MinimumTextHeight * 72F / 25.4F;
+
+    // The symbol specification tables of section 5.12.3 give each application a range of X dimensions, and most symbologies are in several tables. A
+    // symbology clamps the X dimension to the widest range of the tables that list it, so the X dimension of every application those tables define stays
+    // possible. The nominal X dimension is the target of the table that Table 2-37 gives to the main application of the symbology.
+
+    /// <summary>
+    /// The smallest X dimension in millimetres of a GS1-128 symbol, the smallest minimum of the tables that list GS1-128: 0.170 in Table 5-52 and Table 5-57.
+    /// </summary>
+    public const double Gs1128MinimumXDimension = 0.170;
+
+    /// <summary>
+    /// The largest X dimension in millimetres of a GS1-128 symbol, the largest maximum of the tables that list GS1-128: 1.016 in Table 5-47, Table 5-54 and
+    /// Table 5-58.
+    /// </summary>
+    public const double Gs1128MaximumXDimension = 1.016;
+
+    /// <summary>
+    /// The smallest X dimension in millimetres of a GS1-128 symbol that carries an SSCC. Note (*) of Table 5-51: "If the logistic unit is physically too small
+    /// to accommodate the minimum X-dimension, the minimum X-dimension is 0.250 millimetre (0.0098 inch)."
+    /// </summary>
+    public const double SsccMinimumXDimension = 0.250;
+
+    /// <summary>
+    /// The largest X dimension in millimetres of a GS1-128 symbol that carries an SSCC, the maximum of the logistic unit rows of Table 5-51 and Table 5-58.
+    /// </summary>
+    public const double SsccMaximumXDimension = 0.940;
+
+    /// <summary>
+    /// The smallest X dimension in millimetres of an ITF-14 symbol, the smallest minimum of the tables that list ITF-14: 0.170 in Table 5-52.
+    /// </summary>
+    public const double Itf14MinimumXDimension = 0.170;
+
+    /// <summary>
+    /// The largest X dimension in millimetres of an ITF-14 symbol, the largest maximum of the tables that list ITF-14: 1.016 in Table 5-47 and Table 5-54.
+    /// </summary>
+    public const double Itf14MaximumXDimension = 1.016;
+
+    /// <summary>
+    /// The nominal X dimension in millimetres of a GS1 DataMatrix or GS1 QR Code symbol, the target of Table 5-45, symbol specification table 1 addendum 1.
+    /// Table 2-37 gives that table to "GS1 element string syntax for extended packaging applications for trade items".
+    /// </summary>
+    public const double Gs1MatrixXDimension = 0.495;
+
+    /// <summary>
+    /// The smallest X dimension in millimetres of a GS1 DataMatrix symbol, the smallest minimum of the tables that list GS1 DataMatrix: 0.100 for "GS1
+    /// DataMatrix direct part marking - A" in Table 5-53.
+    /// </summary>
+    public const double Gs1DataMatrixMinimumXDimension = 0.100;
+
+    /// <summary>
+    /// The smallest X dimension in millimetres of a GS1 QR Code symbol, the smallest minimum of the tables that list GS1 QR Code: 0.254 in Table 5-53 and
+    /// Table 5-57.
+    /// </summary>
+    public const double Gs1QrCodeMinimumXDimension = 0.254;
+
+    /// <summary>
+    /// The largest X dimension in millimetres of a GS1 DataMatrix or GS1 QR Code symbol, the largest maximum of the tables that list them: 3.50 in Table 5-59.
+    /// </summary>
+    public const double Gs1MatrixMaximumXDimension = 3.50;
+
+    /// <summary>
+    /// The smallest X dimension in millimetres of a GS1 Digital Link Data Matrix or QR Code symbol, the minimum of Table 5-46, symbol specification table 1
+    /// addendum 2. Table 2-37 gives that table to "GS1 Digital Link URI syntax for extended packaging applications for trade items".
+    /// </summary>
+    public const double DigitalLinkMinimumXDimension = 0.396;
+
+    /// <summary>
+    /// The nominal X dimension in millimetres of a GS1 Digital Link Data Matrix or QR Code symbol, the target of Table 5-46.
+    /// </summary>
+    public const double DigitalLinkXDimension = 0.495;
+
+    /// <summary>
+    /// The largest X dimension in millimetres of a GS1 Digital Link Data Matrix or QR Code symbol, the maximum of Table 5-46 and Table 5-49.
+    /// </summary>
+    public const double DigitalLinkMaximumXDimension = 0.990;
+
+    /// <summary>
+    /// Returns the factor that lifts a font to <see cref="MinimumTextHeight"/>, or 1 for a font that is that high or higher.
     /// </summary>
     /// <param name="font">The font of the human readable interpretation.</param>
     /// <returns>The factor applied to the size of the font.</returns>
-    public static float TextScale(Font font) => MathF.Max(1F, MinimumTextHeight * 72F / 25.4F / font.Size);
+    public static float TextScale(Font font) => MathF.Max(1F, MinimumTextSize / font.Size);
 
     /// <summary>
     /// Adds the human readable interpretation of element strings below a built matrix symbol, one element string on each line, as
@@ -136,8 +216,9 @@ internal static class Gs1Data
     }
 
     /// <summary>
-    /// Validates element strings: each one against its entry of the GS1 Barcode Syntax Dictionary, and then the rules that relate them, sections 4.13.1 and
-    /// 4.13.2 of the GS1 General Specifications.
+    /// Validates element strings: each one against its entry of the GS1 Barcode Syntax Dictionary, and then the invalid pairs of section 4.13.1 of the GS1
+    /// General Specifications. A pair in one symbol is a pair on the item that the symbol marks. The mandatory associations of section 4.13.2 are not
+    /// validated: its note says that associated element strings need not "appear in the same data carrier", so one symbol cannot break them.
     /// </summary>
     /// <param name="buffer">The buffer the element strings are in.</param>
     /// <param name="elements">The element strings.</param>
@@ -174,47 +255,11 @@ internal static class Gs1Data
                         nameof(elements));
                 }
             }
-
-            // Section 4.13.2: a mandatory association. Each rule holds when every pattern of one of its groups matches another element string.
-            foreach (string[][] rule in entry.Requisites)
-            {
-                bool satisfied = false;
-                foreach (string[] group in rule)
-                {
-                    // A group fails at its first pattern without a match, so the rest of its patterns are not searched.
-                    satisfied = true;
-                    foreach (string pattern in group)
-                    {
-                        if (FindPattern(buffer, elements, pattern, identifier) < 0)
-                        {
-                            satisfied = false;
-                            break;
-                        }
-                    }
-
-                    if (satisfied)
-                    {
-                        break;
-                    }
-                }
-
-                if (!satisfied)
-                {
-                    string[] alternatives = new string[rule.Length];
-                    for (int g = 0; g < rule.Length; g++)
-                    {
-                        alternatives[g] = "(" + string.Join(") and (", rule[g]) + ")";
-                    }
-
-                    throw new ArgumentException(
-                        $"The Application Identifier ({identifier}) requires {string.Join(" or ", alternatives)} in the same data.",
-                        nameof(elements));
-                }
-            }
         }
 
-        // A digital signature, Application Identifier (8030), signs a serialised key, so a GDTI (253), GCN (255) or GRAI (8003) with it carries its optional
-        // serial component.
+        // Table 4-5 of the GS1 General Specifications puts a digital signature, Application Identifier (8030), with a "Global Returnable Asset Identifier
+        // including Serial component", a "Global Document Type Identifier including Serial component" or a "Global Coupon Number including Serial component".
+        // So a GRAI (8003), GDTI (253) or GCN (255) in the same symbol as a digital signature carries its optional serial component.
         if (FindPattern(buffer, elements, "8030", []) >= 0)
         {
             foreach (string key in (ReadOnlySpan<string>)["253", "255", "8003"])

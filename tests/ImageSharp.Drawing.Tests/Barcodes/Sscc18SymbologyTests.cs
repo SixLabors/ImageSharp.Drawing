@@ -46,15 +46,20 @@ public class Sscc18SymbologyTests
         => Assert.Throws<ArgumentException>(() => Encode(text));
 
     /// <summary>
-    /// A computed check digit joins the printed number after a space, so the caller can see it was added.
+    /// Section 4.14 rule 2.a.v of the GS1 General Specifications: "Spaces may be used in the HRI itself to ease manual data input". The printed number keeps
+    /// the grouping of the input, and a computed check digit follows a space only when the input groups its digits with spaces.
     /// </summary>
-    [Fact]
-    public void PrintsAComputedCheckDigitAfterASpace()
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expected">The printed line.</param>
+    [Theory]
+    [InlineData("(00)10614141123456789", "(00)106141411234567897")]
+    [InlineData("(00) 1 0614141 123456789", "(00) 1 0614141 123456789 7")]
+    public void PrintsAComputedCheckDigitInTheGroupingOfTheInput(string text, string expected)
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        string[] texts = SymbolEncoder.Read(new Sscc18Symbology(), "(00)10614141123456789", options, SymbolEncoder.Texts);
+        string[] texts = SymbolEncoder.Read(new Sscc18Symbology(), text, options, SymbolEncoder.Texts);
 
-        Assert.Equal("(00)10614141123456789 7", Assert.Single(texts));
+        Assert.Equal(expected, Assert.Single(texts));
     }
 
     /// <summary>

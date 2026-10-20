@@ -4,14 +4,15 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The device independent description of an encoded barcode, measured in modules. A module is the narrowest nominal element of a symbology, which ISO/IEC 15420
-/// and related specifications call the X-dimension. A symbol carries no pixel sizes, brushes or fonts. The emitter adds those when it turns the symbol into
-/// canvas commands.
+/// The device independent description of an encoded barcode, measured in modules. A module is the narrowest nominal element of a symbology, whose width the GS1
+/// General Specifications and related specifications call the X-dimension. A symbol carries no pixel sizes, brushes or fonts. The emitter adds those when it
+/// turns the symbol into canvas commands.
 /// </summary>
 /// <remarks>
 /// An encoder writes the symbol once: it begins a linear, stacked or matrix symbol with the sizes that its validated input gives, fills the spans that the
@@ -109,8 +110,9 @@ internal struct BarcodeSymbol : IDisposable
     public float HeightInModules { get; private set; }
 
     /// <summary>
-    /// Gets the width in modules of the quiet zone that comes before the symbol. Each symbology sets its own quiet zone width. For example, ISO/IEC 15420
-    /// requires 11 modules before an EAN-13 symbol, and a postal symbology states its clear zone in inches, which is not a whole number of modules.
+    /// Gets the width in modules of the quiet zone that comes before the symbol. Each symbology sets its own quiet zone width. For example, Table 5-11 of the
+    /// GS1 General Specifications gives 11 modules before an EAN-13 symbol, and a postal symbology states its clear zone in inches, which is not a whole number
+    /// of modules.
     /// </summary>
     public float LeadingQuietZone { get; private set; }
 
@@ -139,6 +141,14 @@ internal struct BarcodeSymbol : IDisposable
     /// Gets the width of one run unit in modules. A run width counts run units.
     /// </summary>
     public float RunUnit { get; private set; }
+
+    /// <summary>
+    /// Gets the number of run units in one module of a symbol whose runs are each a whole number of modules with a correction of less than half a module, or 0
+    /// for a symbol without such corrections. Table 5-10 of the GS1 General Specifications corrects the bars and spaces of some EAN/UPC characters by one
+    /// thirteenth of a module. The emitter rounds the module edges and the corrections onto the pixel grid apart, so a correction never moves an edge further
+    /// than its own nearest whole number of pixels.
+    /// </summary>
+    public int CorrectedModuleUnits { get; private set; }
 
     /// <summary>
     /// Gets a value indicating whether every bar of the symbol is one width at one pitch, so each run draws at a whole number of pixels of its own.
@@ -199,6 +209,27 @@ internal struct BarcodeSymbol : IDisposable
     /// Gets the largest printed height of the characters of the text lines in modules, or 0 when the symbology states none.
     /// </summary>
     public float TextHeightMaximum { get; private set; }
+
+    /// <summary>
+    /// Gets the smallest size of the caption in points, or 0 when the symbology states none.
+    /// </summary>
+    public float CaptionMinimumSize { get; private set; }
+
+    /// <summary>
+    /// Gets the font weight the text of the symbol renders at, or <see langword="null"/> for the weight of the font of the options. A symbology whose standard
+    /// requires a weight sets it, and a font without a face of that weight renders it with a synthetic weight.
+    /// </summary>
+    public FontWeight? TextWeight { get; private set; }
+
+    /// <summary>
+    /// Gets the smallest size of the text lines in points, or 0 when the symbology states none.
+    /// </summary>
+    public float TextMinimumSize { get; private set; }
+
+    /// <summary>
+    /// Gets the largest size of the text lines in points, or 0 when the symbology states none.
+    /// </summary>
+    public float TextMaximumSize { get; private set; }
 
     /// <summary>
     /// Gets the rows of a linear or stacked symbol from the top down. A linear symbol has one row.
@@ -604,13 +635,32 @@ internal struct BarcodeSymbol : IDisposable
         float fontScale,
         bool isCaption,
         BarcodeTextAlignment alignment)
-    {
-        text.CopyTo(Slice<char>(this.textBuffer, this.charOffset + (this.charCount * sizeof(char)), text.Length));
-        Slice<BarcodeTextPlacement>(this.textBuffer, this.textCount++ * Unsafe.SizeOf<BarcodeTextPlacement>(), 1)[0] =
-            new BarcodeTextPlacement(this.charCount, text.Length, left, right, side, textEdge, fontScale, isCaption, alignment);
+        => this.AddText(text, left, right, side, textEdge, fontScale, isCaption, alignment, false);
 
-        this.charCount += text.Length;
-    }
+    /// <summary>
+    /// Adds a centred text placement at the full font size that must stay within its span. The line prints in a smaller font when it is wider than its span.
+    /// The characters copy into the character storage that <see cref="ReserveText"/> reserved.
+    /// </summary>
+    /// <param name="text">The characters to render.</param>
+    /// <param name="left">The left edge of the horizontal span, in modules.</param>
+    /// <param name="right">The right edge of the horizontal span, in modules.</param>
+    /// <param name="side">The side of the bars the line prints on.</param>
+    /// <param name="textEdge">The edge of the ink of the line, in modules from the symbol top.</param>
+    public void AddTextWithinSpan(ReadOnlySpan<char> text, float left, float right, BarcodeTextSide side, float textEdge)
+        => this.AddText(text, left, right, side, textEdge, 1F, false, BarcodeTextAlignment.Centered, true);
+
+    /// <summary>
+    /// Adds a text placement at the full font size whose ink must stay within its span. The line prints in a smaller font when it is wider than its span. The
+    /// characters copy into the character storage that <see cref="ReserveText"/> reserved.
+    /// </summary>
+    /// <param name="text">The characters to render.</param>
+    /// <param name="left">The left edge of the horizontal span, in modules.</param>
+    /// <param name="right">The right edge of the horizontal span, in modules.</param>
+    /// <param name="side">The side of the bars the line prints on.</param>
+    /// <param name="textEdge">The edge of the ink of the line, in modules from the symbol top.</param>
+    /// <param name="alignment">Where the line stands within its span.</param>
+    public void AddTextWithinSpan(ReadOnlySpan<char> text, float left, float right, BarcodeTextSide side, float textEdge, BarcodeTextAlignment alignment)
+        => this.AddText(text, left, right, side, textEdge, 1F, false, alignment, true);
 
     /// <summary>
     /// Adds a centred text placement at the full font size whose characters are three parts in turn, so a caller that frames data with delimiters writes it
@@ -657,18 +707,28 @@ internal struct BarcodeSymbol : IDisposable
         float fontScale,
         bool isCaption,
         BarcodeTextAlignment alignment)
-    {
-        int start = this.charCount;
-        int length = prefix.Length + body.Length + suffix.Length;
-        Span<char> destination = Slice<char>(this.textBuffer, this.charOffset + (start * sizeof(char)), length);
-        prefix.CopyTo(destination);
-        body.CopyTo(destination[prefix.Length..]);
-        suffix.CopyTo(destination[(prefix.Length + body.Length)..]);
-        Slice<BarcodeTextPlacement>(this.textBuffer, this.textCount++ * Unsafe.SizeOf<BarcodeTextPlacement>(), 1)[0] =
-            new BarcodeTextPlacement(start, length, left, right, side, textEdge, fontScale, isCaption, alignment);
+        => this.AddText(prefix, body, suffix, left, right, side, textEdge, fontScale, isCaption, alignment, false);
 
-        this.charCount = start + length;
-    }
+    /// <summary>
+    /// Adds a centred text placement at the full font size whose characters are three parts in turn and which must stay within its span. The line prints in a
+    /// smaller font when it is wider than its span.
+    /// </summary>
+    /// <param name="prefix">The characters before the body.</param>
+    /// <param name="body">The body characters.</param>
+    /// <param name="suffix">The characters after the body.</param>
+    /// <param name="left">The left edge of the horizontal span, in modules.</param>
+    /// <param name="right">The right edge of the horizontal span, in modules.</param>
+    /// <param name="side">The side of the bars the line prints on.</param>
+    /// <param name="textEdge">The edge of the ink of the line, in modules from the symbol top.</param>
+    public void AddTextWithinSpan(
+        ReadOnlySpan<char> prefix,
+        ReadOnlySpan<char> body,
+        ReadOnlySpan<char> suffix,
+        float left,
+        float right,
+        BarcodeTextSide side,
+        float textEdge)
+        => this.AddText(prefix, body, suffix, left, right, side, textEdge, 1F, false, BarcodeTextAlignment.Centered, true);
 
     /// <summary>
     /// Reserves and adds the human readable interpretation of a matrix symbol, one placement below the symbol across its width. The ink starts below the bottom
@@ -686,6 +746,27 @@ internal struct BarcodeSymbol : IDisposable
             text,
             0F,
             this.Columns,
+            BarcodeTextSide.BelowBars,
+            this.HeightInModules + MathF.Max(this.BottomQuietZone, BarcodeTextPlacement.Clearance),
+            fontScale,
+            false,
+            alignment);
+    }
+
+    /// <summary>
+    /// Reserves and adds the human readable interpretation of a stacked symbol, one placement below the symbol across its width. The ink starts below the
+    /// bottom quiet zone, or <see cref="BarcodeTextPlacement.Clearance"/> below the symbol when the quiet zone is narrower.
+    /// </summary>
+    /// <param name="text">The interpretation, its lines separated by <see cref="BarcodeTextPlacement.LineBreak"/>.</param>
+    /// <param name="alignment">Where the lines stand on the width of the symbol.</param>
+    /// <param name="fontScale">The factor applied to the font size of the caller.</param>
+    public void AddStackedText(ReadOnlySpan<char> text, BarcodeTextAlignment alignment, float fontScale)
+    {
+        this.ReserveText(1, text.Length);
+        this.AddText(
+            text,
+            0F,
+            this.WidthInModules,
             BarcodeTextSide.BelowBars,
             this.HeightInModules + MathF.Max(this.BottomQuietZone, BarcodeTextPlacement.Clearance),
             fontScale,
@@ -731,6 +812,35 @@ internal struct BarcodeSymbol : IDisposable
     }
 
     /// <summary>
+    /// Sets the smallest size of the caption in points.
+    /// </summary>
+    /// <param name="points">The smallest size in points.</param>
+    public void SetCaptionMinimumSize(float points) => this.CaptionMinimumSize = points;
+
+    /// <summary>
+    /// Sets <see cref="TextWeight"/>, the font weight the standard of the symbology requires for its text.
+    /// </summary>
+    /// <param name="weight">The font weight.</param>
+    public void SetTextWeight(FontWeight weight) => this.TextWeight = weight;
+
+    /// <summary>
+    /// Sets <see cref="CorrectedModuleUnits"/>, the number of run units in one module of runs that are whole modules with corrections.
+    /// </summary>
+    /// <param name="units">The number of run units in one module.</param>
+    public void SetCorrectedModuleUnits(int units) => this.CorrectedModuleUnits = units;
+
+    /// <summary>
+    /// Sets the range of the size of the text lines in points.
+    /// </summary>
+    /// <param name="minimum">The smallest size in points, or 0 for none.</param>
+    /// <param name="maximum">The largest size in points, or 0 for none.</param>
+    public void SetTextSize(float minimum, float maximum)
+    {
+        this.TextMinimumSize = minimum;
+        this.TextMaximumSize = maximum;
+    }
+
+    /// <summary>
     /// Returns the rented buffers to the shared pool.
     /// </summary>
     public void Dispose()
@@ -764,6 +874,75 @@ internal struct BarcodeSymbol : IDisposable
         PooledBuffer<byte> rented = new(byteCount);
         rented.Span.Clear();
         return rented;
+    }
+
+    /// <summary>
+    /// Adds a text placement. The characters copy into the character storage that <see cref="ReserveText"/> reserved.
+    /// </summary>
+    /// <param name="text">The characters to render.</param>
+    /// <param name="left">The left edge of the horizontal span, in modules.</param>
+    /// <param name="right">The right edge of the horizontal span, in modules.</param>
+    /// <param name="side">The side of the bars the line prints on.</param>
+    /// <param name="textEdge">The edge of the ink of the line, in modules from the symbol top.</param>
+    /// <param name="fontScale">The factor applied to the caller's font size for this placement.</param>
+    /// <param name="isCaption">Whether this placement is a data layer caption rendered with the caption font.</param>
+    /// <param name="alignment">Where the line stands within its span.</param>
+    /// <param name="withinSpan">Whether the ink of the line must stay within its span.</param>
+    private void AddText(
+        ReadOnlySpan<char> text,
+        float left,
+        float right,
+        BarcodeTextSide side,
+        float textEdge,
+        float fontScale,
+        bool isCaption,
+        BarcodeTextAlignment alignment,
+        bool withinSpan)
+    {
+        text.CopyTo(Slice<char>(this.textBuffer, this.charOffset + (this.charCount * sizeof(char)), text.Length));
+        Slice<BarcodeTextPlacement>(this.textBuffer, this.textCount++ * Unsafe.SizeOf<BarcodeTextPlacement>(), 1)[0] =
+            new BarcodeTextPlacement(this.charCount, text.Length, left, right, side, textEdge, fontScale, isCaption, alignment, withinSpan);
+
+        this.charCount += text.Length;
+    }
+
+    /// <summary>
+    /// Adds a text placement whose characters are three parts in turn. The characters copy into the character storage that <see cref="ReserveText"/> reserved.
+    /// </summary>
+    /// <param name="prefix">The characters before the body.</param>
+    /// <param name="body">The body characters.</param>
+    /// <param name="suffix">The characters after the body.</param>
+    /// <param name="left">The left edge of the horizontal span, in modules.</param>
+    /// <param name="right">The right edge of the horizontal span, in modules.</param>
+    /// <param name="side">The side of the bars the line prints on.</param>
+    /// <param name="textEdge">The edge of the ink of the line, in modules from the symbol top.</param>
+    /// <param name="fontScale">The factor applied to the caller's font size for this placement.</param>
+    /// <param name="isCaption">Whether this placement is a data layer caption rendered with the caption font.</param>
+    /// <param name="alignment">Where the line stands within its span.</param>
+    /// <param name="withinSpan">Whether the ink of the line must stay within its span.</param>
+    private void AddText(
+        ReadOnlySpan<char> prefix,
+        ReadOnlySpan<char> body,
+        ReadOnlySpan<char> suffix,
+        float left,
+        float right,
+        BarcodeTextSide side,
+        float textEdge,
+        float fontScale,
+        bool isCaption,
+        BarcodeTextAlignment alignment,
+        bool withinSpan)
+    {
+        int start = this.charCount;
+        int length = prefix.Length + body.Length + suffix.Length;
+        Span<char> destination = Slice<char>(this.textBuffer, this.charOffset + (start * sizeof(char)), length);
+        prefix.CopyTo(destination);
+        body.CopyTo(destination[prefix.Length..]);
+        suffix.CopyTo(destination[(prefix.Length + body.Length)..]);
+        Slice<BarcodeTextPlacement>(this.textBuffer, this.textCount++ * Unsafe.SizeOf<BarcodeTextPlacement>(), 1)[0] =
+            new BarcodeTextPlacement(start, length, left, right, side, textEdge, fontScale, isCaption, alignment, withinSpan);
+
+        this.charCount = start + length;
     }
 
     /// <summary>

@@ -38,7 +38,7 @@ public class PlesseySymbologyTests
     public void CalculatesTheCheckCharacters(string text, string expected)
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        string[] texts = SymbolEncoder.Read(new PlesseySymbology(), text, options, SymbolEncoder.Texts);
+        string[] texts = SymbolEncoder.Read(new PlesseySymbology(false, true), text, options, SymbolEncoder.Texts);
 
         Assert.Equal(expected, Assert.Single(texts));
     }
@@ -57,7 +57,8 @@ public class PlesseySymbologyTests
     }
 
     /// <summary>
-    /// The printed line shows the data and, by default, the check characters. It never shows the start code or the reversed start code.
+    /// The printed line shows the data and, when asked, the check characters. By default it shows the data only, as the reference implementations print it. It
+    /// never shows the start code or the reversed start code.
     /// </summary>
     /// <param name="validateCheckCharacters">Whether the input ends with the check characters.</param>
     /// <param name="printCheckCharacters">Whether the check characters are part of the printed line.</param>

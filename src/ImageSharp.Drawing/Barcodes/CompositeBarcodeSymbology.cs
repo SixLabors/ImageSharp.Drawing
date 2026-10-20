@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Helpers;
 using SixLabors.ImageSharp.Drawing.Processing;
 
@@ -8,7 +9,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
 /// A composite barcode symbology: one symbol made of two or more symbologies. Each symbology encodes its own text into its own part of the symbol, and the
-/// composite places each part relative to the part before it.
+/// composite places each part relative to the parts before it.
 /// </summary>
 public abstract class CompositeBarcodeSymbology
 {
@@ -34,18 +35,19 @@ public abstract class CompositeBarcodeSymbology
     }
 
     /// <summary>
-    /// One pass over the parts of a composite: measure or draw.
+    /// One pass over the arranged parts of a composite: measure or draw.
     /// </summary>
-    private interface IPartPass
+    private interface ICompositePass
     {
         /// <summary>
-        /// Measures or draws one part.
+        /// Measures or draws the arranged parts.
         /// </summary>
-        /// <param name="part">The encoded part.</param>
+        /// <param name="parts">The arranged parts.</param>
         /// <param name="options">The sizing and painting options.</param>
-        /// <param name="origin">The top left corner of the part, in pixels.</param>
-        /// <returns>The measured layout of the part.</returns>
-        public BarcodeMetrics Run(ref BarcodeSymbol part, BarcodeOptions options, PointF origin);
+        /// <param name="origin">The top left corner of the composite, in pixels.</param>
+        /// <param name="advance">The layout box of the composite, relative to <paramref name="origin"/>.</param>
+        /// <returns>The metrics of the composite.</returns>
+        public BarcodeMetrics Run(in CompositeParts parts, BarcodeOptions options, PointF origin, RectangleF advance);
     }
 
     /// <summary>
@@ -57,50 +59,59 @@ public abstract class CompositeBarcodeSymbology
     /// Encodes a composite of two parts and measures the parts from the origin without drawing anything.
     /// </summary>
     /// <param name="options">The sizing and painting options.</param>
-    /// <param name="origin">The top left corner of the first part, in pixels.</param>
+    /// <param name="origin">The top left corner of the composite, in pixels.</param>
     /// <param name="first">The text of the first symbology.</param>
     /// <param name="second">The text of the second symbology.</param>
-    /// <returns>The union of the metrics of the parts.</returns>
+    /// <returns>The metrics of the composite.</returns>
     /// <exception cref="ArgumentException">The composite does not have two parts, a text is not valid, or the parts do not join.</exception>
     internal BarcodeMetrics Measure(BarcodeOptions options, PointF origin, ReadOnlySpan<char> first, ReadOnlySpan<char> second)
-        => this.Measure(options, origin, 2, first, second, []);
+    {
+        MeasurePass measure = default;
+        return this.Lay(ref measure, options, origin, 2, first, second, []);
+    }
 
     /// <summary>
     /// Encodes a composite of three parts and measures the parts from the origin without drawing anything.
     /// </summary>
     /// <param name="options">The sizing and painting options.</param>
-    /// <param name="origin">The top left corner of the first part, in pixels.</param>
+    /// <param name="origin">The top left corner of the composite, in pixels.</param>
     /// <param name="first">The text of the first symbology.</param>
     /// <param name="second">The text of the second symbology.</param>
     /// <param name="third">The text of the third symbology.</param>
-    /// <returns>The union of the metrics of the parts.</returns>
+    /// <returns>The metrics of the composite.</returns>
     /// <exception cref="ArgumentException">The composite does not have three parts, a text is not valid, or the parts do not join.</exception>
     internal BarcodeMetrics Measure(BarcodeOptions options, PointF origin, ReadOnlySpan<char> first, ReadOnlySpan<char> second, ReadOnlySpan<char> third)
-        => this.Measure(options, origin, 3, first, second, third);
+    {
+        MeasurePass measure = default;
+        return this.Lay(ref measure, options, origin, 3, first, second, third);
+    }
 
     /// <summary>
     /// Encodes a composite of two parts and draws the parts from the origin.
     /// </summary>
     /// <param name="canvas">The canvas to render onto.</param>
     /// <param name="options">The sizing and painting options.</param>
-    /// <param name="origin">The top left corner of the first part, in pixels.</param>
+    /// <param name="origin">The top left corner of the composite, in pixels.</param>
     /// <param name="first">The text of the first symbology.</param>
     /// <param name="second">The text of the second symbology.</param>
-    /// <returns>The union of the metrics of the parts.</returns>
+    /// <returns>The metrics of the composite.</returns>
     /// <exception cref="ArgumentException">The composite does not have two parts, a text is not valid, or the parts do not join.</exception>
     internal BarcodeMetrics Draw(DrawingCanvas canvas, BarcodeOptions options, PointF origin, ReadOnlySpan<char> first, ReadOnlySpan<char> second)
-        => this.Draw(canvas, options, origin, 2, first, second, []);
+    {
+        DrawPass draw = new(canvas);
+        return this.Lay(ref draw, options, origin, 2, first, second, []);
+    }
 
     /// <summary>
     /// Encodes a composite of three parts and draws the parts from the origin.
     /// </summary>
     /// <param name="canvas">The canvas to render onto.</param>
     /// <param name="options">The sizing and painting options.</param>
-    /// <param name="origin">The top left corner of the first part, in pixels.</param>
+    /// <param name="origin">The top left corner of the composite, in pixels.</param>
     /// <param name="first">The text of the first symbology.</param>
     /// <param name="second">The text of the second symbology.</param>
     /// <param name="third">The text of the third symbology.</param>
-    /// <returns>The union of the metrics of the parts.</returns>
+    /// <returns>The metrics of the composite.</returns>
     /// <exception cref="ArgumentException">The composite does not have three parts, a text is not valid, or the parts do not join.</exception>
     internal BarcodeMetrics Draw(
         DrawingCanvas canvas,
@@ -109,7 +120,10 @@ public abstract class CompositeBarcodeSymbology
         ReadOnlySpan<char> first,
         ReadOnlySpan<char> second,
         ReadOnlySpan<char> third)
-        => this.Draw(canvas, options, origin, 3, first, second, third);
+    {
+        DrawPass draw = new(canvas);
+        return this.Lay(ref draw, options, origin, 3, first, second, third);
+    }
 
     /// <summary>
     /// Encodes the text of one part. By default the symbology of the part encodes its text as it would alone. A composite whose standard changes a part when
@@ -124,117 +138,88 @@ public abstract class CompositeBarcodeSymbology
         => this.symbologies[index].Encode(text, options, ref part);
 
     /// <summary>
-    /// Returns the origin of a part after the first: the composite places it relative to the part before it, as its standard requires.
+    /// Returns where the symbol of a part after the first stands. The composite places it relative to the symbols of the parts before it, as its standard
+    /// requires. A symbol stands at the top left corner of its first module, so the quiet zones and the text of a part do not move it.
     /// </summary>
     /// <param name="index">The index of the part in <see cref="Symbologies"/>, 1 or more.</param>
     /// <param name="parts">The encoded parts, one for each symbology of <see cref="Symbologies"/> and in the same order.</param>
-    /// <param name="previousOrigin">The origin of the part before it, in pixels.</param>
-    /// <param name="previous">The metrics of the part before it. Its advance is relative to <paramref name="previousOrigin"/>.</param>
+    /// <param name="symbolOrigins">The top left corner of the first module of the symbol of each part before it, in pixels.</param>
     /// <param name="options">The sizing and painting options.</param>
-    /// <returns>The top left corner of the part, in pixels.</returns>
+    /// <returns>The top left corner of the first module of the symbol of the part, in pixels.</returns>
     /// <exception cref="ArgumentException">The parts do not join.</exception>
-    internal abstract PointF Place(int index, ReadOnlySpan<BarcodeSymbol> parts, PointF previousOrigin, in BarcodeMetrics previous, BarcodeOptions options);
+    internal abstract PointF Place(int index, ReadOnlySpan<BarcodeSymbol> parts, ReadOnlySpan<PointF> symbolOrigins, BarcodeOptions options);
 
     /// <summary>
-    /// Returns a rectangle moved by an offset.
+    /// Returns the metrics of a composite. The renderable bounds are the union of the layout box and the bounds, as they are for one symbol.
     /// </summary>
-    /// <param name="rectangle">The rectangle.</param>
-    /// <param name="offset">The offset.</param>
-    /// <returns>The moved rectangle.</returns>
-    private static RectangleF Offset(RectangleF rectangle, PointF offset)
-        => new(rectangle.X + offset.X, rectangle.Y + offset.Y, rectangle.Width, rectangle.Height);
+    /// <param name="origin">The top left corner of the composite, in pixels.</param>
+    /// <param name="advance">The layout box of the composite, relative to <paramref name="origin"/>.</param>
+    /// <param name="bounds">The union of the ink of the parts, in pixels.</param>
+    /// <returns>The metrics of the composite.</returns>
+    private static BarcodeMetrics CompositeMetrics(PointF origin, RectangleF advance, RectangleF bounds)
+        => new(advance, bounds, RectangleF.Union(new RectangleF(origin, advance.Size), bounds));
 
     /// <summary>
-    /// Encodes each text with its own symbology and measures the parts. The parts live on this stack frame and in the arrays they rent, which they return
-    /// once they are measured.
+    /// Encodes each text with its own symbology, shapes the text of each part one time, arranges the parts and runs the pass over them. The parts live on
+    /// this stack frame and in the arrays they rent, which they return once the pass ends.
     /// </summary>
+    /// <typeparam name="TPass">The pass that measures or draws the parts. It is a struct, so the compiler specializes this method for each pass.</typeparam>
+    /// <param name="pass">The pass that measures or draws the parts.</param>
     /// <param name="options">The sizing and painting options.</param>
-    /// <param name="origin">The top left corner of the first part, in pixels.</param>
+    /// <param name="origin">The top left corner of the composite, in pixels.</param>
     /// <param name="count">The number of texts the caller gives, 2 or 3.</param>
     /// <param name="first">The text of the first symbology.</param>
     /// <param name="second">The text of the second symbology.</param>
     /// <param name="third">The text of the third symbology, unused when <paramref name="count"/> is 2.</param>
-    /// <returns>The union of the metrics of the parts.</returns>
-    private BarcodeMetrics Measure(
+    /// <returns>The metrics of the composite.</returns>
+    private BarcodeMetrics Lay<TPass>(
+        ref TPass pass,
         BarcodeOptions options,
         PointF origin,
         int count,
         ReadOnlySpan<char> first,
         ReadOnlySpan<char> second,
         ReadOnlySpan<char> third)
+        where TPass : struct, ICompositePass
     {
         InlineArray3<BarcodeSymbol> partStorage = default;
-        Span<BarcodeSymbol> parts = ((Span<BarcodeSymbol>)partStorage)[..count];
-        InlineArray3<PointF> originStorage = default;
+        Span<BarcodeSymbol> symbols = ((Span<BarcodeSymbol>)partStorage)[..count];
         try
         {
-            this.EncodeParts(parts, options, first, second, third);
-            MeasurePass measure = default;
-            return this.LayoutParts(ref measure, parts, options, origin, ((Span<PointF>)originStorage)[..count]);
+            this.EncodeParts(symbols, options, first, second, third);
+
+            // The lines of all the parts share one buffer, and the lines of part i are the range from lineStarts[i] to lineStarts[i + 1].
+            InlineArray4<int> startStorage = default;
+            Span<int> lineStarts = ((Span<int>)startStorage)[..(count + 1)];
+            for (int i = 0; i < count; i++)
+            {
+                lineStarts[i + 1] = lineStarts[i] + BarcodeEmitter.LineCount(ref symbols[i], options);
+            }
+
+            int lineCount = lineStarts[count];
+            using PooledBuffer<MeasuredLine> lineBuffer = lineCount == 0 ? default : new(lineCount);
+            Span<MeasuredLine> lines = lineBuffer.Span;
+
+            // A TextBlock is a class, so the span holds object references and cannot come from the byte pool. A bar symbol has at most 14 text placements, a
+            // matrix symbol 1 and a hexagonal symbol none, so three parts have at most 42. The 32 stack slots hold up to 32, and a larger count takes an array.
+            InlineArray32<TextBlock> blockStorage = default;
+            Span<TextBlock> blocks = lineCount <= 32 ? ((Span<TextBlock>)blockStorage)[..lineCount] : new TextBlock[lineCount];
+            for (int i = 0; i < count; i++)
+            {
+                Range range = lineStarts[i]..lineStarts[i + 1];
+                BarcodeEmitter.Shape(ref symbols[i], options, lines[range], blocks[range]);
+            }
+
+            InlineArray3<PointF> originStorage = default;
+            CompositeParts parts = new(symbols, lines, blocks, lineStarts, ((Span<PointF>)originStorage)[..count]);
+            RectangleF advance = this.Arrange(in parts, options, origin);
+            return pass.Run(in parts, options, origin, advance);
         }
         finally
         {
-            foreach (ref BarcodeSymbol part in parts)
+            foreach (ref BarcodeSymbol symbol in symbols)
             {
-                part.Dispose();
-            }
-        }
-    }
-
-    /// <summary>
-    /// Encodes each text with its own symbology and draws the parts. The composite is one symbol, so one background fills the renderable bounds of all the
-    /// parts before any part draws, and each part draws with no background of its own. The parts live on this stack frame and in the arrays they rent, which
-    /// they return once they are drawn.
-    /// </summary>
-    /// <param name="canvas">The canvas to render onto.</param>
-    /// <param name="options">The sizing and painting options.</param>
-    /// <param name="origin">The top left corner of the first part, in pixels.</param>
-    /// <param name="count">The number of texts the caller gives, 2 or 3.</param>
-    /// <param name="first">The text of the first symbology.</param>
-    /// <param name="second">The text of the second symbology.</param>
-    /// <param name="third">The text of the third symbology, unused when <paramref name="count"/> is 2.</param>
-    /// <returns>The union of the metrics of the parts.</returns>
-    private BarcodeMetrics Draw(
-        DrawingCanvas canvas,
-        BarcodeOptions options,
-        PointF origin,
-        int count,
-        ReadOnlySpan<char> first,
-        ReadOnlySpan<char> second,
-        ReadOnlySpan<char> third)
-    {
-        InlineArray3<BarcodeSymbol> partStorage = default;
-        Span<BarcodeSymbol> parts = ((Span<BarcodeSymbol>)partStorage)[..count];
-        InlineArray3<PointF> originStorage = default;
-        Span<PointF> origins = ((Span<PointF>)originStorage)[..count];
-        try
-        {
-            this.EncodeParts(parts, options, first, second, third);
-
-            // Without a background each part draws as soon as the part before it has its metrics, so every part is laid out one time.
-            if (options.Background is null)
-            {
-                DrawPass draw = new(canvas);
-                return this.LayoutParts(ref draw, parts, options, origin, origins);
-            }
-
-            // The background must fill the union of the parts before any part draws, and the union is known only when every part has its position.
-            MeasurePass measure = default;
-            BarcodeMetrics metrics = this.LayoutParts(ref measure, parts, options, origin, origins);
-            RectangleF renderable = metrics.RenderableBounds;
-            canvas.Fill(options.Background, new RectanglePolygon(renderable.X, renderable.Y, renderable.Width, renderable.Height));
-            for (int i = 0; i < parts.Length; i++)
-            {
-                BarcodeEmitter.Draw(canvas, ref parts[i], options, origins[i], null);
-            }
-
-            return metrics;
-        }
-        finally
-        {
-            foreach (ref BarcodeSymbol part in parts)
-            {
-                part.Dispose();
+                symbol.Dispose();
             }
         }
     }
@@ -264,51 +249,134 @@ public abstract class CompositeBarcodeSymbology
     }
 
     /// <summary>
-    /// Measures or draws the parts in order. The first part stands at the origin, and each next part stands where <see cref="Place"/> puts it from the metrics
-    /// of the part before it. Each part reports its advance relative to its own origin, so the advances join at their absolute positions. The bounds and the
-    /// renderable bounds are absolute already.
+    /// Writes the origin of each part. The text and the quiet zones of a part set where its symbol stands in its layout box, and nothing in the layout box
+    /// rounds, so that offset is the same wherever the part stands. The layout of each part at zero gives the offset. The symbol of the first part stands at
+    /// its offset, <see cref="Place"/> puts the symbol of each next part, and each part starts its offset before its symbol. The union of the layout boxes then
+    /// moves so that its top left corner is the origin, as the layout box of one symbol does.
     /// </summary>
-    /// <typeparam name="TPass">The pass that measures or draws each part. It is a struct, so the compiler specializes the loop for each pass.</typeparam>
-    /// <param name="pass">The pass that measures or draws each part.</param>
-    /// <param name="parts">The encoded parts.</param>
+    /// <param name="parts">The shaped parts. Their origins are written.</param>
     /// <param name="options">The sizing and painting options.</param>
-    /// <param name="origin">The top left corner of the first part, in pixels.</param>
-    /// <param name="origins">The origin of each part, to write.</param>
-    /// <returns>The union of the metrics of the parts, with the advance relative to <paramref name="origin"/>.</returns>
-    private BarcodeMetrics LayoutParts<TPass>(ref TPass pass, Span<BarcodeSymbol> parts, BarcodeOptions options, PointF origin, Span<PointF> origins)
-        where TPass : struct, IPartPass
+    /// <param name="origin">The top left corner of the composite, in pixels.</param>
+    /// <returns>The layout box of the composite, relative to <paramref name="origin"/>.</returns>
+    /// <exception cref="ArgumentException">The parts do not join.</exception>
+    private RectangleF Arrange(in CompositeParts parts, BarcodeOptions options, PointF origin)
     {
-        origins[0] = origin;
-        BarcodeMetrics previous = pass.Run(ref parts[0], options, origin);
-        RectangleF advance = Offset(previous.Advance, origin);
-        RectangleF bounds = previous.Bounds;
-        RectangleF renderable = previous.RenderableBounds;
-        for (int i = 1; i < parts.Length; i++)
+        Span<BarcodeSymbol> symbols = parts.Symbols;
+        Span<PointF> origins = parts.Origins;
+        InlineArray3<PointF> symbolStorage = default;
+        Span<PointF> symbolOrigins = ((Span<PointF>)symbolStorage)[..symbols.Length];
+        RectangleF box = RectangleF.Empty;
+        for (int i = 0; i < symbols.Length; i++)
         {
-            origins[i] = this.Place(i, parts, origins[i - 1], in previous, options);
-            previous = pass.Run(ref parts[i], options, origins[i]);
-            advance = RectangleF.Union(advance, Offset(previous.Advance, origins[i]));
-            bounds = RectangleF.Union(bounds, previous.Bounds);
-            renderable = RectangleF.Union(renderable, previous.RenderableBounds);
+            BarcodeMetrics metrics = BarcodeEmitter.Measure(ref symbols[i], options, PointF.Empty, parts.Lines(i), out PointF offset);
+            symbolOrigins[i] = i == 0 ? offset : this.Place(i, symbols, symbolOrigins[..i], options);
+            origins[i] = new PointF(symbolOrigins[i].X - offset.X, symbolOrigins[i].Y - offset.Y);
+
+            RectangleF partBox = new(origins[i], metrics.Advance.Size);
+            box = i == 0 ? partBox : RectangleF.Union(box, partBox);
         }
 
-        return new BarcodeMetrics(Offset(advance, new PointF(-origin.X, -origin.Y)), bounds, renderable);
+        for (int i = 0; i < origins.Length; i++)
+        {
+            origins[i] = new PointF(origin.X + origins[i].X - box.X, origin.Y + origins[i].Y - box.Y);
+        }
+
+        return new RectangleF(0, 0, box.Width, box.Height);
+    }
+
+    /// <summary>
+    /// The encoded parts of a composite, their shaped text and their origins. The lines and the blocks of all the parts share one span each, and each part
+    /// reads its own range.
+    /// </summary>
+    private readonly ref struct CompositeParts
+    {
+        /// <summary>
+        /// The shaped lines of all the parts.
+        /// </summary>
+        private readonly Span<MeasuredLine> lines;
+
+        /// <summary>
+        /// The shaped blocks of all the parts, one for each line.
+        /// </summary>
+        private readonly ReadOnlySpan<TextBlock> blocks;
+
+        /// <summary>
+        /// The index of the first line of each part, and the line count after the last part.
+        /// </summary>
+        private readonly ReadOnlySpan<int> lineStarts;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="CompositeParts"/> struct.
+        /// </summary>
+        /// <param name="symbols">The encoded parts.</param>
+        /// <param name="lines">The shaped lines of all the parts.</param>
+        /// <param name="blocks">The shaped blocks of all the parts, one for each line.</param>
+        /// <param name="lineStarts">The index of the first line of each part, and the line count after the last part.</param>
+        /// <param name="origins">The top left corner of each part, to write.</param>
+        public CompositeParts(
+            Span<BarcodeSymbol> symbols,
+            Span<MeasuredLine> lines,
+            ReadOnlySpan<TextBlock> blocks,
+            ReadOnlySpan<int> lineStarts,
+            Span<PointF> origins)
+        {
+            this.Symbols = symbols;
+            this.lines = lines;
+            this.blocks = blocks;
+            this.lineStarts = lineStarts;
+            this.Origins = origins;
+        }
+
+        /// <summary>
+        /// Gets the encoded parts.
+        /// </summary>
+        public Span<BarcodeSymbol> Symbols { get; }
+
+        /// <summary>
+        /// Gets the top left corner of each part, in pixels.
+        /// </summary>
+        public Span<PointF> Origins { get; }
+
+        /// <summary>
+        /// Returns the shaped lines of one part.
+        /// </summary>
+        /// <param name="index">The index of the part.</param>
+        /// <returns>The lines.</returns>
+        public Span<MeasuredLine> Lines(int index) => this.lines[this.lineStarts[index]..this.lineStarts[index + 1]];
+
+        /// <summary>
+        /// Returns the shaped blocks of one part.
+        /// </summary>
+        /// <param name="index">The index of the part.</param>
+        /// <returns>The blocks, one for each line.</returns>
+        public ReadOnlySpan<TextBlock> Blocks(int index) => this.blocks[this.lineStarts[index]..this.lineStarts[index + 1]];
     }
 
     /// <summary>
     /// The pass that measures each part without drawing anything.
     /// </summary>
-    private readonly struct MeasurePass : IPartPass
+    private readonly struct MeasurePass : ICompositePass
     {
         /// <inheritdoc/>
-        public BarcodeMetrics Run(ref BarcodeSymbol part, BarcodeOptions options, PointF origin)
-            => BarcodeEmitter.Measure(ref part, options, origin);
+        public BarcodeMetrics Run(in CompositeParts parts, BarcodeOptions options, PointF origin, RectangleF advance)
+        {
+            Span<BarcodeSymbol> symbols = parts.Symbols;
+            RectangleF bounds = RectangleF.Empty;
+            for (int i = 0; i < symbols.Length; i++)
+            {
+                RectangleF partBounds = BarcodeEmitter.Measure(ref symbols[i], options, parts.Origins[i], parts.Lines(i), out _).Bounds;
+                bounds = i == 0 ? partBounds : RectangleF.Union(bounds, partBounds);
+            }
+
+            return CompositeMetrics(origin, advance, bounds);
+        }
     }
 
     /// <summary>
-    /// The pass that draws each part onto a canvas with no background of its own.
+    /// The pass that draws the parts onto a canvas. The composite is one symbol, so one background fills the renderable bounds of the composite before any
+    /// part draws, and each part draws with no background of its own.
     /// </summary>
-    private readonly struct DrawPass : IPartPass
+    private readonly struct DrawPass : ICompositePass
     {
         /// <summary>
         /// The canvas to render onto.
@@ -322,7 +390,33 @@ public abstract class CompositeBarcodeSymbology
         public DrawPass(DrawingCanvas canvas) => this.canvas = canvas;
 
         /// <inheritdoc/>
-        public BarcodeMetrics Run(ref BarcodeSymbol part, BarcodeOptions options, PointF origin)
-            => BarcodeEmitter.Draw(this.canvas, ref part, options, origin, null);
+        public BarcodeMetrics Run(in CompositeParts parts, BarcodeOptions options, PointF origin, RectangleF advance)
+        {
+            Span<BarcodeSymbol> symbols = parts.Symbols;
+
+            // The ink of a part is known only when it is laid out at its origin, so the background needs the measure pass first.
+            if (options.Background is not null)
+            {
+                BarcodeMetrics metrics = default(MeasurePass).Run(in parts, options, origin, advance);
+                RectangleF renderable = metrics.RenderableBounds;
+                this.canvas.Fill(options.Background, new RectanglePolygon(renderable.X, renderable.Y, renderable.Width, renderable.Height));
+                for (int i = 0; i < symbols.Length; i++)
+                {
+                    BarcodeEmitter.Draw(this.canvas, ref symbols[i], options, parts.Origins[i], parts.Lines(i), parts.Blocks(i), null);
+                }
+
+                return metrics;
+            }
+
+            // Without a background each part draws at its origin in one pass.
+            RectangleF bounds = RectangleF.Empty;
+            for (int i = 0; i < symbols.Length; i++)
+            {
+                BarcodeMetrics metrics = BarcodeEmitter.Draw(this.canvas, ref symbols[i], options, parts.Origins[i], parts.Lines(i), parts.Blocks(i), null);
+                bounds = i == 0 ? metrics.Bounds : RectangleF.Union(bounds, metrics.Bounds);
+            }
+
+            return CompositeMetrics(origin, advance, bounds);
+        }
     }
 }

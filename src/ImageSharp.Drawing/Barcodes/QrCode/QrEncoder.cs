@@ -883,6 +883,13 @@ internal static class QrEncoder
                 }
             }
 
+            // Section 6.8.2.1: "the area to be evaluated is the complete symbol", so the format information of each mask, the dark module and the version
+            // information of a QR Code symbol are in the layers before the masks are scored.
+            if (size.Format == QrFormat.Full)
+            {
+                WriteFormatLayers(size, level, layers);
+            }
+
             // Section 5.3.7 of ISO/IEC 18004: the quiet zone is 4X around a QR Code symbol and 2X around a Micro QR Code symbol. It is 2X around a Rectangular
             // Micro QR Code symbol too.
             int mask = size.Format switch
@@ -898,7 +905,10 @@ internal static class QrEncoder
                 modules[i] = ((layers[i] >> mask) & 1) != 0;
             }
 
-            WriteFormatAndVersion(size, level, mask, modules);
+            if (size.Format != QrFormat.Full)
+            {
+                WriteMicroFormat(size, level, mask, modules);
+            }
         }
         finally
         {
@@ -1027,8 +1037,8 @@ internal static class QrEncoder
             }
         }
 
-        // Sections 6.9 and 6.10: the format information modules are reserved dark and the version information modules and the dark module light while the masks
-        // are evaluated, then take their final values.
+        // Sections 6.9 and 6.10: the format information modules, the dark module and the version information modules are reserved, so the data skips them.
+        // They take their values before the masks of a QR Code symbol are scored, and after the mask of a Micro QR Code symbol is chosen.
         for (int i = 0; i < 15; i++)
         {
             FormatPosition(size, i, 0, out int row, out int column);
@@ -1117,13 +1127,61 @@ internal static class QrEncoder
     }
 
     /// <summary>
-    /// Writes the dark module, the format information and the version information over the chosen grid.
+    /// Writes the dark module, the format information of every data mask pattern and the version information of a QR Code symbol into its mask layers. Bit m
+    /// of a layer is the module under data mask pattern m, and the format information carries the reference of its mask, so bit m of a format information
+    /// module takes the format information of mask m. The dark module and the version information are the same under every mask.
+    /// </summary>
+    /// <param name="size">The symbol size.</param>
+    /// <param name="level">The error correction level.</param>
+    /// <param name="layers">The mask layers of the modules, row-major.</param>
+    private static void WriteFormatLayers(SymbolSize size, QrErrorCorrectionLevel level, Span<byte> layers)
+    {
+        int n = size.Columns;
+
+        // Section 6.9.1: the module in position (4V + 9, 8) "shall always be dark".
+        layers[((n - 8) * n) + 8] = 0xFF;
+
+        for (int mask = 0; mask < 8; mask++)
+        {
+            // Section 6.9.1: the level indicator of Table 12 and the mask reference.
+            int format = BchCode((LevelIndicators[(int)level] << 3) | mask, 10, FormatGenerator) ^ FormatMask;
+            int clear = ~(1 << mask);
+            for (int i = 0; i < 15; i++)
+            {
+                int bit = ((format >> (14 - i)) & 1) << mask;
+                for (int copy = 0; copy < 2; copy++)
+                {
+                    FormatPosition(size, i, copy, out int row, out int column);
+                    int index = (row * n) + column;
+                    layers[index] = (byte)((layers[index] & clear) | bit);
+                }
+            }
+        }
+
+        // Section 6.10 and Figure 28: version 7 and above carry the version in two 6 x 3 blocks, bit 17 - i at row 5 - i / 3 and column n - 9 - i mod 3 of the
+        // upper right block, transposed in the lower left.
+        if (size.Version >= 7)
+        {
+            int version = BchCode(size.Version, 12, VersionGenerator);
+            for (int i = 0; i < 18; i++)
+            {
+                byte layer = ((version >> (17 - i)) & 1) != 0 ? (byte)0xFF : (byte)0;
+                int a = i / 3;
+                int b = i % 3;
+                layers[((5 - a) * n) + (n - 9 - b)] = layer;
+                layers[((n - 9 - b) * n) + (5 - a)] = layer;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Writes the format information of a Micro QR Code or Rectangular Micro QR Code symbol over the chosen grid.
     /// </summary>
     /// <param name="size">The symbol size.</param>
     /// <param name="level">The error correction level.</param>
     /// <param name="mask">The data mask pattern reference, 0 to 7, of Table 10.</param>
     /// <param name="modules">The modules, row-major.</param>
-    private static void WriteFormatAndVersion(SymbolSize size, QrErrorCorrectionLevel level, int mask, Span<bool> modules)
+    private static void WriteMicroFormat(SymbolSize size, QrErrorCorrectionLevel level, int mask, Span<bool> modules)
     {
         int n = size.Columns;
         if (size.Format == QrFormat.Rectangular)
@@ -1145,45 +1203,13 @@ internal static class QrEncoder
             return;
         }
 
-        int format;
-        if (size.Format == QrFormat.Micro)
-        {
-            // Section 6.9.2: the symbol number of Table 13 and the two-bit reference of the mask.
-            int symbolNumber = MicroSymbolNumbers[((size.Version - 1) * 3) + (int)level];
-            format = BchCode((symbolNumber << 2) | MicroMasks.IndexOf((byte)mask), 10, FormatGenerator) ^ MicroFormatMask;
-        }
-        else
-        {
-            // Section 6.9.1: the level indicator of Table 12 and the mask reference.
-            format = BchCode((LevelIndicators[(int)level] << 3) | mask, 10, FormatGenerator) ^ FormatMask;
-            modules[((n - 8) * n) + 8] = true;
-        }
-
+        // Section 6.9.2: the symbol number of Table 13 and the two-bit reference of the mask.
+        int symbolNumber = MicroSymbolNumbers[((size.Version - 1) * 3) + (int)level];
+        int format = BchCode((symbolNumber << 2) | MicroMasks.IndexOf((byte)mask), 10, FormatGenerator) ^ MicroFormatMask;
         for (int i = 0; i < 15; i++)
         {
-            bool dark = ((format >> (14 - i)) & 1) != 0;
             FormatPosition(size, i, 0, out int row, out int column);
-            modules[(row * n) + column] = dark;
-            if (size.Format == QrFormat.Full)
-            {
-                FormatPosition(size, i, 1, out row, out column);
-                modules[(row * n) + column] = dark;
-            }
-        }
-
-        // Section 6.10 and Figure 28: version 7 and above carry the version in two 6 x 3 blocks, bit 17 - i at row 5 - i / 3 and column n - 9 - i mod 3 of the
-        // upper right block, transposed in the lower left.
-        if (size.Format == QrFormat.Full && size.Version >= 7)
-        {
-            int version = BchCode(size.Version, 12, VersionGenerator);
-            for (int i = 0; i < 18; i++)
-            {
-                bool dark = ((version >> (17 - i)) & 1) != 0;
-                int a = i / 3;
-                int b = i % 3;
-                modules[((5 - a) * n) + (n - 9 - b)] = dark;
-                modules[((n - 9 - b) * n) + (5 - a)] = dark;
-            }
+            modules[(row * n) + column] = ((format >> (14 - i)) & 1) != 0;
         }
     }
 
@@ -1231,7 +1257,7 @@ internal static class QrEncoder
         }
 
         // N3: 40 points for a dark run of 3k modules between light and dark runs of k modules on each side, the 1 : 1 : 3 : 1 : 1 ratio of the finder pattern,
-        // with a light run of at least 4k modules or the edge of the symbol beside it. Odd runs are dark.
+        // with a light run of at least 4 modules or the edge of the symbol beside it, the "light area 4 modules wide" of Table 11. Odd runs are dark.
         for (int j = 3; j <= runs.Length - 3; j += 2)
         {
             int center = runs[j];

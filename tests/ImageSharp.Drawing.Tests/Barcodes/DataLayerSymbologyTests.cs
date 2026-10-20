@@ -58,12 +58,18 @@ public class DataLayerSymbologyTests
         });
     }
 
+    /// <summary>
+    /// The inputs have a wrong check digit, a prefix outside 978 and 979, the wrong length or a wrong character. The GS1 General Specifications allocate the
+    /// prefix 9790 to the ISMN, so the ISMN 979-0-3452-4680-5 of the ISMN users' manual is not an ISBN.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("978-0-306-40615-5")]
     [InlineData("0-306-40615-3")]
     [InlineData("5901234123457")]
     [InlineData("12345")]
     [InlineData("97X-0-306-40615")]
+    [InlineData("979-0-3452-4680-5")]
     public void Isbn_RejectsInvalidInput(string text)
         => Assert.Throws<ArgumentException>(() => Encode(new IsbnSymbology(), text));
 
@@ -89,6 +95,10 @@ public class DataLayerSymbologyTests
         Assert.Equal("ISMN 979-0-2306-7118-7", SymbolEncoder.Read(new IsmnSymbology(), "-M-2306-7118", options, SymbolEncoder.Texts)[^1]);
 
         Assert.Equal("ISMN 979-0-2600-0043-8", SymbolEncoder.Read(new IsmnSymbology(), "979-0-2600-0043-8", options, SymbolEncoder.Texts)[^1]);
+
+        // Section 2.2 of the ISMN Users' Manual, 2008: "while there cannot be a publisher with the identifier 299 or 29910, there can be a publisher with the
+        // identifier 2991", so the four elements of 9790299102349 print apart.
+        Assert.Equal("ISMN 979-0-2991-0234-9", SymbolEncoder.Read(new IsmnSymbology(), "9790299102349", options, SymbolEncoder.Texts)[^1]);
     }
 
     [Theory]
@@ -176,14 +186,14 @@ public class DataLayerSymbologyTests
     /// <param name="text">The text to encode.</param>
     /// <returns>The run widths of the symbol, separated by commas.</returns>
     private static string Encode(BarcodeSymbology symbology, string text)
-        => SymbolEncoder.Read(symbology, text, new BarcodeOptions(), static (ref symbol) => string.Join(',', symbol.Runs.ToArray()));
+        => SymbolEncoder.Read(symbology, text, new BarcodeOptions(), SymbolEncoder.ModuleRuns);
 
     private static BarcodeOptions CreateTextOptions()
         => new()
         {
             Dpi = 144F,
-            XDimension = BarcodeSymbology.PointXDimension,
-            BarHeight = 50F * BarcodeSymbology.PointXDimension,
+            XDimension = BarcodeSymbology.DefaultXDimension,
+            BarHeight = 50F * BarcodeSymbology.DefaultXDimension,
             Font = BarcodeFonts.OcrB.CreateFont(10.75F),
         };
 }

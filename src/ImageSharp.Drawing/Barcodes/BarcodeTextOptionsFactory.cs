@@ -18,11 +18,14 @@ internal static class BarcodeTextOptionsFactory
     /// </summary>
     /// <param name="font">The font the line renders in, whose size is in points.</param>
     /// <param name="dpi">The resolution the line renders at, in dots per inch.</param>
+    /// <param name="weight">The font weight the symbology requires, <see cref="BarcodeSymbol.TextWeight"/>, or <see langword="null"/> for the weight of the
+    /// font.</param>
     /// <returns>The options.</returns>
-    public static RichTextOptions Create(Font font, float dpi)
+    public static RichTextOptions Create(Font font, float dpi, FontWeight? weight)
         => new(font)
         {
             Dpi = dpi,
-            HintingMode = HintingMode.Standard
+            HintingMode = HintingMode.Standard,
+            FontWeight = weight
         };
 }

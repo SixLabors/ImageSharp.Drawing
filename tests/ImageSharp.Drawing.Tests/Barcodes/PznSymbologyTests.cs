@@ -93,15 +93,24 @@ public class PznSymbologyTests
 
     /// <summary>
     /// IFA gives a nominal module width of 0.25 mm, so a symbol without an X dimension of the caller draws its modules at 0.25 mm and its 40 module bars 10 mm
-    /// high. An X dimension of the caller replaces it.
+    /// high. At the default 96 dots per inch the module draws at the nearest whole number of pixels: 0.25 mm is 0.94 pixels and draws at 1 pixel. An X
+    /// dimension of the caller replaces the nominal width inside the permitted 187 µm to 450 µm, and one outside that range draws at the nearest limit.
     /// </summary>
     [Fact]
     public void DefaultsTheModuleWidthToTheNominalModuleWidth()
     {
-        BarcodeOptions options = new() { XDimension = 0.3 };
+        Assert.Equal(25.4 / 96, SymbolEncoder.Read(new Pzn8Symbology(), "03752864", new BarcodeOptions(), static (ref symbol) => symbol.XDimension), 1e-12);
+        Assert.Equal(0.25, XDimensionAt(null), 1e-9);
+        Assert.Equal(0.4, XDimensionAt(0.4), 1e-9);
+        Assert.Equal(0.187, XDimensionAt(0.15), 1e-9);
+        Assert.Equal(0.45, XDimensionAt(0.6), 1e-9);
 
-        Assert.Equal(0.25, SymbolEncoder.Read(new Pzn8Symbology(), "03752864", new BarcodeOptions(), static (ref symbol) => symbol.XDimension));
-        Assert.Equal(0.3, SymbolEncoder.Read(new Pzn8Symbology(), "03752864", options, static (ref symbol) => symbol.XDimension));
+        static double XDimensionAt(double? xDimension)
+            => SymbolEncoder.Read(
+                new Pzn8Symbology(),
+                "03752864",
+                new BarcodeOptions { Dpi = SymbolEncoder.MicrometreDpi, XDimension = xDimension },
+                static (ref symbol) => symbol.XDimension);
     }
 
     /// <summary>
@@ -110,6 +119,17 @@ public class PznSymbologyTests
     [Fact]
     public void AddsNoCode39CheckCharacter()
         => Assert.Equal(((1 + 8 + 2) * 16) - 1, SymbolEncoder.Read(new Pzn8Symbology(), "03752864", new BarcodeOptions(), SymbolEncoder.RunSum));
+
+    /// <summary>
+    /// IFA prints the PZN "in a well-readable font size (at least 6 pt. for a small code)".
+    /// </summary>
+    [Fact]
+    public void PrintsTheTextAtSixPointsOrLarger()
+    {
+        BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(4F) };
+
+        Assert.Equal(6F, SymbolEncoder.Read(new Pzn8Symbology(), "03752864", options, static (ref symbol) => symbol.TextMinimumSize));
+    }
 
     /// <summary>
     /// Encodes the text with the default options.

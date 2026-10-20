@@ -14,6 +14,20 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 public class Pdf417SymbologyTests
 {
     /// <summary>
+    /// Section 5.8.2 of ISO/IEC 15438 requires the row height "Y &gt;= 3X", so a bar height under 3X is rejected. At a 0.3 mm module 3X is 0.9 mm.
+    /// </summary>
+    [Fact]
+    public void Pdf417_RejectsARowUnderThreeModules()
+    {
+        Pdf417Symbology symbology = new();
+        BarcodeOptions minimum = new() { Dpi = SymbolEncoder.MillimetreDpi, XDimension = 0.3, BarHeight = 0.9 };
+        BarcodeOptions under = new() { Dpi = SymbolEncoder.MillimetreDpi, XDimension = 0.3, BarHeight = 0.89 };
+
+        Assert.Null(Record.Exception(() => SymbolEncoder.Encode(symbology, "PDF417", minimum)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => SymbolEncoder.Encode(symbology, "PDF417", under));
+    }
+
+    /// <summary>
     /// Table 6 of section 5.4.2.2: the data PDF417 is the codewords 453, 178, 121 and 239.
     /// </summary>
     [Fact]
@@ -679,7 +693,7 @@ public class Pdf417SymbologyTests
     [Fact]
     public void Pdf417_BarHeightOptionSetsTheRowHeight()
     {
-        BarcodeOptions options = new() { BarHeight = 5F * BarcodeSymbology.PointXDimension };
+        BarcodeOptions options = new() { BarHeight = 5F * BarcodeSymbology.DefaultXDimension };
         ApproximateFloatComparer comparer = new(1e-4F);
         SymbolEncoder.Encode(new Pdf417Symbology(), "PDF417", options, (ref symbol) =>
         {

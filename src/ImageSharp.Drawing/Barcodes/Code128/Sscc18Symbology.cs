@@ -8,11 +8,13 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// <summary>
 /// SSCC-18, a GS1-128 symbol that carries one element string: the Serial Shipping Container Code of GS1 Application Identifier (00). Section 3.3.1 of the GS1
 /// General Specifications gives that identifier an 18 digit SSCC. Table 7-6 gives the element string a total length of 20, and section 7.9 defines the check
-/// digit.
+/// digit. Table 5-51, symbol specification table 5 for logistic units, gives an X dimension of 0.495 to 0.940 millimetres, and 0.250 millimetre when the
+/// logistic unit is too small for the minimum. An X dimension outside 0.250 to 0.940 millimetres is clamped to that range.
 /// <para>
 /// The input is the element string syntax, <c>(00)</c> and then the SSCC. Spaces are ignored. Give 17 digits, and this class calculates the check digit. Give
-/// 18 digits, and this class compares the last digit with the calculated one. The interpretation prints the number as the caller grouped it, with a space
-/// before a calculated check digit.
+/// 18 digits, and this class compares the last digit with the calculated one. The interpretation prints the number as the caller grouped it. A
+/// calculated check digit follows a space when the input groups its digits with spaces, which section 4.14 rule 2.a.v permits, and follows the digits
+/// directly otherwise.
 /// </para>
 /// </summary>
 public sealed class Sscc18Symbology : BarcodeSymbology
@@ -88,8 +90,19 @@ public sealed class Sscc18Symbology : BarcodeSymbology
         supplied[..(SsccLength - 1)].CopyTo(encoded[2..]);
         encoded[^1] = (char)('0' + check);
 
-        // The caption is the input as given, with the check digit after a space when the input left it out.
-        ReadOnlySpan<char> suffix = supplied.Length == SsccLength ? [] : [' ', (char)('0' + check)];
-        Code128Encoder.BuildSymbol(encoded, true, [], text, suffix, options, ref symbol);
+        // The caption is the input as given, with the check digit after it when the input left it out, set off by a space when the input groups its
+        // digits with spaces.
+        char checkCharacter = (char)('0' + check);
+        ReadOnlySpan<char> suffix = supplied.Length == SsccLength ? [] : text.Contains(' ') ? [' ', checkCharacter] : [checkCharacter];
+        Code128Encoder.BuildSymbol(
+            encoded,
+            true,
+            [],
+            text,
+            suffix,
+            Gs1Data.SsccMinimumXDimension,
+            Gs1Data.SsccMaximumXDimension,
+            options,
+            ref symbol);
     }
 }

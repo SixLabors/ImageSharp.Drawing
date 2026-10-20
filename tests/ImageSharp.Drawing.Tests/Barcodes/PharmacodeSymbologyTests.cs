@@ -51,17 +51,43 @@ public class PharmacodeSymbologyTests
     }
 
     /// <summary>
-    /// The one-track dimensions of section 1.2 at the 0.5 mm module: bars of 1 and 3 modules, gaps of 2, a height of 16 and quiet zones of 12.
+    /// The one-track dimensions of section 1.2 at the 0.5 mm module: a height of 8.0 mm, 16 modules, and the 6 mm gap of section 2.2.4 to other print, 12
+    /// modules. Both are in millimetres, so at a 0.35 mm module they are 8 / 0.35 and 6 / 0.35 modules.
     /// </summary>
-    [Fact]
-    public void DrawsTheOneTrackDimensionsOfSectionOneTwo()
-        => SymbolEncoder.Encode(new PharmacodeSymbology(), "117480", new BarcodeOptions(), static (ref symbol) =>
+    /// <param name="xDimension">The X dimension in millimetres.</param>
+    [Theory]
+    [InlineData(0.5)]
+    [InlineData(0.35)]
+    public void DrawsTheOneTrackDimensionsOfSectionOneTwo(double xDimension)
+    {
+        BarcodeOptions options = new() { Dpi = SymbolEncoder.MillimetreDpi, XDimension = xDimension };
+        SymbolEncoder.Encode(new PharmacodeSymbology(), "117480", options, (ref symbol) =>
         {
-            Assert.All(symbol.BarHeights.ToArray(), height => Assert.Equal(16F, height));
+            Assert.All(symbol.BarHeights.ToArray(), height => Assert.Equal((float)(8.0 / xDimension), height, 1e-4F));
             Assert.All(symbol.BarTops.ToArray(), top => Assert.Equal(0F, top));
-            Assert.Equal(12, symbol.LeadingQuietZone);
-            Assert.Equal(12, symbol.TrailingQuietZone);
+            Assert.Equal((float)(6 / xDimension), symbol.LeadingQuietZone, 1e-4F);
+            Assert.Equal((float)(6 / xDimension), symbol.TrailingQuietZone, 1e-4F);
         });
+    }
+
+    /// <summary>
+    /// Section 1.3 gives the thin bar of the miniature Pharmacode a minimum of 0.3 mm, and section 1.2 gives the thin bar of the standard Pharmacode a maximum
+    /// of 0.7 mm. Section 1.4 gives the bars of the two-track Pharmacode 0.8 mm to 2 mm.
+    /// </summary>
+    /// <param name="twoTrack">Whether the symbol is a two-track Pharmacode.</param>
+    /// <param name="xDimension">The X dimension in millimetres.</param>
+    /// <param name="expected">The X dimension the symbol draws at in millimetres, the nearest limit of the range.</param>
+    [Theory]
+    [InlineData(false, 0.29, 0.3)]
+    [InlineData(false, 0.71, 0.7)]
+    [InlineData(true, 0.79, 0.8)]
+    [InlineData(true, 2.01, 2.0)]
+    public void ClampsAnXDimensionOutsideTheTables(bool twoTrack, double xDimension, double expected)
+        => SymbolEncoder.Encode(
+            twoTrack ? new TwoTrackPharmacodeSymbology() : new PharmacodeSymbology(),
+            "117480",
+            new BarcodeOptions { Dpi = SymbolEncoder.MillimetreDpi, XDimension = xDimension },
+            (ref symbol) => Assert.Equal(expected, symbol.XDimension, 1e-9));
 
     /// <summary>
     /// Section 4.5 of the guide values a lower bar in position n at 3 to the power n - 1, an upper bar at twice that and a full bar at three times that. Its
@@ -76,7 +102,7 @@ public class PharmacodeSymbologyTests
     [InlineData("117480", "LUUULUFFUFF")]
     [InlineData("64570080", "FFFFFFFFFFFFFFFF")]
     public void FollowsTheValueTableOfSectionFourFive(string text, string bars)
-        => SymbolEncoder.Encode(new TwoTrackPharmacodeSymbology(), text, new BarcodeOptions(), (ref symbol) =>
+        => SymbolEncoder.Encode(new TwoTrackPharmacodeSymbology(), text, new BarcodeOptions { Dpi = SymbolEncoder.MillimetreDpi }, (ref symbol) =>
         {
             string actual = string.Empty;
             int value = 0;
@@ -92,8 +118,8 @@ public class PharmacodeSymbologyTests
             Assert.Equal(bars, actual);
             Assert.Equal(int.Parse(text, CultureInfo.InvariantCulture), value);
             Assert.All(symbol.Runs.ToArray(), run => Assert.Equal(1, run));
-            Assert.Equal(6, symbol.LeadingQuietZone);
-            Assert.Equal(6, symbol.TrailingQuietZone);
+            Assert.Equal(6F, symbol.LeadingQuietZone);
+            Assert.Equal(6F, symbol.TrailingQuietZone);
         });
 
     /// <summary>
@@ -102,7 +128,7 @@ public class PharmacodeSymbologyTests
     [Fact]
     public void ScalesTheHalfBarsWithTheBarHeight()
     {
-        BarcodeOptions options = new() { BarHeight = 30F };
+        BarcodeOptions options = new() { Dpi = SymbolEncoder.MillimetreDpi, BarHeight = 30F };
         SymbolEncoder.Encode(new TwoTrackPharmacodeSymbology(), "105", options, static (ref symbol) =>
         {
             Assert.Equal([30F, 15F, 15F, 30F], symbol.BarHeights.ToArray());
@@ -110,16 +136,16 @@ public class PharmacodeSymbologyTests
         });
     }
 
+    /// <summary>
+    /// The Laetus Pharmacode Guide defines no text line, so a font prints none.
+    /// </summary>
     [Fact]
-    public void PrintsTheNumberAsGiven()
+    public void PrintsNoText()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
 
-        string[] texts = SymbolEncoder.Read(new PharmacodeSymbology(), "117480", options, SymbolEncoder.Texts);
-        Assert.Equal("117480", Assert.Single(texts));
-
-        string[] twoTrack = SymbolEncoder.Read(new TwoTrackPharmacodeSymbology(), "117480", options, SymbolEncoder.Texts);
-        Assert.Equal("117480", Assert.Single(twoTrack));
+        Assert.Empty(SymbolEncoder.Read(new PharmacodeSymbology(), "117480", options, SymbolEncoder.Texts));
+        Assert.Empty(SymbolEncoder.Read(new TwoTrackPharmacodeSymbology(), "117480", options, SymbolEncoder.Texts));
     }
 
     [Theory]

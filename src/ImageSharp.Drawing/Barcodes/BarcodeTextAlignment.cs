@@ -17,4 +17,9 @@ internal enum BarcodeTextAlignment
     /// The left edge of the line's ink stands on the left edge of the span.
     /// </summary>
     Left,
+
+    /// <summary>
+    /// The right edge of the line's ink stands on the right edge of the span.
+    /// </summary>
+    Right,
 }

@@ -116,14 +116,15 @@ public class Gs1NorthAmericanCouponSymbologyTests
 
     /// <summary>
     /// Section 5.4 of the guideline: "Each row shall be 34X high, and the separator pattern shall be 3X (minimum) high", with a nominal X dimension of 0.33
-    /// millimetre. Figure 1 has eight segments in a row, 200 modules, which is the default.
+    /// millimetre, 33 pixels at 100 pixels a millimetre. Figure 1 has eight segments in a row, 200 modules, which is the default.
     /// </summary>
     [Fact]
     public void Gs1NorthAmericanCoupon_HasEightSegmentRowsOfThirtyFourModules()
     {
         Gs1NorthAmericanCouponSymbology symbology = new();
         Assert.Equal(8, symbology.Segments);
-        SymbolEncoder.Encode(symbology, "(8110)1061414165432131501101201211014092110256100126663101231", new BarcodeOptions(), static (ref symbol) =>
+        BarcodeOptions options = new() { Dpi = SymbolEncoder.MillimetreDpi };
+        SymbolEncoder.Encode(symbology, "(8110)1061414165432131501101201211014092110256100126663101231", options, static (ref symbol) =>
         {
             Assert.Equal(0.33, symbol.XDimension);
             Assert.Equal(200F, symbol.WidthInModules);
@@ -134,18 +135,19 @@ public class Gs1NorthAmericanCouponSymbologyTests
 
     /// <summary>
     /// Table C of the guideline: a leap year allows 29 February, the start date of data field 4 may equal the expiration date of data field 3, and data field 9
-    /// carries its four miscellaneous elements.
+    /// carries its four miscellaneous elements. The guideline sets no order for the optional data fields, so data field 1 can follow data field 3.
     /// </summary>
     [Theory]
     [InlineData("(8110)106141410012342501106503120229")]
     [InlineData("(8110)106141410012342501106503101231410123190010")]
+    [InlineData("(8110)106141410012342501106503101231101308509")]
     public void Gs1NorthAmericanCoupon_AcceptsValidOptionalFields(string text)
         => Assert.Null(Record.Exception(() => SymbolEncoder.Encode(new Gs1NorthAmericanCouponSymbology(), text, new BarcodeOptions())));
 
     /// <summary>
     /// The symbol carries one element string, Application Identifier (8110), whose coupon code follows Table C of the guideline: digits only, at most 70 of
-    /// them, every required element present, every indicator and code in its range, valid dates with the start date not after the expiration date, and the
-    /// optional data fields 1, 2, 3, 4, 5, 6 and 9 in increasing order.
+    /// them, every required element present, every indicator and code in its range, valid dates with the start date not after the expiration date, and only
+    /// the optional data fields 1, 2, 3, 4, 5, 6 and 9.
     /// </summary>
     [Theory]
     [InlineData("(01)09521234543213")]
@@ -157,7 +159,7 @@ public class Gs1NorthAmericanCouponSymbologyTests
     [InlineData("(8110)106141410012342501106503101331")]
     [InlineData("(8110)106141410012342501106503110229")]
     [InlineData("(8110)1061414100123425011065031012314110101")]
-    [InlineData("(8110)106141410012342501106503101231101308509")]
+    [InlineData("(8110)1061414100123425011065041101013101231")]
     [InlineData("(8110)106141410012342501106509300")]
     [InlineData("(8110)10614141001234250110650A")]
     [InlineData("(8110)1061414100123425011065051234567890123456789012345678901234567890123")]

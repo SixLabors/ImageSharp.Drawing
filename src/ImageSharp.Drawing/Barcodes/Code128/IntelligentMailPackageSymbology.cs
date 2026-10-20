@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
@@ -17,8 +18,10 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// </para>
 /// <para>
 /// Section 2.4 makes three more elements part of the IMpb structure: the PIC below the bars, a service banner above them, and an identification bar above the
-/// banner and below the PIC. The symbol prints all three with the text. Without a font it prints the bars alone. Section 2.4.1 and section 2.4.2 call for a
-/// bold sans serif font, which the caller supplies.
+/// banner and below the PIC. The structure "shall include" all three, so the symbol needs a font. Section 2.4.1 and section 2.4.2 call for a "boldface*, sans
+/// serif font". The caller supplies a sans serif font, and the text renders bold, with a synthetic weight when the font has no bold face. Section 2.2.2 limits
+/// the X dimension to 0.013 to 0.021 inch, and section 2.2.4 requires a bar height of at least 0.75 inch. An X dimension outside that range is clamped to
+/// it, and a bar height under that minimum is rejected.
 /// </para>
 /// </summary>
 public sealed class IntelligentMailPackageSymbology : BarcodeSymbology
@@ -28,6 +31,29 @@ public sealed class IntelligentMailPackageSymbology : BarcodeSymbology
     /// preferred". The nominal value is the middle of the preferred range, 0.016 inch.
     /// </summary>
     private const double NominalXDimension = 0.016 * 25.4;
+
+    /// <summary>
+    /// The smallest X dimension in millimetres. Section 2.2.2: "The mailer shall print the barcode with an X-dimension measuring between 0.013 inch (13.0 mils)
+    /// and 0.021 inch (21.0 mils)."
+    /// </summary>
+    private const double MinimumXDimension = 0.013 * 25.4;
+
+    /// <summary>
+    /// The largest X dimension in millimetres, the upper limit of section 2.2.2.
+    /// </summary>
+    private const double MaximumXDimension = 0.021 * 25.4;
+
+    /// <summary>
+    /// The clear zone above and below the bars in millimetres. Section 2.3.2: "A clear zone measuring at least 0.125 inch shall be maintained directly above
+    /// and below the barcode."
+    /// </summary>
+    private const double VerticalClearZone = 0.125 * 25.4;
+
+    /// <summary>
+    /// The clear zone before and after the bars in millimetres. Section 4.10.1 of Publication 199: "A minimum left/right clear zone of 0.25 inch is
+    /// recommended."
+    /// </summary>
+    private const double HorizontalClearZone = 0.25 * 25.4;
 
     /// <summary>
     /// The bar height in millimetres. Section 2.2.4: "The overall minimum height of the barcode shall measure at least 0.75 inch".
@@ -146,6 +172,22 @@ public sealed class IntelligentMailPackageSymbology : BarcodeSymbology
     {
         Guard.MustBeLessThanOrEqualTo(text.Length, MaximumInputLength, nameof(text));
 
+        // Section 2.4: "The IM Package Barcode structure shall include the elements defined in 2.4.1 through 2.4.3", and two of them are text.
+        if (options.Font is null)
+        {
+            throw new ArgumentException("The Intelligent Mail package barcode prints its PIC and its banner, so it needs a font.", nameof(options));
+        }
+
+        double xDimension = options.ResolveXDimension(MinimumXDimension, NominalXDimension, MaximumXDimension);
+
+        // Section 2.2.4: "The overall minimum height of the barcode shall measure at least 0.75 inch".
+        if (options.IsBarHeightUnder(BarHeight))
+        {
+            throw new ArgumentException(
+                $"The Intelligent Mail package barcode is at least 0.75 inch high; the bar height is {options.BarHeight / 25.4:0.###} inch.",
+                nameof(options));
+        }
+
         InlineArray64<char> encodedStorage = default;
         ValueStringBuilder encoded = new(encodedStorage);
         try
@@ -208,43 +250,39 @@ public sealed class IntelligentMailPackageSymbology : BarcodeSymbology
             InlineArray64<char> readableStorage = default;
             Span<char> readable = readableStorage;
             int readableLength = 0;
-            if (options.Font is not null)
-            {
-                // Each step copies one group of four digits and the space after it. The last group takes the remaining digits and no space: two, because every
-                // PIC is 22, 26 or 30 digits.
-                int start = 0;
-                for (; start + 4 < data.Length; start += 4)
-                {
-                    data.Slice(start, 4).CopyTo(readable[readableLength..]);
-                    readable[readableLength + 4] = ' ';
-                    readableLength += 5;
-                }
 
-                data[start..].CopyTo(readable[readableLength..]);
-                readableLength += data.Length - start;
+            // Each step copies one group of four digits and the space after it. The last group takes the remaining digits and no space: two, because every PIC
+            // is 22, 26 or 30 digits.
+            int start = 0;
+            for (; start + 4 < data.Length; start += 4)
+            {
+                data.Slice(start, 4).CopyTo(readable[readableLength..]);
+                readable[readableLength + 4] = ' ';
+                readableLength += 5;
             }
 
-            double xDimension = options.XDimension ?? NominalXDimension;
-            Code128Encoder.BuildSymbol(
-                encoded.AsSpan(),
-                true,
-                [],
-                readable[..readableLength],
-                [],
-                options.Font is null ? [] : this.Banner,
-                xDimension,
-                (float)(BarHeight / xDimension),
-                (float)(TextClearance / xDimension),
-                (float)(BannerClearance / xDimension),
-                options,
-                ref symbol);
+            data[start..].CopyTo(readable[readableLength..]);
+            readableLength += data.Length - start;
 
-            // The identification bars stand beyond the banner and the PIC, so they print only with them.
-            if (options.Font is not null)
+            // Section 4.10.1 of Publication 199: "A minimum left/right clear zone of 0.25 inch is recommended", over the "10 times the X dimension" it
+            // requires.
+            Code128Layout layout = new()
             {
-                symbol.AddIdentificationBars((float)(IdentificationBarThickness / xDimension), (float)(IdentificationBarClearance / xDimension));
-                symbol.SetTextHeight((float)(MinimumTextHeight / xDimension), (float)(MaximumTextHeight / xDimension));
-            }
+                XDimension = xDimension,
+                NominalBarHeight = (float)(BarHeight / xDimension),
+                TextClearance = (float)(TextClearance / xDimension),
+                AboveClearance = (float)(BannerClearance / xDimension),
+                HorizontalQuietZone = MathF.Max(Code128Encoder.QuietZone, (float)(HorizontalClearZone / xDimension)),
+                VerticalQuietZone = (float)(VerticalClearZone / xDimension),
+            };
+
+            Code128Encoder.BuildSymbol(encoded.AsSpan(), true, [], readable[..readableLength], [], this.Banner, in layout, options, ref symbol);
+
+            symbol.AddIdentificationBars((float)(IdentificationBarThickness / xDimension), (float)(IdentificationBarClearance / xDimension));
+            symbol.SetTextHeight((float)(MinimumTextHeight / xDimension), (float)(MaximumTextHeight / xDimension));
+
+            // Sections 2.4.1 and 2.4.2: the PIC and the banner "shall be printed in a boldface* sans serif font".
+            symbol.SetTextWeight(FontWeight.Bold);
         }
         finally
         {

@@ -82,7 +82,7 @@ public class Gs1DataBarStackedSymbologyTests
     [Fact]
     public void Gs1DataBarStacked_BarHeightOptionSetsTheLowerRow()
     {
-        BarcodeOptions options = new() { BarHeight = 14F * DataBarEncoder.NominalXDimension };
+        BarcodeOptions options = new() { Dpi = SymbolEncoder.MillimetreDpi, BarHeight = 14F * DataBarEncoder.NominalXDimension };
         ApproximateFloatComparer comparer = new(1e-4F);
         SymbolEncoder.Encode(new Gs1DataBarStackedSymbology(), "(01)09521234543213", options, (ref symbol) =>
         {

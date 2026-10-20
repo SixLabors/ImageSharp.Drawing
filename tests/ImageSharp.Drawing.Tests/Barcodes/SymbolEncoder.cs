@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Globalization;
 using System.Text;
 using SixLabors.ImageSharp.Drawing.Barcodes;
 
@@ -25,6 +26,31 @@ internal static class SymbolEncoder
     /// </summary>
     /// <param name="symbol">The encoded symbol.</param>
     public delegate void Check(ref BarcodeSymbol symbol);
+
+    /// <summary>
+    /// A resolution of 72 dots per inch, at which one point is one pixel, so a symbol of an X dimension of whole points draws at that X dimension.
+    /// </summary>
+    public const float PointDpi = 72F;
+
+    /// <summary>
+    /// An X dimension of one point in millimetres, which draws at one pixel at <see cref="PointDpi"/> and at a whole number of pixels at its multiples.
+    /// </summary>
+    public const double PointXDimension = 25.4 / 72;
+
+    /// <summary>
+    /// A resolution of 1000 dots per inch, at which a symbol of an X dimension of whole thousandths of an inch draws at that X dimension.
+    /// </summary>
+    public const float InchDpi = 1000F;
+
+    /// <summary>
+    /// A resolution of 100 pixels a millimetre, at which a symbol of an X dimension of whole hundredths of a millimetre draws at that X dimension.
+    /// </summary>
+    public const float MillimetreDpi = 2540F;
+
+    /// <summary>
+    /// A resolution of 1000 pixels a millimetre, at which a symbol of an X dimension of whole thousandths of a millimetre draws at that X dimension.
+    /// </summary>
+    public const float MicrometreDpi = 25400F;
 
     /// <summary>
     /// Encodes the text and returns the storage the symbol rented.
@@ -85,6 +111,25 @@ internal static class SymbolEncoder
     /// <param name="symbol">The encoded symbol.</param>
     /// <returns>The run widths.</returns>
     public static string RunString(ref BarcodeSymbol symbol) => string.Concat(symbol.Runs.ToArray());
+
+    /// <summary>
+    /// Returns the run widths of a symbol in whole modules, separated by commas. A run narrower or wider than whole modules by less than half a module, such as
+    /// a bar or space of an EAN/UPC character that Table 5-10 of the GS1 General Specifications corrects by one thirteenth, rounds to its modules.
+    /// </summary>
+    /// <param name="symbol">The encoded symbol.</param>
+    /// <returns>The run widths in modules.</returns>
+    public static string ModuleRuns(ref BarcodeSymbol symbol)
+    {
+        float runUnit = symbol.RunUnit;
+        ReadOnlySpan<int> runs = symbol.Runs;
+        string[] modules = new string[runs.Length];
+        for (int i = 0; i < runs.Length; i++)
+        {
+            modules[i] = ((int)MathF.Round(runs[i] * runUnit)).ToString(CultureInfo.InvariantCulture);
+        }
+
+        return string.Join(',', modules);
+    }
 
     /// <summary>
     /// Returns the run widths of one row of a symbol as one string of digits.
@@ -211,6 +256,42 @@ internal static class SymbolEncoder
         }
 
         return texts;
+    }
+
+    /// <summary>
+    /// Reads the bar states of a height modulated postal symbol: F for a full bar, A for an ascender, D for a descender and T for a tracker. An ascender reaches
+    /// the top of the bars and a descender reaches their bottom, so the states read the same at every module width.
+    /// </summary>
+    /// <param name="symbol">The encoded symbol.</param>
+    /// <returns>The bar states.</returns>
+    public static string FourStates(ref BarcodeSymbol symbol)
+    {
+        float bottom = BarBottom(ref symbol);
+        char[] states = new char[symbol.BarHeights.Length];
+        for (int i = 0; i < states.Length; i++)
+        {
+            bool up = symbol.BarTops[i] == 0F;
+            bool down = symbol.BarTops[i] + symbol.BarHeights[i] > bottom - 0.001F;
+            states[i] = up && down ? 'F' : up ? 'A' : down ? 'D' : 'T';
+        }
+
+        return new string(states);
+    }
+
+    /// <summary>
+    /// Returns the bottom edge of the lowest bar of a symbol, in modules from the top of the bars.
+    /// </summary>
+    /// <param name="symbol">The encoded symbol.</param>
+    /// <returns>The bottom edge in modules.</returns>
+    public static float BarBottom(ref BarcodeSymbol symbol)
+    {
+        float bottom = 0F;
+        for (int i = 0; i < symbol.BarHeights.Length; i++)
+        {
+            bottom = MathF.Max(bottom, symbol.BarTops[i] + symbol.BarHeights[i]);
+        }
+
+        return bottom;
     }
 
     /// <summary>

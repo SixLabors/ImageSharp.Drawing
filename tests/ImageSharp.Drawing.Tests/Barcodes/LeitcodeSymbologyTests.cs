@@ -35,7 +35,7 @@ public class LeitcodeSymbologyTests
     [Fact]
     public void CalculatesTheDeutschePostCheckDigit()
     {
-        BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
+        BarcodeOptions options = new() { Dpi = SymbolEncoder.MillimetreDpi, Font = BarcodeFonts.OcrB.CreateFont(12F) };
         string[] texts = SymbolEncoder.Read(new LeitcodeSymbology(), "2134807501640", options, SymbolEncoder.Texts);
 
         Assert.Equal("21348.075.016.40 1", Assert.Single(texts));
@@ -55,22 +55,21 @@ public class LeitcodeSymbologyTests
         => Assert.ThrowsAny<ArgumentException>(() => Encode(text));
 
     /// <summary>
-    /// Deutsche Post permits a narrow module of 0.375 mm to 0.5 mm and requires a height of at least 25 mm. A symbol without an X dimension of the caller draws
-    /// at 0.5 mm with bars of 50 modules, 25 mm.
+    /// A symbol without an X dimension or a bar height of the caller draws at 0.5 mm, 50 pixels at 100 pixels a millimetre, with bars of 50 modules, 25 mm.
     /// </summary>
     [Fact]
     public void DefaultsToTheWidestModuleAndTheLeastHeight()
-        => SymbolEncoder.Encode(new LeitcodeSymbology(), "2134807501640", new BarcodeOptions(), static (ref symbol) =>
+        => SymbolEncoder.Encode(new LeitcodeSymbology(), "2134807501640", new BarcodeOptions { Dpi = SymbolEncoder.MillimetreDpi }, static (ref symbol) =>
         {
             Assert.Equal(0.5, symbol.XDimension);
             Assert.Equal(25.0, symbol.BarHeights[0] * symbol.XDimension);
         });
 
     /// <summary>
-    /// Encodes the text with the default options.
+    /// Encodes the text at the nominal 0.5 mm module, 50 pixels at 100 pixels a millimetre.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     /// <returns>The run widths of the symbol.</returns>
     private static string Encode(string text)
-        => SymbolEncoder.Read(new LeitcodeSymbology(), text, new BarcodeOptions(), SymbolEncoder.RunString);
+        => SymbolEncoder.Read(new LeitcodeSymbology(), text, new BarcodeOptions { Dpi = SymbolEncoder.MillimetreDpi }, SymbolEncoder.RunString);
 }

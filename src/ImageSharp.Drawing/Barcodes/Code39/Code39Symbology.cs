@@ -80,6 +80,6 @@ public sealed class Code39Symbology : BarcodeSymbology
         // start and stop character.
         ReadOnlySpan<char> opening = [ReadableDelimiter];
         ReadOnlySpan<char> closing = check is not null && this.PrintCheckCharacter ? [check.Value, ReadableDelimiter] : [ReadableDelimiter];
-        Code39Encoder.BuildSymbol(data, check, opening, data, closing, options, options.XDimension ?? PointXDimension, ref symbol);
+        Code39Encoder.BuildSymbol(data, check, opening, data, closing, options, options.ResolveXDimension(DefaultXDimension), ref symbol);
     }
 }

@@ -60,7 +60,7 @@ public sealed class AztecCodeSymbology : BarcodeSymbology
             this.Layers is null ? AztecFormat.Auto : AztecFormat.Full,
             this.ErrorCorrectionPercentage,
             this.Layers ?? 0,
-            options.XDimension ?? PointXDimension,
+            options.ResolveXDimension(DefaultMatrixXDimension),
             ref symbol);
     }
 }

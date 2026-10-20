@@ -20,6 +20,9 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// The printed line is the letter A and then the nine digits. That letter is the field identifier for automatic reading equipment. The symbol does not carry
 /// the letter or the digits.
 /// </para>
+/// <para>
+/// The symbol draws its wide elements at the nominal ratio of 2.5 that Allegato A gives.
+/// </para>
 /// </summary>
 public sealed class Code32Symbology : BarcodeSymbology
 {
@@ -30,8 +33,8 @@ public sealed class Code32Symbology : BarcodeSymbology
     private const string Base32Characters = "0123456789BCDFGHJKLMNPQRSTUVWXYZ";
 
     /// <summary>
-    /// The letter that opens the printed line. Area 3 of Allegato A prints the code "preceduto dalla lettera A, avente funzione di identificatore di campo per
-    /// apparecchiature di lettura automatica".
+    /// The letter that opens the printed line. Section 3 of Allegato A prints the code "preceduto dalla lettera A, avente funzione di identificatore di campo
+    /// per apparecchiature di lettura automatica".
     /// </summary>
     private const char FieldIdentifier = 'A';
 
@@ -51,6 +54,22 @@ public sealed class Code32Symbology : BarcodeSymbology
     /// 0,250".
     /// </summary>
     private const double NominalXDimension = 0.25;
+
+    /// <summary>
+    /// The width of a narrow element in run units, so a run unit is half a module.
+    /// </summary>
+    private const int NarrowElement = 2;
+
+    /// <summary>
+    /// The width of a wide element in run units. Allegato A: the wide elements are such "che il rapporto tra S ed M risulti nominalmente uguale a 2,5".
+    /// </summary>
+    private const int WideElement = 5;
+
+    /// <summary>
+    /// The width of the symbol in modules, quiet zones excluded. The start character, the six base 32 characters and the stop character each have three wide
+    /// and six narrow elements, every character but the stop character has a narrow gap, and a run unit is half a module.
+    /// </summary>
+    private const float WidthInModules = (((Base32Length + 2) * ((3 * WideElement) + (7 * NarrowElement))) - NarrowElement) / (float)NarrowElement;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Code32Symbology"/> class.
@@ -113,6 +132,20 @@ public sealed class Code32Symbology : BarcodeSymbology
         }
 
         // The interpretation is the field identifier, then the nine digits of the code.
-        Code39Encoder.BuildSymbol(encoded, null, [FieldIdentifier], printed, [], options, options.XDimension ?? NominalXDimension, ref symbol);
+        double xDimension = options.ResolveXDimension(NominalXDimension);
+
+        // The runs count pixels, so every element draws at a whole number of pixels. A wide element is WideElement / NarrowElement modules, rounded half up
+        // to a whole pixel: at an odd number of pixels a module the ratio of 2.5 becomes 3.0 at one pixel and 2.67 at three, and every wide element takes the
+        // same width.
+        int pixels = options.ModulePixels(xDimension);
+        Code39Layout layout = new()
+        {
+            XDimension = xDimension,
+            NominalBarHeight = Code39Encoder.ProportionalBarHeight(WidthInModules, xDimension),
+            NarrowElement = pixels,
+            WideElement = ((WideElement * pixels) + (NarrowElement / 2)) / NarrowElement,
+        };
+
+        Code39Encoder.BuildSymbol(encoded, null, [FieldIdentifier], printed, [], in layout, options, ref symbol);
     }
 }

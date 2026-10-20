@@ -4,11 +4,12 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The UPC-E symbology, which ISO/IEC 15420 specifies. UPC-E is the zero suppression form of UPC-A. A UPC-A number compresses to six digits when its
-/// manufacturer and product codes match one of four zero patterns.
+/// The UPC-E symbology, which the GS1 General Specifications specify. UPC-E is the zero suppression form of a GTIN-12 that starts with a zero and holds four
+/// or five zeros in the positions of one of four zero suppression rules. The text is the leading zero and the six digits that the rules leave, with an optional
+/// check digit. Text that the rules cannot produce is rejected.
 /// <para>
 /// The symbol is 51 modules wide: a normal guard pattern, six symbol characters from number sets A and B, and a special right guard pattern. The number set
-/// parity of the six characters carries the number system digit (0 or 1) and the check digit of the expanded UPC-A number.
+/// parity of the six characters carries the check digit of the GTIN-12.
 /// </para>
 /// </summary>
 public sealed class UpcESymbology : BarcodeSymbology
@@ -29,12 +30,12 @@ public sealed class UpcESymbology : BarcodeSymbology
     private const int SpecialGuardWidth = 6;
 
     /// <summary>
-    /// The quiet zone before the symbol in modules, which holds the number system digit.
+    /// The quiet zone before the symbol in modules, which holds the leading zero. Table 5-11 of the GS1 General Specifications gives 9 modules.
     /// </summary>
     private const int LeadingQuietZone = 9;
 
     /// <summary>
-    /// The quiet zone after the symbol in modules.
+    /// The quiet zone after the symbol in modules. Table 5-11 of the GS1 General Specifications gives 7 modules.
     /// </summary>
     private const int TrailingQuietZone = 7;
 
@@ -56,19 +57,29 @@ public sealed class UpcESymbology : BarcodeSymbology
         if (text.Length is not (7 or 8))
         {
             throw new ArgumentException(
-                $"UPC-E requires a number system digit and 6 data digits with an optional check digit; got {text.Length} characters.",
+                $"UPC-E requires a leading zero and 6 data digits with an optional check digit; got {text.Length} characters.",
                 nameof(text));
         }
 
         BarcodeSymbology.ValidateDigits(text);
 
-        int numberSystem = text[0] - '0';
-        if (numberSystem is not 0 and not 1)
+        // Section 5.2.2.4.1 of the GS1 General Specifications: "D1 SHALL always be zero."
+        if (text[0] != '0')
         {
-            throw new ArgumentException("UPC-E supports only the number systems 0 and 1.", nameof(text));
+            throw new ArgumentException("UPC-E encodes only a GTIN-12 that starts with a zero.", nameof(text));
         }
 
-        // The check digit is computed over the expanded UPC-A number, not the compressed digits, per the zero suppression rules of ISO/IEC 15420.
+        // The four zero suppression rules of section 5.2.2.4.1 exclude each other, so a GTIN-12 suppresses one way only. The last digit selects the rule, and
+        // each rule requires one digit to be nonzero: X5 (D6) when X6 is 5 to 9, X4 (D5) when X6 is 4, and X3 (D4) from 3 to 9 when X6 is 3. Other digits
+        // would come from a GTIN-12 that a different rule suppresses.
+        char x6 = text[6];
+        if ((x6 >= '5' && text[5] == '0') || (x6 == '4' && text[4] == '0') || (x6 == '3' && text[3] < '3'))
+        {
+            throw new ArgumentException("The UPC-E digits are not the zero suppression of a GTIN-12.", nameof(text));
+        }
+
+        // The check digit is computed over the GTIN-12, not the compressed digits. Section 5.2.2.4.1: "D12 SHALL be the check digit calculated according to
+        // the algorithm in section 7.9."
         InlineArray12<char> expandedStorage = default;
         Span<char> expanded = ((Span<char>)expandedStorage)[..11];
         int check = Gs1Data.ComputeCheckDigit(Expand(text, expanded));
@@ -78,46 +89,53 @@ public sealed class UpcESymbology : BarcodeSymbology
         }
 
         int parity = EanUpcEncoder.UpcEParity[check];
-        if (numberSystem == 1)
-        {
-            parity = ~parity & 0b111111;
-        }
 
         InlineArray64<byte> moduleStorage = default;
         Span<byte> modules = ((Span<byte>)moduleStorage)[..Width];
+        InlineArray64<sbyte> correctionStorage = default;
+        Span<sbyte> corrections = ((Span<sbyte>)correctionStorage)[..Width];
         int position = 0;
         EanUpcEncoder.AppendPattern(modules, ref position, EanUpcEncoder.NormalGuard, EanUpcEncoder.NormalGuardWidth);
         for (int i = 1; i <= 6; i++)
         {
-            ReadOnlySpan<byte> numberSet = ((parity >> (6 - i)) & 1) == 0 ? EanUpcEncoder.NumberSetA : EanUpcEncoder.NumberSetB;
-            EanUpcEncoder.AppendCharacter(modules, ref position, numberSet, text[i]);
+            EanUpcNumberSet numberSet = ((parity >> (6 - i)) & 1) == 0 ? EanUpcNumberSet.A : EanUpcNumberSet.B;
+            EanUpcEncoder.AppendCharacter(modules, corrections, ref position, numberSet, text[i]);
         }
 
         EanUpcEncoder.AppendPattern(modules, ref position, SpecialGuard, SpecialGuardWidth);
 
-        EanUpcEncoder.BeginRuns(modules, options.XDimension ?? EanUpcEncoder.NominalXDimension, ref symbol, out Span<float> heights);
-        float barHeight = options.ResolveBarHeight(symbol.XDimension, EanUpcEncoder.NominalBarHeight);
-        EanUpcEncoder.FillGuardedHeights(heights, barHeight, GuardBars, options);
+        EanUpcEncoder.BeginRuns(
+            modules,
+            corrections,
+            options.ResolveXDimension(EanUpcEncoder.MinimumXDimension, EanUpcEncoder.NominalXDimension, EanUpcEncoder.MaximumXDimension),
+            ref symbol,
+            out Span<float> heights);
 
-        // ISO/IEC 15420 prints the number system digit in the leading quiet zone, the check digit in the trailing quiet zone and every other digit below its
-        // own symbol character. Digits hang one module below the digit bars and flow past the extended guard bars, as in the nominal symbol drawing.
+        float barHeight = options.ResolveBarHeight(symbol.XDimension, EanUpcEncoder.NominalBarHeight);
+        EanUpcEncoder.FillGuardedHeights(heights, barHeight, GuardBars);
+
+        // Section 5.2.5 of the GS1 General Specifications: "the size of the first and last digits should be reduced to a maximum width equivalent to four
+        // modules". "The right-hand side of the first digit is positioned five module widths to the left of the leftmost guard bar." The left-hand side of
+        // the last digit is positioned "three module widths for UPC-E barcodes" to the right of the rightmost guard bar. The digits share one baseline, which
+        // aligns the bottom edges of the smaller digits with the others. Every other digit prints below its own symbol character. Digits hang one module
+        // below the digit bars and flow past the extended guard bars.
         if (options.Font is not null)
         {
             float textLine = barHeight + BarcodeTextPlacement.Clearance;
             symbol.ReserveText(8, 8);
-            symbol.AddText(text.Slice(0, 1), -9F, -2F, BarcodeTextSide.BelowBars, textLine, EanUpcEncoder.QuietZoneDigitScale);
+            symbol.AddTextWithinSpan(text.Slice(0, 1), -9F, -5F, BarcodeTextSide.BelowBars, textLine, BarcodeTextAlignment.Right);
             EanUpcEncoder.AddDigits(text.Slice(1, 6), 3F, 7F, BarcodeTextSide.BelowBars, textLine, ref symbol);
-            symbol.AddText([(char)('0' + check)], 52F, 59F, BarcodeTextSide.BelowBars, textLine, EanUpcEncoder.QuietZoneDigitScale);
+            symbol.AddTextWithinSpan([(char)('0' + check)], 54F, 58F, BarcodeTextSide.BelowBars, textLine, BarcodeTextAlignment.Left);
         }
 
-        symbol.EndLinear(LeadingQuietZone, TrailingQuietZone);
+        symbol.EndLinear(LeadingQuietZone, TrailingQuietZone, 0F, EanUpcEncoder.RunUnit, false);
     }
 
     /// <summary>
-    /// Expands the compressed digits to the eleven data digits of the equivalent UPC-A number using the zero suppression rules of ISO/IEC 15420. The last
-    /// compressed digit selects the pattern.
+    /// Expands the compressed digits to the eleven data digits of the GTIN-12 with the zero suppression rules of section 5.2.2.4.1 of the GS1 General
+    /// Specifications. The last compressed digit selects the rule.
     /// </summary>
-    /// <param name="text">The number system digit followed by the six compressed digits.</param>
+    /// <param name="text">The leading zero followed by the six compressed digits.</param>
     /// <param name="destination">The buffer the eleven data digits are written into.</param>
     /// <returns>The eleven UPC-A data digits.</returns>
     private static ReadOnlySpan<char> Expand(ReadOnlySpan<char> text, Span<char> destination)

@@ -13,9 +13,14 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// input can carry spaces, which the printed line keeps and the symbol drops.
 /// <para>
 /// Section 5.3.2.4 requires the bearer bar, which for plate printing "has a constant thickness of 4.83 millimetres (0.190 inch) and must completely surround
-/// the symbol, including its Quiet Zones and butt directly against the top and bottom of the bars". Section 5.3.2.2 gives the target X of 1.016 millimetres and
-/// the 10X quiet zones, and the symbol height table of section 5.12.3.2 gives a minimum height of 31.75 millimetres. A calculated check digit prints after the
-/// data, and after a space when the input carries spaces, as Figure 5-32 shows.
+/// the symbol, including its Quiet Zones and butt directly against the top and bottom of the bars". The X dimension is the target of 0.495 millimetre of
+/// Table 5-47, symbol specification table 2 for trade items scanned in general distribution. The symbol specification tables of section 5.12.3 give ITF-14
+/// X dimensions from 0.170 to 1.016 millimetres, and an X dimension outside that range is clamped to it. Section 5.3.2.2 gives the 10X quiet zones and 1.02 millimetres between the bearer bar and the human readable characters. The symbol
+/// height table of section 5.12.3.2 gives a minimum bar height of 31.75 millimetres and a wide to narrow ratio target of 2.5:1. A wide element rounds half
+/// up to a whole pixel, so the ratio is 2.67 at three pixels a module, inside the range of 2.25:1 to 3.0:1 of section 5.3.2.2. The bar height, the bearer
+/// bar and the text space are in millimetres, so they hold at any X dimension. The bearer bar is the 4.83 millimetres of plate printing, more than "a
+/// minimum of twice the width of a narrow bar" that section 5.3.2.4 requires for printing methods without plates. A calculated check digit prints after
+/// the data, and after a space when the input carries spaces, as Figure 5-32 shows.
 /// </para>
 /// </summary>
 public sealed class Itf14Symbology : BarcodeSymbology
@@ -26,20 +31,39 @@ public sealed class Itf14Symbology : BarcodeSymbology
     private const int Digits = 14;
 
     /// <summary>
-    /// The nominal X dimension in millimetres: the 1.016 millimetre target X of section 5.3.2.2.
+    /// The nominal X dimension in millimetres: the target X of 0.495 millimetres of Table 5-47, symbol specification table 2, which Table 2-37 gives to
+    /// "Fixed measure trade items scanned in general distribution".
     /// </summary>
-    private const double XDimension = 1.016;
+    private const double XDimension = 0.495;
 
     /// <summary>
-    /// The bar height in modules when the caller sets none: the 31.75 millimetre minimum of the symbol height table in section 5.12.3.2, footnote (****), at
-    /// the target X.
+    /// The bar height in millimetres when the caller sets none. Footnote (****) of the symbol height table in section 5.12.3.2: "For GS1-128 and ITF-14
+    /// symbols the minimum symbol height for General distribution scanning is always 31.75 millimetres (1.250 inch)."
     /// </summary>
-    private const float NominalBarHeight = (float)(31.75 / XDimension);
+    private const double NominalBarHeight = 31.75;
 
     /// <summary>
-    /// The bearer bar thickness in modules: the 4.83 millimetres of section 5.3.2.4 at the target X.
+    /// The bearer bar thickness in millimetres: the 4.83 millimetres of section 5.3.2.4 for printing plates, more than the two modules that the same section
+    /// requires for printing methods without plates at every X dimension of Table 5-47.
     /// </summary>
-    private const float BearerBarThickness = (float)(4.83 / XDimension);
+    private const double BearerBarThickness = 4.83;
+
+    /// <summary>
+    /// The smallest space between the bearer bar and the human readable interpretation in millimetres. Section 5.3.2.2: "A minimum space of 1.02 millimetre
+    /// (0.040 inch) between the bottom line of the bearer bar and the top of the human readable characters is required."
+    /// </summary>
+    private const double TextClearance = 1.02;
+
+    /// <summary>
+    /// The narrow term of the wide to narrow ratio, <see cref="WideElement"/> / <see cref="NarrowElement"/>.
+    /// </summary>
+    private const int NarrowElement = 2;
+
+    /// <summary>
+    /// The wide term of the wide to narrow ratio. The symbol height table of section 5.12.3.2: "The ITF-14 symbol's bar width ratio target is 2.5:1". Section
+    /// 5.3.2.2 gives the range "2.25:1 to 3.0:1".
+    /// </summary>
+    private const int WideElement = 5;
 
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
@@ -103,6 +127,26 @@ public sealed class Itf14Symbology : BarcodeSymbology
             }
         }
 
-        Interleaved2Of5Encoder.BuildSymbol(digits, readable, options, options.XDimension ?? XDimension, NominalBarHeight, BearerBarThickness, ref symbol);
+        double xDimension = options.ResolveXDimension(Gs1Data.Itf14MinimumXDimension, XDimension, Gs1Data.Itf14MaximumXDimension);
+
+        // The runs count pixels, so every element draws at a whole number of pixels. A wide element is WideElement / NarrowElement modules, rounded half up
+        // to a whole pixel: at an odd number of pixels a module the ratio of 2.5 becomes 3.0 at one pixel and 2.67 at three, and every wide element takes the
+        // same width.
+        int pixels = options.ModulePixels(xDimension);
+        Interleaved2Of5Layout layout = new()
+        {
+            XDimension = xDimension,
+            NominalBarHeight = (float)(NominalBarHeight / xDimension),
+            QuietZone = Interleaved2Of5Encoder.QuietZone,
+            BearerBarThickness = (float)(BearerBarThickness / xDimension),
+            TextClearance = MathF.Max(BarcodeTextPlacement.Clearance, (float)(TextClearance / xDimension)),
+            NarrowElement = pixels,
+            WideElement = ((WideElement * pixels) + (NarrowElement / 2)) / NarrowElement,
+        };
+
+        Interleaved2Of5Encoder.BuildSymbol(digits, readable, in layout, options, ref symbol);
+
+        // Section 4.14 rule 2.a.iii: "The font size SHOULD be at least 2 mm (0.08 in) in height".
+        symbol.SetTextSize(Gs1Data.MinimumTextSize, 0F);
     }
 }

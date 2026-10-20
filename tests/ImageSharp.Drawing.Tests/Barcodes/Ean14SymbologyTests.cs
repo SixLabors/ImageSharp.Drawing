@@ -45,15 +45,20 @@ public class Ean14SymbologyTests
         => Assert.Throws<ArgumentException>(() => Encode(text));
 
     /// <summary>
-    /// A computed check digit joins the printed number after a space, so the caller can see it was added.
+    /// Section 4.14 rule 2.a.v of the GS1 General Specifications: "Spaces may be used in the HRI itself to ease manual data input". The printed number keeps
+    /// the grouping of the input, and a computed check digit follows a space only when the input groups its digits with spaces.
     /// </summary>
-    [Fact]
-    public void PrintsAComputedCheckDigitAfterASpace()
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expected">The printed line.</param>
+    [Theory]
+    [InlineData("(01)0952123454321", "(01)09521234543213")]
+    [InlineData("(01) 0952123454321", "(01) 0952123454321 3")]
+    public void PrintsAComputedCheckDigitInTheGroupingOfTheInput(string text, string expected)
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        string[] texts = SymbolEncoder.Read(new Ean14Symbology(), "(01)0952123454321", options, SymbolEncoder.Texts);
+        string[] texts = SymbolEncoder.Read(new Ean14Symbology(), text, options, SymbolEncoder.Texts);
 
-        Assert.Equal("(01)0952123454321 3", Assert.Single(texts));
+        Assert.Equal(expected, Assert.Single(texts));
     }
 
     /// <summary>

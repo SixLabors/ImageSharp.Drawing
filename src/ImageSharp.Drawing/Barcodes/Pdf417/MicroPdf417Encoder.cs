@@ -198,7 +198,7 @@ internal static class MicroPdf417Encoder
         int centreAfter = c - 2;
         int runCount = (2 * AddressPatternElements) + (c * Pdf417Patterns.ElementCount) + 1 + (hasCentre ? AddressPatternElements : 0);
 
-        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        double xDimension = options.ResolveXDimension(BarcodeSymbology.DefaultXDimension);
         float rowHeight = options.ResolveBarHeight(xDimension, NominalRowHeight);
 
         ReadOnlySpan<int> patterns = Pdf417Patterns.Modules;

@@ -6,8 +6,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// <summary>
 /// The POSTNET symbology, which section 708.4.2 of the United States Postal Service Domestic Mail Manual defines: "A POSTNET barcode can represent a 5-digit
 /// ZIP Code (32 bars), a 9-digit ZIP+4 code (52 bars), or an 11-digit delivery point code (62 bars)." Every digit is five bars of which two are full, the
-/// symbol carries a correction digit that makes the digit sum a multiple of 10, and a full frame bar stands at each end. The printed line shows the digits as
-/// given.
+/// symbol carries a correction digit that makes the digit sum a multiple of 10, and a full frame bar stands at each end. The symbol prints no text line,
+/// because the Domestic Mail Manual defines none.
 /// </summary>
 public sealed class PostnetSymbology : BarcodeSymbology
 {
@@ -26,6 +26,6 @@ public sealed class PostnetSymbology : BarcodeSymbology
         Span<char> digits = ((Span<char>)digitStorage)[..(text.Length + 1)];
         text.CopyTo(digits);
         digits[^1] = (char)('0' + UspsPostalEncoder.CorrectionDigit(text));
-        UspsPostalEncoder.BuildSymbol(digits, text, options, true, ref symbol);
+        UspsPostalEncoder.BuildSymbol(digits, options, true, ref symbol);
     }
 }

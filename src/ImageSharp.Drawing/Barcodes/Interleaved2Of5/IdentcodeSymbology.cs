@@ -5,8 +5,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
 /// The Deutsche Post Identcode, the identification code of a mail item. An Interleaved 2 of 5 symbol carries it. The code is twelve digits: the two digit
-/// origin mail centre, the customer number, the item number and the check digit. Deutsche Post fixes the narrow module at 0.375 mm to 0.5 mm, the wide to
-/// narrow ratio at 1:2 to 1:3, the height at 25 mm or more and the quiet zone at 5 mm or more on each side.
+/// origin mail centre, the customer number, the item number and the check digit. The symbol draws at a narrow module of 0.5 mm with bars 25 mm high when the
+/// caller sets neither. The quiet zones are 5 mm on each side, and at least the ten modules of Interleaved 2 of 5.
 /// <para>
 /// The input is the eleven data digits, or those digits and the check digit. This class always calculates the check digit. When the input carries one, this
 /// class compares the two.
@@ -51,7 +51,6 @@ public sealed class IdentcodeSymbology : BarcodeSymbology
         readable[14] = ' ';
         readable[15] = encoded[11];
 
-        double xDimension = options.XDimension ?? DeutschePostData.NominalXDimension;
-        Interleaved2Of5Encoder.BuildSymbol(encoded, readable, options, xDimension, DeutschePostData.NominalBarHeight, ref symbol);
+        DeutschePostData.BuildSymbol(encoded, readable, options, ref symbol);
     }
 }

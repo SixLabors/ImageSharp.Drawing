@@ -5,13 +5,14 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
 /// The Compact PDF417 symbology, Annex G of ISO/IEC 15438. A symbol is a PDF417 symbol whose rows omit the right row indicator and end with a single module bar
-/// in place of the stop character.
+/// in place of the stop character. The bar height of the options sets each row, and section 5.8.2 requires "Y &gt;= 3X", so a bar height under 3X is rejected.
 /// </summary>
 public sealed class CompactPdf417Symbology : BarcodeSymbology
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="CompactPdf417Symbology"/> class. The number of data columns follows from the data. The error correction
-    /// level is the recommended minimum of Annex E of ISO/IEC 15438 for the data, raised to the highest level the rows leave room for.
+    /// level is the recommended minimum of Annex E of ISO/IEC 15438 for the data, raised to the highest level the rows leave room for. Table E.1 ends at 863
+    /// data codewords, and more data takes the highest level that fits.
     /// </summary>
     public CompactPdf417Symbology()
     {
@@ -19,7 +20,8 @@ public sealed class CompactPdf417Symbology : BarcodeSymbology
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CompactPdf417Symbology"/> class. The error correction level is the recommended minimum of Annex E of
-    /// ISO/IEC 15438 for the data, raised to the highest level the rows leave room for.
+    /// ISO/IEC 15438 for the data, raised to the highest level the rows leave room for. Table E.1 ends at 863 data codewords, and more data takes the highest
+    /// level that fits.
     /// </summary>
     /// <param name="columns">The number of data columns in a row, 1 to 30. The row count follows from the data.</param>
     public CompactPdf417Symbology(int columns)

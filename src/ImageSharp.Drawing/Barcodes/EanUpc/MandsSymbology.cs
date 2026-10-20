@@ -58,11 +58,13 @@ public sealed class MandsSymbology : BarcodeSymbology
 
         InlineArray128<byte> moduleStorage = default;
         Span<byte> modules = ((Span<byte>)moduleStorage)[..EanUpcEncoder.Ean8Width];
-        EanUpcEncoder.WriteEan8Modules(digits, modules);
+        InlineArray128<sbyte> correctionStorage = default;
+        Span<sbyte> corrections = ((Span<sbyte>)correctionStorage)[..EanUpcEncoder.Ean8Width];
+        EanUpcEncoder.WriteEan8Modules(digits, modules, corrections);
 
-        EanUpcEncoder.BeginRuns(modules, options.XDimension ?? EanUpcEncoder.NominalXDimension, ref symbol, out Span<float> heights);
+        EanUpcEncoder.BeginRuns(modules, corrections, options.ResolveXDimension(EanUpcEncoder.NominalXDimension), ref symbol, out Span<float> heights);
         float digitHeight = options.ResolveBarHeight(symbol.XDimension, EanUpcEncoder.NominalEan8BarHeight);
-        EanUpcEncoder.FillGuardedHeights(heights, digitHeight, GuardBars, options);
+        EanUpcEncoder.FillGuardedHeights(heights, digitHeight, GuardBars);
 
         if (options.Font is not null)
         {
@@ -77,6 +79,6 @@ public sealed class MandsSymbology : BarcodeSymbology
             symbol.AddText("S", 69F, 76F, BarcodeTextSide.BelowBars, textLine);
         }
 
-        symbol.EndLinear(QuietZone, QuietZone);
+        symbol.EndLinear(QuietZone, QuietZone, 0F, EanUpcEncoder.RunUnit, false);
     }
 }

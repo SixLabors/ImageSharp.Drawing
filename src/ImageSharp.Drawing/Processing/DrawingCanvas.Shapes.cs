@@ -235,7 +235,10 @@ public abstract partial class DrawingCanvas
     /// <param name="options">The sizing and painting options.</param>
     /// <param name="origin">The top left corner of the barcode, in pixels.</param>
     /// <param name="text">The text to encode.</param>
-    /// <exception cref="ArgumentException">The text is not valid for the symbology.</exception>
+    /// <exception cref="ArgumentException">
+    /// The text is not valid for the symbology, or the options break a requirement of the standard of the symbology, such as its minimum bar
+    /// height or its maximum size.
+    /// </exception>
     public void DrawBarcode(BarcodeSymbology symbology, BarcodeOptions options, PointF origin, ReadOnlySpan<char> text)
     {
         Guard.NotNull(symbology, nameof(symbology));
@@ -264,7 +267,10 @@ public abstract partial class DrawingCanvas
     /// <param name="origin">The top left corner of the barcode, in pixels.</param>
     /// <param name="first">The text of the first symbology of the composite.</param>
     /// <param name="second">The text of the second symbology of the composite.</param>
-    /// <exception cref="ArgumentException">The composite does not have two parts, a text is not valid, or the parts do not join.</exception>
+    /// <exception cref="ArgumentException">
+    /// The composite does not have two parts, a text is not valid, the parts do not join, or the options break a requirement of the standard of the
+    /// symbology, such as its minimum bar height or its maximum size.
+    /// </exception>
     public void DrawBarcode(CompositeBarcodeSymbology symbology, BarcodeOptions options, PointF origin, ReadOnlySpan<char> first, ReadOnlySpan<char> second)
     {
         Guard.NotNull(symbology, nameof(symbology));
@@ -283,7 +289,10 @@ public abstract partial class DrawingCanvas
     /// <param name="first">The text of the first symbology of the composite.</param>
     /// <param name="second">The text of the second symbology of the composite.</param>
     /// <param name="third">The text of the third symbology of the composite.</param>
-    /// <exception cref="ArgumentException">The composite does not have three parts, a text is not valid, or the parts do not join.</exception>
+    /// <exception cref="ArgumentException">
+    /// The composite does not have three parts, a text is not valid, the parts do not join, or the options break a requirement of the standard of the
+    /// symbology, such as its minimum bar height or its maximum size.
+    /// </exception>
     public void DrawBarcode(
         CompositeBarcodeSymbology symbology,
         BarcodeOptions options,
@@ -306,7 +315,10 @@ public abstract partial class DrawingCanvas
     /// <param name="origin">The top left corner of the barcode, in pixels.</param>
     /// <param name="text">The text to encode.</param>
     /// <returns>The advance, the bounds and the renderable bounds of the barcode.</returns>
-    /// <exception cref="ArgumentException">The text is not valid for the symbology.</exception>
+    /// <exception cref="ArgumentException">
+    /// The text is not valid for the symbology, or the options break a requirement of the standard of the symbology, such as its minimum bar
+    /// height or its maximum size.
+    /// </exception>
     public abstract BarcodeMetrics MeasureBarcode(BarcodeSymbology symbology, BarcodeOptions options, PointF origin, ReadOnlySpan<char> text);
 
     /// <summary>
@@ -318,7 +330,10 @@ public abstract partial class DrawingCanvas
     /// <param name="first">The text of the first symbology of the composite.</param>
     /// <param name="second">The text of the second symbology of the composite.</param>
     /// <returns>The advance, the bounds and the renderable bounds of the barcode.</returns>
-    /// <exception cref="ArgumentException">The composite does not have two parts, a text is not valid, or the parts do not join.</exception>
+    /// <exception cref="ArgumentException">
+    /// The composite does not have two parts, a text is not valid, the parts do not join, or the options break a requirement of the standard of the
+    /// symbology, such as its minimum bar height or its maximum size.
+    /// </exception>
     public abstract BarcodeMetrics MeasureBarcode(
         CompositeBarcodeSymbology symbology,
         BarcodeOptions options,
@@ -336,7 +351,10 @@ public abstract partial class DrawingCanvas
     /// <param name="second">The text of the second symbology of the composite.</param>
     /// <param name="third">The text of the third symbology of the composite.</param>
     /// <returns>The advance, the bounds and the renderable bounds of the barcode.</returns>
-    /// <exception cref="ArgumentException">The composite does not have three parts, a text is not valid, or the parts do not join.</exception>
+    /// <exception cref="ArgumentException">
+    /// The composite does not have three parts, a text is not valid, the parts do not join, or the options break a requirement of the standard of the
+    /// symbology, such as its minimum bar height or its maximum size.
+    /// </exception>
     public abstract BarcodeMetrics MeasureBarcode(
         CompositeBarcodeSymbology symbology,
         BarcodeOptions options,

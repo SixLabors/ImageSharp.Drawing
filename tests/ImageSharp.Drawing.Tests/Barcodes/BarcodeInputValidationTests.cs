@@ -108,4 +108,53 @@ public class BarcodeInputValidationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => options.XDimension = value);
         Assert.Throws<ArgumentOutOfRangeException>(() => options.BarHeight = value);
     }
+
+    /// <summary>
+    /// At the default options a symbol draws at an X dimension inside the range its specification permits, at 96, 144, 300 and 600 dots per inch, where a
+    /// whole number of pixels is inside that range. Where none is, as for BC412 at 96, 144 and 300 dots per inch, the module is the smallest whole number of
+    /// pixels over the minimum. The ranges are the smallest minimum and the largest maximum of the symbol specification tables of section 5.12.3 of the GS1
+    /// General Specifications that list ITF-14, GS1-128, EAN/UPC, GS1 DataBar, GS1 DataMatrix and GS1 QR Code, note (*) and the logistic unit rows of Tables
+    /// 5-51 and 5-58 for the SSCC, Table 5-58 for GS1 DotCode, Tables 5-46 and 5-49 for GS1 Digital Link, section 4 of the IFA PZN document, Table 1 of
+    /// SEMI T1-95 for BC412, DMM 708.4.2.5 c for POSTNET and DMM 708.9.3 b for the FIM.
+    /// </summary>
+    /// <param name="symbologyType">The symbology.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="minimum">The smallest X dimension the specification permits, in millimetres.</param>
+    /// <param name="maximum">The largest X dimension the specification permits, in millimetres.</param>
+    [Theory]
+    [InlineData(typeof(Itf14Symbology), "15400141288763", 0.170, 1.016)]
+    [InlineData(typeof(Gs1128Symbology), "(01)09521234543213", 0.170, 1.016)]
+    [InlineData(typeof(Ean14Symbology), "(01)09521234543213", 0.170, 1.016)]
+    [InlineData(typeof(Sscc18Symbology), "(00)106141411234567897", 0.250, 0.940)]
+    [InlineData(typeof(Ean13Symbology), "5901234123457", 0.170, 0.660)]
+    [InlineData(typeof(Gs1DataBarOmnidirectionalSymbology), "(01)09521234543213", 0.170, 0.660)]
+    [InlineData(typeof(Gs1DotCodeSymbology), "(01)09521234543213(17)240101(10)ABC123", 0.380, 0.990)]
+    [InlineData(typeof(Gs1DataMatrixSymbology), "(01)09521234543213", 0.100, 3.50)]
+    [InlineData(typeof(Gs1QrCodeSymbology), "(01)09521234543213", 0.254, 3.50)]
+    [InlineData(typeof(Gs1DigitalLinkDataMatrixSymbology), "https://id.gs1.org/01/09521234543213", 0.396, 0.990)]
+    [InlineData(typeof(Gs1DigitalLinkQrCodeSymbology), "https://id.gs1.org/01/09521234543213", 0.396, 0.990)]
+    [InlineData(typeof(Pzn8Symbology), "03752864", 0.187, 0.450)]
+    [InlineData(typeof(Bc412Symbology), "BC412AB", 0.120 - 0.025, 0.120 + 0.025)]
+    [InlineData(typeof(PostnetSymbology), "01234", 0.015 * 25.4, 0.025 * 25.4)]
+    [InlineData(typeof(FacingIdentificationMarkSymbology), "A", ((1.0 / 32) - 0.008) * 25.4, ((1.0 / 32) + 0.008) * 25.4)]
+    public void DrawsTheDefaultXDimensionInsideTheRangeOfTheSpecification(Type symbologyType, string text, double minimum, double maximum)
+    {
+        BarcodeSymbology symbology = (BarcodeSymbology)Activator.CreateInstance(symbologyType)!;
+        foreach (float dpi in (ReadOnlySpan<float>)[96F, 144F, 300F, 600F])
+        {
+            // The whole numbers of pixels at or over the minimum and at or under the maximum. The tolerance keeps a limit that falls on a whole pixel on it.
+            double pixelsPerMillimetre = dpi / 25.4;
+            double lowest = Math.Max(1, Math.Ceiling((minimum * pixelsPerMillimetre) - 1e-9));
+            double highest = Math.Floor((maximum * pixelsPerMillimetre) + 1e-9);
+            double xDimension = SymbolEncoder.Read(symbology, text, new BarcodeOptions { Dpi = dpi }, static (ref symbol) => symbol.XDimension);
+            if (lowest <= highest)
+            {
+                Assert.InRange(xDimension, minimum - 1e-9, maximum + 1e-9);
+            }
+            else
+            {
+                Assert.Equal(lowest, xDimension * pixelsPerMillimetre, 1e-9);
+            }
+        }
+    }
 }

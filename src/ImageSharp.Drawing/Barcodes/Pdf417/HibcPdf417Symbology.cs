@@ -7,6 +7,13 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
 /// HIBC PDF417, a Health Industry Bar Code carried by a PDF417 symbol. The symbol carries the flag character, the data and the modulo 43 check character.
+/// The text follows a data structure of ANSI/HIBC 2.6: primary data, secondary data that ends with its link character, or primary and secondary data joined
+/// with "/", each with any supplemental data fields. The bar height of the options sets each row, and section 5.8.2 of ISO/IEC 15438 requires "Y &gt;= 3X", so a
+/// bar height under 3X is rejected.
+/// <para>
+/// When a font is set, that same string prints below the symbol between delimiters, with a space printed as an underscore and a zero as "Ø". Primary and
+/// secondary data that the symbol joins with "/" print on two lines, broken after the "/".
+/// </para>
 /// </summary>
 public sealed class HibcPdf417Symbology : BarcodeSymbology
 {
@@ -58,6 +65,10 @@ public sealed class HibcPdf417Symbology : BarcodeSymbology
             HibcData.Prepare(text, this.ValidateCheckCharacter, ref encoded);
 
             Pdf417Encoder.BuildSymbol(encoded.AsSpan(), this.Columns, null, false, options, ref symbol);
+            if (options.Font is not null)
+            {
+                HibcData.AddStackedReadable(encoded.AsSpan(), ref symbol);
+            }
         }
         finally
         {

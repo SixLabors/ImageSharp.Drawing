@@ -13,6 +13,10 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// When a font is set, the element strings that the URI carries print below the symbol, one on each line, with the Application Identifiers in parentheses, in
 /// the order of the URI. The URI does not print.
 /// </para>
+/// <para>
+/// Table 5-46, symbol specification table 1 addendum 2, gives an X dimension of 0.396 to 0.990 millimetres with a target of 0.495, and an X dimension outside
+/// that range is clamped to it.
+/// </para>
 /// </summary>
 public sealed class Gs1DigitalLinkDataMatrixSymbology : BarcodeSymbology
 {
@@ -28,10 +32,15 @@ public sealed class Gs1DigitalLinkDataMatrixSymbology : BarcodeSymbology
     {
         // The URI encodes as plain data, so no URI longer than the largest symbol holds is parsed.
         Guard.MustBeLessThanOrEqualTo(text.Length, DataMatrixEncoder.MaximumLength, nameof(text));
+        double xDimension = options.ResolveXDimension(
+            Gs1Data.DigitalLinkMinimumXDimension,
+            Gs1Data.DigitalLinkXDimension,
+            Gs1Data.DigitalLinkMaximumXDimension);
+
         if (options.Font is null)
         {
             Gs1DigitalLink.Validate(text);
-            DataMatrixEncoder.BuildSymbol(text, false, DataMatrixFormat.Square, 0, 0, options.XDimension ?? PointXDimension, ref symbol);
+            DataMatrixEncoder.BuildSymbol(text, false, DataMatrixFormat.Square, 0, 0, xDimension, ref symbol);
             return;
         }
 
@@ -46,7 +55,7 @@ public sealed class Gs1DigitalLinkDataMatrixSymbology : BarcodeSymbology
         try
         {
             int written = Gs1DigitalLink.Validate(text, readable);
-            DataMatrixEncoder.BuildSymbol(text, false, DataMatrixFormat.Square, 0, 0, options.XDimension ?? PointXDimension, ref symbol);
+            DataMatrixEncoder.BuildSymbol(text, false, DataMatrixFormat.Square, 0, 0, xDimension, ref symbol);
             symbol.AddMatrixText(readable[..written], BarcodeTextAlignment.Left, Gs1Data.TextScale(options.Font));
         }
         finally

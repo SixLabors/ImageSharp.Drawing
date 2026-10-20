@@ -84,7 +84,7 @@ internal static class ChannelCodeEncoder
     {
         int channels = digits + ChannelsBeyondDigits;
         int finder = shortFinder ? ShortFinderElements : FinderElements;
-        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        double xDimension = options.ResolveXDimension(BarcodeSymbology.DefaultXDimension);
         Span<int> runs = symbol.BeginLinear(finder + (channels * 2), xDimension, out Span<float> heights, out _);
         runs[..finder].Fill(1);
 

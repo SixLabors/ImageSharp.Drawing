@@ -8,7 +8,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// <summary>
 /// Encoder tests for <see cref="SwissQrCodeSymbology"/> against the Swiss Implementation Guidelines for the QR-bill version 2.4. The valid data is the six
 /// examples of Annex A, Tables 17 to 22, with the names as the payment parts print them. Each expected grid is the module grid of an independent reference
-/// implementation at level M with Kanji mode off. Each rejected input changes one line of an example so that it breaks one rule of the guidelines.
+/// implementation at level M with Kanji mode off. That implementation scores the data masks with placeholders in the format information modules, and section
+/// 6.8.2.1 of ISO/IEC 18004 evaluates "the complete symbol", so where that changes the mask the expected grid is the reference grid with its data modules
+/// masked by the pattern chosen over the complete symbol, and the format information of that pattern. Each rejected input changes one line of an example so
+/// that it breaks one rule of the guidelines.
 /// </summary>
 public class SwissQrCodeSymbologyTests
 {
@@ -288,47 +291,47 @@ public class SwissQrCodeSymbologyTests
             "Example3",
             "\n",
             41,
-            "fe69aeaabf8|" +
-            "82d5ca40a08|" +
-            "ba068f9fae8|" +
-            "ba085fdcae8|" +
-            "baa802a62e8|" +
-            "824608d8208|" +
+            "fe8a20923f8|" +
+            "8292d631208|" +
+            "ba08b77c2e8|" +
+            "ba942e1bae8|" +
+            "ba10e1282e8|" +
+            "8237cfc4208|" +
             "feaaaaaabf8|" +
-            "002d425d800|" +
-            "aa5a9716890|" +
-            "1c3a15931d0|" +
-            "0b424668a40|" +
-            "291652b7718|" +
-            "aba429b29e8|" +
-            "498a5d77150|" +
-            "ca9afeef3d0|" +
-            "1d740918490|" +
-            "cec232aa370|" +
-            "7de71557320|" +
-            "77d6cbff820|" +
-            "b87786019d8|" +
-            "e67582a36a8|" +
-            "dc8053151c0|" +
-            "8f577ec2a18|" +
-            "39e215df560|" +
-            "c2463e3b0b0|" +
-            "103e7398050|" +
-            "c7d0e7a6aa0|" +
-            "b9c31325298|" +
-            "a63eb3801a8|" +
-            "1169555f8b0|" +
-            "b36167e32e0|" +
-            "446d9010698|" +
-            "a29222a8fe8|" +
-            "00b35b568b0|" +
-            "fe0bbdeeab0|" +
-            "824270008d0|" +
-            "badaa022fb8|" +
-            "ba61f512550|" +
-            "babeadb6488|" +
-            "826136552f0|" +
-            "fef292582b8"
+            "00ea5e2c000|" +
+            "b754aff5258|" +
+            "d9266454010|" +
+            "877aa5e69c8|" +
+            "356795ab000|" +
+            "9347a78a7d0|" +
+            "384d4106d20|" +
+            "2b14c60cb30|" +
+            "d86878df550|" +
+            "42fad1240f8|" +
+            "6196d24b438|" +
+            "4f3545c7618|" +
+            "c9b09a705a8|" +
+            "07fbba40e48|" +
+            "199c22d2000|" +
+            "036f9d4c990|" +
+            "2593d2c3278|" +
+            "faa5b003e88|" +
+            "61f96fe9c20|" +
+            "265edf45240|" +
+            "7cdf62e2358|" +
+            "2a06500e220|" +
+            "0d189243fa8|" +
+            "8b82e9dbcd8|" +
+            "35aa8c61ae8|" +
+            "431c1a4bf88|" +
+            "00af2a918f0|" +
+            "feb35e60ab8|" +
+            "82b3b71c8c8|" +
+            "ba392e1af80|" +
+            "baa6e963920|" +
+            "bab09555c68|" +
+            "827d4792330|" +
+            "feca71d6130"
         },
         {
             "Example4",
@@ -393,116 +396,116 @@ public class SwissQrCodeSymbologyTests
             "\n",
             53,
             "fe5cf35f8ea3f8|" +
-            "827181a4837208|" +
-            "ba34e66e5992e8|" +
+            "82d513eda7f208|" +
+            "ba26af4acbd2e8|" +
             "ba1db04194eae8|" +
-            "ba0995f99a22e8|" +
-            "82dff38986e208|" +
+            "baad07f8bea2e8|" +
+            "824dba8d14a208|" +
             "feaaaaaaaaabf8|" +
-            "007cde8a07f000|" +
-            "96a07bfe805500|" +
+            "00584c8b236000|" +
+            "aa3232fa121890|" +
             "5d0694e513c520|" +
-            "66dbd2fb124ef0|" +
-            "60049c31e62148|" +
+            "2fff40b236dcb8|" +
+            "4496d515746868|" +
             "6f9e8a7ee1cb28|" +
-            "5ca22b98aae928|" +
-            "53e0adb7b12dd0|" +
+            "1586b9d18e7b60|" +
+            "7772e4932364f0|" +
             "8955e674425450|" +
-            "b6ed4c79d20fa0|" +
-            "e80529c3073d00|" +
+            "ffc9de30f69de8|" +
+            "cc9760e7957420|" +
             "2b560bbeb62638|" +
-            "65260a4570ac70|" +
-            "27bdfa4dbde540|" +
+            "2c02980c543e38|" +
+            "032fb3692fac60|" +
             "64e649770db5c0|" +
-            "ded63fa25df8d0|" +
-            "5c1b5c31201d70|" +
+            "97f2adeb796a98|" +
+            "78891515b25450|" +
             "df8655f8a07fa0|" +
-            "48bda38f55e888|" +
-            "7a9ae3aae96a98|" +
+            "0899318e7178c0|" +
+            "5a88aaae7b2ab8|" +
             "f8f92f8b234880|" +
-            "6f88abfbd2ffe8|" +
-            "cc457031078a40|" +
+            "2fac39faf66fa0|" +
+            "e8d7391595c360|" +
             "9f62ea3a36a4b8|" +
-            "4cac375476eb88|" +
-            "4fc5900289aa10|" +
+            "0588a51d5279c0|" +
+            "6b57d9261be330|" +
             "e12fe991f88720|" +
-            "02469293963828|" +
-            "69122a5cd11ab8|" +
+            "4b6200dab2aa60|" +
+            "4d806378435398|" +
             "5281bba3639be8|" +
-            "143a2b1a3276e8|" +
-            "bbd16d6e24ed98|" +
+            "5d1eb95316e4a0|" +
+            "9f43244ab6a4b8|" +
             "4dd09ffa73b640|" +
-            "a6d4a7221261a8|" +
-            "40f51c6db99760|" +
+            "eff0356b36f3e0|" +
+            "646755492bde40|" +
             "defc98db0f7600|" +
-            "6194b7105497a8|" +
-            "139666ff29efd8|" +
+            "60b025597005e0|" +
+            "13042ffbbbaff8|" +
             "00bbd58a1c58c0|" +
-            "fe5808abdaba80|" +
-            "82b1018f5538e0|" +
-            "ba5c03fa1e0fb0|" +
-            "baf8ebb4550738|" +
-            "ba00244ef4e948|" +
+            "fe7c9aaafe2ac8|" +
+            "8223488bc778c0|" +
+            "badc03fa1e0fb0|" +
+            "ba5c79fd719570|" +
+            "ba926d6a66a068|" +
             "8222aa753257f0|" +
-            "feb47c969c8d70"
+            "fe90eedfb81f38"
         },
         {
             "Example6",
             "\n",
             53,
-            "fe6f0b2f89a3f8|" +
-            "822319dc81f208|" +
-            "ba56c65e5192e8|" +
-            "ba7d904f952ae8|" +
-            "ba0f6df89b22e8|" +
-            "82f41b8d86e208|" +
+            "feba5e7adce3f8|" +
+            "82dce6237e3208|" +
+            "ba83930b04d2e8|" +
+            "ba026fb06aeae8|" +
+            "bada38fdce62e8|" +
+            "820be48a792208|" +
             "feaaaaaaaaabf8|" +
-            "002bf78a07e000|" +
-            "968b0aff104500|" +
-            "693ded6013d520|" +
-            "b6db9feb9246f0|" +
-            "293dad39e63148|" +
-            "6f2840ee39daa8|" +
-            "58dd2b98b2f828|" +
-            "327fb1b66125f8|" +
-            "1593bb75265650|" +
-            "7396d6f8d20f28|" +
-            "395ca9a2a31c60|" +
-            "93659bbf762728|" +
-            "45e43a6574c838|" +
-            "de2a020db842c0|" +
-            "0cfcf9370d75e0|" +
-            "fbe71eaa5f7d10|" +
-            "20dfac51281d40|" +
-            "2feac4fab95fe0|" +
-            "c8820b8b55a888|" +
-            "cabfb3aaf13a98|" +
-            "f8b68f8d234880|" +
-            "3fca03f9aaffe8|" +
-            "b13f407a979040|" +
-            "93da49aab6a6b8|" +
-            "ac5d5e5e10ef88|" +
-            "3a8e274733aa10|" +
-            "b8c5c9ce3e9760|" +
-            "5fb893814e2020|" +
-            "f0c4dadd911ae0|" +
-            "2f2148bb839bf0|" +
-            "cc62331ab277b8|" +
-            "cff0b5efa4ed48|" +
-            "7d8b87fa725718|" +
-            "62833f6214c3a8|" +
-            "1c15bc6dbfd500|" +
-            "dfd2e4bb08f610|" +
-            "61be6f344497b8|" +
-            "131d2cfd29ef98|" +
-            "0099098c1c78c0|" +
-            "fe7be8afd3ba80|" +
-            "8291898ff538e0|" +
-            "ba68c2fe560fb0|" +
-            "ba939232551438|" +
-            "ba14c9cf24e848|" +
-            "821d1536345870|" +
-            "fef74260049d70"
+            "0054088df81800|" +
+            "9fde5ffa4514b8|" +
+            "94c2129fec2ad8|" +
+            "e38ecabec713a0|" +
+            "d4c252c619ceb0|" +
+            "3a7d15bb6c8ff8|" +
+            "a522d4674d07d0|" +
+            "672ae4e33470a8|" +
+            "e86c448ad9a9a8|" +
+            "26c383ad875a78|" +
+            "c4a3565d5ce398|" +
+            "c630ceea237278|" +
+            "b81bc59a8b37c0|" +
+            "8b7f5758ed1790|" +
+            "f10306c8f28a18|" +
+            "aeb24bff0a2840|" +
+            "dd2053aed7e2b8|" +
+            "7fbf91ffec0fb0|" +
+            "38fdf48caa58f0|" +
+            "9aeae6afa46ac8|" +
+            "08c9708adcb8f8|" +
+            "6f9f56fcffafb8|" +
+            "4cc0bf85686fb8|" +
+            "c68f1cffe3f3e8|" +
+            "51a2a1a1ef1070|" +
+            "6fdb721266ff40|" +
+            "453a3631c16898|" +
+            "0aedc6d41b7570|" +
+            "0d3b25226ee518|" +
+            "7a741deed6cea0|" +
+            "319dcce54d8840|" +
+            "9aa5e0baf1b818|" +
+            "807478058da8e0|" +
+            "37d66a374196f8|" +
+            "e1ea4392402af8|" +
+            "de87b1ee5da340|" +
+            "604190cbbb6840|" +
+            "124879f87cbfc8|" +
+            "00e6f68be388b8|" +
+            "feaebdaa86ead0|" +
+            "82ee76880ac898|" +
+            "babd97fb035fe0|" +
+            "baec6dcdaaebc0|" +
+            "ba419c9a71bd18|" +
+            "8262eac9cba788|" +
+            "fea2173551c820"
         },
         {
             "Example3WithMessage",
@@ -682,13 +685,17 @@ public class SwissQrCodeSymbologyTests
     }
 
     /// <summary>
-    /// An X dimension of the caller replaces the one the 46 mm width sets.
+    /// Section 6.4: "The measurements of the Swiss QR Code for printing must always be 46 x 46 mm (without surrounding quiet space) regardless of the Swiss QR
+    /// Code version", so the modules divide 46 mm and an X dimension of the caller is rejected.
     /// </summary>
     [Fact]
-    public void TakesTheXDimensionOfTheCaller()
+    public void IsAlwaysFortySixMillimetresWide()
     {
-        BarcodeOptions options = new() { XDimension = 0.5 };
-        Assert.Equal(0.5, SymbolEncoder.Read(new SwissQrCodeSymbology(), Payload(nameof(Example3), "\n"), options, static (ref symbol) => symbol.XDimension));
+        string text = Payload(nameof(Example3), "\n");
+        SymbolEncoder.Encode(new SwissQrCodeSymbology(), text, new BarcodeOptions(), static (ref symbol) =>
+            Assert.Equal(46.0, symbol.XDimension * symbol.Columns, 1e-9));
+
+        Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new SwissQrCodeSymbology(), text, new BarcodeOptions { XDimension = 0.5 }));
     }
 
     /// <summary>

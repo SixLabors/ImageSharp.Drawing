@@ -8,10 +8,13 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// <summary>
 /// EAN-14, a GS1-128 symbol that carries one element string: the Global Trade Item Number of GS1 Application Identifier (01). Section 3.3.2 of the GS1 General
 /// Specifications gives that identifier a 14 digit GTIN. Table 7-6 gives the element string a total length of 16, and section 7.9 defines the check digit.
+/// The symbol specification tables of section 5.12.3 give GS1-128 X dimensions from 0.170 to 1.016 millimetres, and an X dimension outside that range is
+/// clamped to it.
 /// <para>
 /// The input is the element string syntax, <c>(01)</c> and then the GTIN. Spaces are ignored. Give 13 digits, and this class calculates the check digit. Give
-/// 14 digits, and this class compares the last digit with the calculated one. The interpretation prints the number as the caller grouped it, with a space
-/// before a calculated check digit.
+/// 14 digits, and this class compares the last digit with the calculated one. The interpretation prints the number as the caller grouped it. A
+/// calculated check digit follows a space when the input groups its digits with spaces, which section 4.14 rule 2.a.v permits, and follows the digits
+/// directly otherwise.
 /// </para>
 /// </summary>
 public sealed class Ean14Symbology : BarcodeSymbology
@@ -87,8 +90,19 @@ public sealed class Ean14Symbology : BarcodeSymbology
         supplied[..(GtinLength - 1)].CopyTo(encoded[2..]);
         encoded[^1] = (char)('0' + check);
 
-        // The caption is the input as given, with the check digit after a space when the input left it out.
-        ReadOnlySpan<char> suffix = supplied.Length == GtinLength ? [] : [' ', (char)('0' + check)];
-        Code128Encoder.BuildSymbol(encoded, true, [], text, suffix, options, ref symbol);
+        // The caption is the input as given, with the check digit after it when the input left it out, set off by a space when the input groups its
+        // digits with spaces.
+        char checkCharacter = (char)('0' + check);
+        ReadOnlySpan<char> suffix = supplied.Length == GtinLength ? [] : text.Contains(' ') ? [' ', checkCharacter] : [checkCharacter];
+        Code128Encoder.BuildSymbol(
+            encoded,
+            true,
+            [],
+            text,
+            suffix,
+            Gs1Data.Gs1128MinimumXDimension,
+            Gs1Data.Gs1128MaximumXDimension,
+            options,
+            ref symbol);
     }
 }

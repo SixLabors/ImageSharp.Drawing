@@ -13,6 +13,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 public class IntelligentMailSymbologyTests
 {
     /// <summary>
+    /// The millimetres in an inch.
+    /// </summary>
+    private const double Inch = 25.4;
+
+    /// <summary>
     /// Step 1 of each example, the binary data as 13 bytes.
     /// </summary>
     /// <param name="text">The tracking code followed by the routing code.</param>
@@ -86,49 +91,44 @@ public class IntelligentMailSymbologyTests
     [InlineData("01234567094987654321012345678", "ADFTTAFDTTTTFATTADTAAATFTFTATDAAAFDDADATATDTDTTDFDTDATADADTDFFTFA")]
     [InlineData("0123456709498765432101234567891", "AADTFFDFTDADTAADAATFDTDDAAADDTDTTDAFADADDDTFFFDDTTTADFAAADFTDAADA")]
     public void EncodesTheBars(string text, string bars)
-        => Assert.Equal(bars, SymbolEncoder.Read(new IntelligentMailSymbology(), text, new BarcodeOptions(), States));
+        => Assert.Equal(bars, SymbolEncoder.Read(new IntelligentMailSymbology(), text, new BarcodeOptions(), SymbolEncoder.FourStates));
 
     /// <summary>
-    /// Figure 6 at the 0.020 inch module: bars of 11 run units of 1/550 inch, spaces of 14, a full bar of 0.145 inch, a tracker of 0.048 inch, an extender of
-    /// 0.0485 inch above or below it, and a clear zone of 0.125 inch at each end.
+    /// Section 2.3.1: "an overall barcode height of 0.125 inch to 0.165 inch", "an overall barcode pitch of 22±2 bars per inch", "a width of 0.020±0.005 inch",
+    /// "spacing between bars of 0.012 inch to 0.040 inch", a distance from the lead edge of the 1st bar to the lead edge of the 65th that "shall never be less
+    /// than 2.667 inches", and from the lead edge of the 1st to the trail edge of the 65th that "shall never be greater than 3.225 inches". Section 2.3.2: "A
+    /// minimum clear zone shall be 0.028 inch above and below the barcode and 0.125 inch on each end of the barcode."
     /// </summary>
     [Fact]
     public void DrawsTheDimensionsOfFigureSix()
         => SymbolEncoder.Encode(new IntelligentMailSymbology(), "0123456709498765432101234567891", new BarcodeOptions(), static (ref symbol) =>
         {
-            Assert.Equal(1F / 11F, symbol.RunUnit);
             Assert.Equal(129, symbol.Runs.Length);
-            for (int i = 0; i < symbol.Runs.Length; i++)
+            double unit = symbol.RunUnit * symbol.XDimension / Inch;
+            int leadToLead = 0;
+            for (int i = 0; i < symbol.Runs.Length - 1; i++)
             {
-                Assert.Equal((i & 1) == 0 ? 11 : 14, symbol.Runs[i]);
+                Assert.InRange(symbol.Runs[i] * unit, (i & 1) == 0 ? 0.015 : 0.012, (i & 1) == 0 ? 0.025 : 0.040);
+                leadToLead += symbol.Runs[i];
             }
 
-            float extender = (float)(0.0485 / 0.020);
-            float tracker = (float)(0.048 / 0.020);
-            string states = States(ref symbol);
-            ApproximateFloatComparer comparer = new(1e-4F);
-            for (int i = 0; i < states.Length; i++)
-            {
-                float expectedTop = states[i] is 'A' or 'F' ? 0F : extender;
-                float expectedHeight = states[i] switch
-                {
-                    'T' => tracker,
-                    'F' => extender + tracker + extender,
-                    _ => extender + tracker,
-                };
+            Assert.InRange(symbol.Runs[^1] * unit, 0.015, 0.025);
+            Assert.InRange(64 / (leadToLead * unit), 20, 24);
+            Assert.True(leadToLead * unit >= 2.667);
+            Assert.True((leadToLead + symbol.Runs[^1]) * unit <= 3.225);
 
-                Assert.Equal(expectedTop, symbol.BarTops[i], comparer);
-                Assert.Equal(expectedHeight, symbol.BarHeights[i], comparer);
-            }
-
-            Assert.Equal(6.25F, symbol.LeadingQuietZone);
-            Assert.Equal(6.25F, symbol.TrailingQuietZone);
+            Assert.InRange(SymbolEncoder.BarBottom(ref symbol) * symbol.XDimension / Inch, 0.125, 0.165);
+            Assert.True(symbol.TopQuietZone * symbol.XDimension / Inch >= 0.028 - 1e-6);
+            Assert.True(symbol.BottomQuietZone * symbol.XDimension / Inch >= 0.028 - 1e-6);
+            Assert.True(symbol.LeadingQuietZone * symbol.XDimension / Inch >= 0.125 - 1e-6);
+            Assert.True(symbol.TrailingQuietZone * symbol.XDimension / Inch >= 0.125 - 1e-6);
         });
 
     /// <summary>
     /// Section 2.4.3: the fields of the tracking code and the groups of the routing code, separated by spaces, with the example "01 234 567094 987654321 01234
-    /// 5678 91" for the fourth example of Table 5. A mailer ID that starts with 9 is 9 digits and leaves a 6-digit serial number. Section 2.4.2 aligns the left
-    /// edge of the line with the leftmost bar, and section 2.4.1 keeps it at least 0.028 inch below the bars.
+    /// 5678 91" for the fourth example of Table 5. A mailer ID that starts with 9 is 9 digits and leaves a 6-digit serial number. Section 2.4.2: "the left edge
+    /// of the leftmost digit aligns with the leftmost bar of the IMb". Section 2.4.1: the top of the line "shall be at least 0.028 inch below the bottom of the
+    /// IMb but shall not be more than 0.5 inch below the bottom of the IMb".
     /// </summary>
     /// <param name="text">The digits.</param>
     /// <param name="expected">The printed line.</param>
@@ -148,7 +148,7 @@ public class IntelligentMailSymbologyTests
             Assert.Equal(BarcodeTextSide.BelowBars, placement.Side);
             Assert.Equal(BarcodeTextAlignment.Left, placement.Alignment);
             Assert.Equal(0F, placement.Left);
-            Assert.Equal((float)((0.145 / 0.020) + (0.028 / 0.020)), placement.TextEdge, new ApproximateFloatComparer(1e-4F));
+            Assert.InRange((placement.TextEdge - SymbolEncoder.BarBottom(ref symbol)) * symbol.XDimension / Inch, 0.028 - 1e-6, 0.5);
         });
     }
 
@@ -162,24 +162,4 @@ public class IntelligentMailSymbologyTests
     [InlineData("０1234567094987654321")]
     public void RejectsMalformedInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => SymbolEncoder.Encode(new IntelligentMailSymbology(), text, new BarcodeOptions()));
-
-    /// <summary>
-    /// Reads the bar states of a symbol from the bar tops and heights: F for a full bar, A for an ascender, D for a descender and T for a tracker.
-    /// </summary>
-    /// <param name="symbol">The encoded symbol.</param>
-    /// <returns>The bar states.</returns>
-    private static string States(ref BarcodeSymbol symbol)
-    {
-        float extender = (float)(0.0485 / 0.020);
-        float tracker = (float)(0.048 / 0.020);
-        char[] states = new char[symbol.BarHeights.Length];
-        for (int i = 0; i < states.Length; i++)
-        {
-            bool up = symbol.BarTops[i] == 0F;
-            bool down = symbol.BarTops[i] + symbol.BarHeights[i] > extender + tracker + 0.001F;
-            states[i] = up && down ? 'F' : up ? 'A' : down ? 'D' : 'T';
-        }
-
-        return new string(states);
-    }
 }

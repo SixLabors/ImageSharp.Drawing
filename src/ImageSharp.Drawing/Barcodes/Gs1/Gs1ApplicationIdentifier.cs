@@ -17,7 +17,6 @@ internal sealed class Gs1ApplicationIdentifier
     /// <param name="predefinedLength">Whether the element string has a predefined length and takes no separator.</param>
     /// <param name="dataAttribute">Whether the Application Identifier may be a data attribute of a GS1 Digital Link URI.</param>
     /// <param name="components">The components of the data, in order.</param>
-    /// <param name="requisites">The requisite rules, each a list of groups of Application Identifier patterns.</param>
     /// <param name="exclusions">The Application Identifier patterns that may not appear with this one.</param>
     /// <param name="keyQualifiers">The qualifier sequences of a GS1 Digital Link primary key, or <see langword="null"/> when it is not one.</param>
     public Gs1ApplicationIdentifier(
@@ -26,7 +25,6 @@ internal sealed class Gs1ApplicationIdentifier
         bool predefinedLength,
         bool dataAttribute,
         Gs1Component[] components,
-        string[][][] requisites,
         string[] exclusions,
         string[][]? keyQualifiers)
     {
@@ -35,7 +33,6 @@ internal sealed class Gs1ApplicationIdentifier
         this.PredefinedLength = predefinedLength;
         this.DataAttribute = dataAttribute;
         this.Components = components;
-        this.Requisites = requisites;
         this.Exclusions = exclusions;
         this.KeyQualifiers = keyQualifiers;
 
@@ -71,12 +68,6 @@ internal sealed class Gs1ApplicationIdentifier
     /// Gets the components of the data, in order.
     /// </summary>
     public Gs1Component[] Components { get; }
-
-    /// <summary>
-    /// Gets the requisite rules. Each rule is a list of groups, and a rule holds when every pattern of at least one group matches another element string of the
-    /// data.
-    /// </summary>
-    public string[][][] Requisites { get; }
 
     /// <summary>
     /// Gets the Application Identifier patterns that may not appear in the same data as this one.

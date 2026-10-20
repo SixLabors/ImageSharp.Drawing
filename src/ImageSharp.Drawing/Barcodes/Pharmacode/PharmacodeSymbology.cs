@@ -9,20 +9,22 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// code from the value Z: while Z is not zero, an even Z takes a thick bar in the lowest position left and becomes (Z - 2) / 2, and an odd Z takes a thin bar
 /// and becomes (Z - 1) / 2.
 /// <para>
-/// Section 1.2 gives the standard dimensions: a thin bar of 0.5 mm, a thick bar of 1.5 mm, a gap of 1.0 mm and a height of 8.0 mm, so at the 0.5 mm module a
-/// thin bar is 1 module, a thick bar 3, a gap 2 and the height 16. The quiet zone is 6 mm on either side of the symbol, which is 12 modules. The printed line
-/// shows the number as given.
+/// Section 1.2 gives the standard dimensions: a thin bar of 0.5 mm, a thick bar of 1.5 mm, a gap of 1.0 mm and a height of 8.0 mm, so a thin bar is 1
+/// module, a thick bar 3 and a gap 2. The X dimension is the width of the thin bar, from 0.3 mm to 0.7 mm. From 0.45 mm to 0.7 mm the bars and gaps keep
+/// the limits of the standard Pharmacode of section 1.2, and from 0.3 mm to 0.45 mm the limits of the miniature Pharmacode of section 1.3. The bars are
+/// 8.0 mm high when the caller sets no height, and the symbol keeps 6 mm clear on either side, the gap section 2.2.4 gives between the first or last code bar
+/// and other print. The guide defines no text line, so a font prints none.
 /// </para>
 /// </summary>
 public sealed class PharmacodeSymbology : BarcodeSymbology
 {
     /// <summary>
-    /// The smallest value, two thin bars.
+    /// The smallest value, two thin bars. Section 4.9.2: "coding that is only one bar wide should never be used".
     /// </summary>
     public const int MinimumValue = 3;
 
     /// <summary>
-    /// The largest value, sixteen thick bars.
+    /// The largest value, sixteen thick bars, the last count of the table of section 4.1.
     /// </summary>
     public const int MaximumValue = 131070;
 
@@ -32,9 +34,22 @@ public sealed class PharmacodeSymbology : BarcodeSymbology
     private const double XDimension = 0.5;
 
     /// <summary>
-    /// The quiet zone in modules on each side: 6 mm at the 0.5 mm module.
+    /// The smallest X dimension in millimetres, the smallest thin bar of the miniature Pharmacode of section 1.3. A thick bar of three modules and a gap of two
+    /// stay inside the limits of section 1.3 up to 0.45 mm.
     /// </summary>
-    private const int QuietZone = 12;
+    private const double MinimumXDimension = 0.3;
+
+    /// <summary>
+    /// The largest X dimension in millimetres, the largest thin bar of the standard Pharmacode of section 1.2. A thick bar of three modules and a gap of two
+    /// stay inside the limits of section 1.2 from 0.45 mm.
+    /// </summary>
+    private const double MaximumXDimension = 0.7;
+
+    /// <summary>
+    /// The clear space in millimetres on each side. Section 2.2.4: "The gap between the first or last code bar and the extraneous print or the edges of the
+    /// paper or the start or end bar "D" should be a minimum of 6 mm."
+    /// </summary>
+    private const double QuietZone = 6;
 
     /// <summary>
     /// The width of a thin bar in modules, 0.5 mm.
@@ -52,9 +67,9 @@ public sealed class PharmacodeSymbology : BarcodeSymbology
     private const int Gap = 2;
 
     /// <summary>
-    /// The bar height in modules when the caller sets none: 8.0 mm at the 0.5 mm module.
+    /// The bar height in millimetres when the caller sets none, the standard code bar height of section 1.2.
     /// </summary>
-    private const float NominalBarHeight = 16F;
+    private const double NominalBarHeight = 8.0;
 
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
@@ -72,7 +87,8 @@ public sealed class PharmacodeSymbology : BarcodeSymbology
             value = (value - (thick ? 2 : 1)) / 2;
         }
 
-        double xDimension = options.XDimension ?? XDimension;
+        double xDimension = options.ResolveXDimension(MinimumXDimension, XDimension, MaximumXDimension);
+
         Span<int> runs = symbol.BeginLinear((count * 2) - 1, xDimension, out Span<float> heights, out _);
 
         // The bars were found from the right end, so they are written in reverse, with a gap between each pair.
@@ -82,17 +98,10 @@ public sealed class PharmacodeSymbology : BarcodeSymbology
             runs[i * 2] = bars[count - 1 - i];
         }
 
-        int widthInModules = BarcodeSymbol.RunWidth(runs);
-
-        float barHeight = options.ResolveBarHeight(xDimension, NominalBarHeight);
+        float barHeight = options.ResolveBarHeight(xDimension, (float)(NominalBarHeight / xDimension));
         heights.Fill(barHeight);
 
-        if (options.Font is not null)
-        {
-            symbol.ReserveText(1, text.Length);
-            symbol.AddText(text, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);
-        }
-
-        symbol.EndLinear(QuietZone, QuietZone);
+        float quietZone = (float)(QuietZone / xDimension);
+        symbol.EndLinear(quietZone, quietZone);
     }
 }

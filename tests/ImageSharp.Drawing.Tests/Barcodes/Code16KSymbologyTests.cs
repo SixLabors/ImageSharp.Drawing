@@ -155,7 +155,7 @@ public class Code16KSymbologyTests
     [Fact]
     public void Code16K_BarHeightOptionSetsRowHeight()
     {
-        BarcodeOptions options = new() { BarHeight = 12F * BarcodeSymbology.PointXDimension };
+        BarcodeOptions options = new() { BarHeight = 12F * BarcodeSymbology.DefaultXDimension };
         ApproximateFloatComparer comparer = new(1e-4F);
         SymbolEncoder.Encode(new Code16KSymbology(), "A", options, (ref symbol) =>
         {

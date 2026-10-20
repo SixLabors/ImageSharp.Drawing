@@ -7,8 +7,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
 /// The Interleaved 2 of 5 symbology, which AIM USS-I 2/5 defines and ISO/IEC 16390 succeeded. It carries the digits 0 to 9. Section 2.1 gives every character
-/// "two wide elements and three narrow elements", and section 2.2.3 encodes "the more significant digit in the bars and the less significant digit in the
-/// spaces", so a symbol carries an even number of digits. A symbol carries a start pattern, the digit pairs and a stop pattern.
+/// "two wide elements and three narrow elements". Section 2.2.3: "the more significant digit is encoded in the bars and the less significant digit is encoded
+/// in the spaces", so a symbol carries an even number of digits. A symbol carries a start pattern, the digit pairs and a stop pattern.
 /// <para>
 /// Section 2.2.1 requires a leading zero for an odd number of digits: "then a leading zero must be added to produce an even number of digits". Section 2.5
 /// makes the check digit optional, and Appendix C recommends the modulo 10 calculation with alternate weights of 1 and 3 that section 7.9 of the GS1 General
@@ -53,7 +53,8 @@ public sealed class Interleaved2Of5Symbology : BarcodeSymbology
 
     /// <summary>
     /// Gets a value indicating whether a check digit the symbol carries is part of the human readable interpretation. A symbol that carries none prints none
-    /// either way.
+    /// either way. Appendix D of AIM USS-I 2/5: "The presentation should include all numeric characters in the code including leading zeroes", so the
+    /// constructors that do not take this value print the check digit.
     /// </summary>
     public bool PrintCheckDigit { get; }
 
@@ -99,7 +100,7 @@ public sealed class Interleaved2Of5Symbology : BarcodeSymbology
             }
 
             ReadOnlySpan<char> readable = check is null || this.PrintCheckDigit ? encoded : encoded[..^1];
-            Interleaved2Of5Encoder.BuildSymbol(encoded, readable, options, options.XDimension ?? PointXDimension, ref symbol);
+            Interleaved2Of5Encoder.BuildSymbol(encoded, readable, options, options.ResolveXDimension(DefaultXDimension), ref symbol);
         }
         finally
         {

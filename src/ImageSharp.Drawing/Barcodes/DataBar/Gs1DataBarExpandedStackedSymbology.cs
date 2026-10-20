@@ -54,6 +54,7 @@ public sealed class Gs1DataBarExpandedStackedSymbology : BarcodeSymbology
         try
         {
             Gs1Data.Prepare(text, ref encoded);
+            DataBarExpandedEncoder.ValidateGtinFirst(text);
 
             // The interpretation is never longer than the text, which PreparedCapacity bounds to 122 characters, so the inline buffer always holds it.
             InlineArray128<char> readableStorage = default;
@@ -66,6 +67,8 @@ public sealed class Gs1DataBarExpandedStackedSymbology : BarcodeSymbology
                 readable[..readableLength],
                 [],
                 BarcodeTextSide.BelowBars,
+                DataBarEncoder.MinimumXDimension,
+                DataBarEncoder.MaximumXDimension,
                 options,
                 ref symbol);
         }

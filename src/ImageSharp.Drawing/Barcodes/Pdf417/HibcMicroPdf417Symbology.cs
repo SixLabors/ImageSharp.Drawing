@@ -8,6 +8,12 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// <summary>
 /// HIBC MicroPDF417, a Health Industry Bar Code carried by a MicroPDF417 symbol. The symbol carries the flag character, the data and the modulo 43 check
 /// character.
+/// The text follows a data structure of ANSI/HIBC 2.6: primary data, secondary data that ends with its link character, or primary and secondary data joined
+/// with "/", each with any supplemental data fields.
+/// <para>
+/// When a font is set, that same string prints below the symbol between delimiters, with a space printed as an underscore and a zero as "Ø". Primary and
+/// secondary data that the symbol joins with "/" print on two lines, broken after the "/".
+/// </para>
 /// </summary>
 public sealed class HibcMicroPdf417Symbology : BarcodeSymbology
 {
@@ -59,6 +65,10 @@ public sealed class HibcMicroPdf417Symbology : BarcodeSymbology
             HibcData.Prepare(text, this.ValidateCheckCharacter, ref encoded);
 
             MicroPdf417Encoder.BuildSymbol(encoded.AsSpan(), this.Columns, options, ref symbol);
+            if (options.Font is not null)
+            {
+                HibcData.AddStackedReadable(encoded.AsSpan(), ref symbol);
+            }
         }
         finally
         {

@@ -428,4 +428,22 @@ public class MaxiCodeSymbologyTests
     [Fact]
     public void RejectsCharactersAboveLatin1()
         => Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new MaxiCodeSymbology(), "Ā", new BarcodeOptions()));
+
+    /// <summary>
+    /// Table 7 gives W = X = L/29 = 0.88 mm at L = 25.50 mm, and section 4.11.1: "The acceptable range of L is 24.00 mm to 27.00 mm." The hexagonal modules
+    /// draw at the exact X dimension, so an X dimension inside that range draws as given and one outside it draws at the nearest limit.
+    /// </summary>
+    /// <param name="xDimension">The X dimension of the caller in millimetres, or <see langword="null"/> for the default.</param>
+    /// <param name="expected">The X dimension the symbol draws at in millimetres.</param>
+    [Theory]
+    [InlineData(null, 0.88)]
+    [InlineData(0.9, 0.9)]
+    [InlineData(0.5, 24.00 / 29)]
+    [InlineData(2.0, 27.00 / 29)]
+    public void ClampsTheXDimensionToTheRangeOfSectionFourElevenOne(double? xDimension, double expected)
+        => SymbolEncoder.Encode(
+            new MaxiCodeSymbology(),
+            "This is MaxiCode",
+            new BarcodeOptions { XDimension = xDimension },
+            (ref symbol) => Assert.Equal(expected, symbol.XDimension, 1e-12));
 }

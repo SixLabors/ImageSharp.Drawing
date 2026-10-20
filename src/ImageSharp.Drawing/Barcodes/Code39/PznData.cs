@@ -30,9 +30,25 @@ internal static class PznData
     private const float NominalBarHeight = 40F;
 
     /// <summary>
+    /// The smallest size of the printed line in points. IFA prints the PZN "in a well-readable font size (at least 6 pt. for a small code)".
+    /// </summary>
+    private const float MinimumTextSize = 6F;
+
+    /// <summary>
     /// The X dimension in millimetres a symbol takes when the caller sets none: the nominal module width of 0.25 mm that IFA gives.
     /// </summary>
     private const double NominalXDimension = 0.25;
+
+    /// <summary>
+    /// The smallest X dimension in millimetres. IFA: "The code size may vary within the limits stipulated by the parameter listed below", and "Permissible is
+    /// a minimal width: Module width X = 187 µm".
+    /// </summary>
+    private const double MinimumXDimension = 0.187;
+
+    /// <summary>
+    /// The largest X dimension in millimetres. IFA: "a maximum code size: Module width X = 450 µm".
+    /// </summary>
+    private const double MaximumXDimension = 0.45;
 
     /// <summary>
     /// The modulus of the check digit. IFA: "The check digit of the PZN is calculated based on mod 11."
@@ -94,8 +110,10 @@ internal static class PznData
             encoded[1..],
             [],
             options,
-            options.XDimension ?? NominalXDimension,
+            options.ResolveXDimension(MinimumXDimension, NominalXDimension, MaximumXDimension),
             NominalBarHeight,
             ref symbol);
+
+        symbol.SetTextSize(MinimumTextSize, 0F);
     }
 }

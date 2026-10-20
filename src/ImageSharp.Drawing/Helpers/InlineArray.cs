@@ -9,6 +9,15 @@ using System.Runtime.CompilerServices;
 namespace SixLabors.ImageSharp.Drawing;
 
 /// <summary>
+/// Represents a safe, fixed sized buffer of 1 elements.
+/// </summary>
+[InlineArray(1)]
+internal struct InlineArray1<T>
+{
+    private T t;
+}
+
+/// <summary>
 /// Represents a safe, fixed sized buffer of 2 elements.
 /// </summary>
 [InlineArray(2)]

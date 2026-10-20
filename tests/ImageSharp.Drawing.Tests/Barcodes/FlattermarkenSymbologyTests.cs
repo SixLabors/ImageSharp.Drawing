@@ -41,6 +41,21 @@ public class FlattermarkenSymbologyTests
             Assert.Equal(0, symbol.TrailingQuietZone);
         });
 
+    /// <summary>
+    /// The TEC-IT Barcode Reference gives a "Symbol height between 5 and 10mm" and a module width of 2 to 3 mm. The bars are 10 mm high at any module width:
+    /// 5 modules at 2 mm and 10 / 3 modules at 3 mm.
+    /// </summary>
+    /// <param name="xDimension">The X dimension in millimetres.</param>
+    [Theory]
+    [InlineData(2.0)]
+    [InlineData(3.0)]
+    public void DrawsBarsTenMillimetresHigh(double xDimension)
+    {
+        BarcodeOptions options = new() { Dpi = SymbolEncoder.MillimetreDpi, XDimension = xDimension };
+        SymbolEncoder.Encode(new FlattermarkenSymbology(), "11099", options, (ref symbol) =>
+            Assert.All(symbol.BarHeights.ToArray(), height => Assert.Equal((float)(10 / xDimension), height, 1e-4F)));
+    }
+
     [Fact]
     public void PrintsTheDigitsAsGiven()
     {

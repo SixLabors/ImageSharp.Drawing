@@ -14,13 +14,22 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// and rule 2b keeps the separators out of it. The human readable interpretation prints the element strings on one line, except an element string of
 /// Application Identifier (8200), which does not print.
 /// </para>
+/// <para>
+/// The symbol specification tables of section 5.12.3 give GS1-128 X dimensions from 0.170 to 1.016 millimetres, and an X dimension outside that range is
+/// clamped to it.
+/// </para>
 /// </summary>
 public sealed class Gs1128Symbology : BarcodeSymbology
 {
     /// <summary>
-    /// The largest number of data characters section 5.4.1 allows in one symbol.
+    /// The largest number of data characters in one symbol. Section 5.4.4.3: "The number of encoded data characters SHALL NOT exceed 48."
     /// </summary>
     private const int MaximumDataCharacters = 48;
+
+    /// <summary>
+    /// The largest length of a symbol in millimetres. Section 5.4.4.3: "The length, including Quiet Zones, cannot exceed 165.10 millimetres (6.500 inches)."
+    /// </summary>
+    private const double MaximumLength = 165.10;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Gs1128Symbology"/> class.
@@ -44,7 +53,24 @@ public sealed class Gs1128Symbology : BarcodeSymbology
             InlineArray128<char> readableStorage = default;
             Span<char> readable = readableStorage;
             int readableLength = options.Font is null ? 0 : Gs1Data.WriteReadable(text, false, readable);
-            Code128Encoder.BuildSymbol(encoded.AsSpan(), true, [], readable[..readableLength], [], options, ref symbol);
+            Code128Encoder.BuildSymbol(
+                encoded.AsSpan(),
+                true,
+                [],
+                readable[..readableLength],
+                [],
+                Gs1Data.Gs1128MinimumXDimension,
+                Gs1Data.Gs1128MaximumXDimension,
+                options,
+                ref symbol);
+
+            double length = (symbol.LeadingQuietZone + symbol.WidthInModules + symbol.TrailingQuietZone) * symbol.XDimension;
+            if (length > MaximumLength)
+            {
+                throw new ArgumentException(
+                    $"A GS1-128 symbol with its quiet zones is at most {MaximumLength} mm long; this one is {length:0.##} mm at its X dimension.",
+                    nameof(text));
+            }
         }
         finally
         {

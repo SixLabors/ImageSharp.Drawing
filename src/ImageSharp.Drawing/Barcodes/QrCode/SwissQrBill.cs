@@ -11,7 +11,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// <summary>
 /// The data of a Swiss QR Code, chapter 4 of the Swiss Implementation Guidelines for the QR-bill: the character set of section 4.1.1, the separators of section
 /// 4.1.4, the data groups of section 4.1.5 and the lines of Table 8, with the rules of chapter 2, sections 4.3 and 4.4 and Annex B. The checks follow version
-/// 2.4 of the guidelines. Version 2.4 adds one rule to version 2.3, a QR reference in CHF only, so data that passes the checks follows both versions.
+/// 2.4 of the guidelines. Against version 2.3, version 2.4 permits only an IBAN with a Creditor Reference or no reference for EUR, and Table 10 adds the
+/// Romansh text BETG DUVRAR PER IL PAJAMENT, which version 2.3 does not have.
 /// </summary>
 internal static class SwissQrBill
 {

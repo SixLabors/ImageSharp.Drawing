@@ -41,9 +41,14 @@ internal static class HexagonalEmitter
     /// <param name="symbol">The encoded hexagonal symbol.</param>
     /// <param name="options">The sizing and painting options.</param>
     /// <param name="origin">The top left corner of the barcode, in pixels.</param>
+    /// <param name="symbolOrigin">The top left corner of the first module of the symbol, in pixels, before it rounds onto the pixel grid.</param>
     /// <returns>The measured layout of the symbol.</returns>
-    public static BarcodeMetrics Measure(ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin)
-        => new HexagonLayout(ref symbol, options, origin).Metrics;
+    public static BarcodeMetrics Measure(ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin, out PointF symbolOrigin)
+    {
+        HexagonLayout layout = new(ref symbol, options, origin);
+        symbolOrigin = layout.SymbolOrigin;
+        return layout.Metrics;
+    }
 
     /// <summary>
     /// Draws the symbol onto the canvas.
@@ -196,6 +201,11 @@ internal static class HexagonalEmitter
         /// Gets the union of the dark hexagons, in pixels.
         /// </summary>
         public RectangleF HexagonInk { get; }
+
+        /// <summary>
+        /// Gets the top left corner of the first module of the symbol, in pixels.
+        /// </summary>
+        public PointF SymbolOrigin => new((float)this.left, (float)this.top);
 
         /// <summary>
         /// Gets the metrics of the layout.

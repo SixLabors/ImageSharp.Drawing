@@ -50,8 +50,9 @@ internal static class JapanPostEncoder
 
     /// <summary>
     /// The dimensions of page 12 of the Japan Post zip code and barcode manual at the 10 point size: a bar width of 0.6 mm, a bar pitch of 1.2 mm, so a space
-    /// of 0.6 mm, a timing bar of 1.2 mm and a long bar of 3.6 mm, so an extender of 1.2 mm above or below the timing bar. Page 13: "2mm以上の空白", a clear space
-    /// of at least 2 mm above, below, left and right of the barcode, which also stands between the bars and the human readable interpretation.
+    /// of 0.6 mm, a timing bar of 1.2 mm and a long bar of 3.6 mm, so an extender of 1.2 mm above or below the timing bar. Every size is "×a/10" for a size of
+    /// a points, 8 to 11.5, so the bars stay proportional to the bar width. Page 13: "2mm以上の空白", a clear space of at least 2 mm above, below, left and right
+    /// of the barcode. The bar width sets the size a, so it is clamped to the bar width of 0.6×a/10 mm at the permitted sizes "8≦ａ≦11.5": 0.48 to 0.69 mm.
     /// </summary>
     public static readonly FourStateMetrics Metrics = new(
         0.6,
@@ -65,7 +66,13 @@ internal static class JapanPostEncoder
         (float)(2 / 0.6),
         BarcodeTextSide.BelowBars,
         (float)(2 / 0.6),
-        BarcodeTextAlignment.Centered);
+        BarcodeTextAlignment.Centered,
+        null,
+        true)
+    {
+        MinimumXDimension = 0.6 * 8 / 10,
+        MaximumXDimension = 0.6 * 11.5 / 10,
+    };
 
     /// <summary>
     /// Gets the bar states of every code value, three per code, as <see cref="FourState"/> values: the digits 0 to 9, the hyphen and CC1 to CC8.

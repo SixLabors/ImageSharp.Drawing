@@ -19,9 +19,15 @@ internal static class TelepenEncoder
     public const int MaximumLength = 500;
 
     /// <summary>
-    /// The quiet zone in modules on each side: the "minimum quiet zone width of 10X or 2.54 mm, whichever is greater".
+    /// The quiet zone in modules on each side.
     /// </summary>
     public const int QuietZone = 10;
+
+    /// <summary>
+    /// The X dimension in millimetres a symbol takes when the caller sets none, 0.0125 inch. The Telepen history of SB Electronic Systems: "For normal
+    /// applications the recommended value of x should be between 0.010 inch an 0.0125".
+    /// </summary>
+    private const double NominalXDimension = 0.0125 * 25.4;
 
     /// <summary>
     /// The number of characters a caller holds inline to build symbol data in. Longer data rents its buffer once.
@@ -74,7 +80,7 @@ internal static class TelepenEncoder
     private const int WideElement = 3;
 
     /// <summary>
-    /// The bar height as a fraction of the symbol width, quiet zones excluded, when the caller sets no height: 15 per cent, and at least
+    /// The bar height as a fraction of the symbol length, the quiet zones included, when the caller sets no height: 15 per cent, and at least
     /// <see cref="MinimumBarHeightMillimetres"/>.
     /// </summary>
     private const float NominalBarHeightFraction = 0.15F;
@@ -121,7 +127,7 @@ internal static class TelepenEncoder
     {
         // Every run is at least one module and a character is sixteen modules, so a character is at most sixteen runs. The symbol reserves that many runs and
         // keeps those it writes. The stop code ends on a bar, so the space written after it is dropped.
-        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        double xDimension = options.ResolveXDimension(NominalXDimension);
         Span<int> runs = symbol.BeginLinear((values.Length + FrameCharacters) * ModulesPerCharacter, xDimension, out Span<float> heights, out _);
         int written = 0;
         Append(runs, ref written, Start);
@@ -137,7 +143,7 @@ internal static class TelepenEncoder
 
         int widthInModules = BarcodeSymbol.RunWidth(runs);
 
-        float nominalBarHeight = MathF.Max(widthInModules * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
+        float nominalBarHeight = MathF.Max((widthInModules + (2 * QuietZone)) * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
         float barHeight = options.ResolveBarHeight(xDimension, nominalBarHeight);
         heights[..((runs.Length + 1) >> 1)].Fill(barHeight);
 

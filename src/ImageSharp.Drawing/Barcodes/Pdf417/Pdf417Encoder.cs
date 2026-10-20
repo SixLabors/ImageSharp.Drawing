@@ -207,7 +207,18 @@ internal static class Pdf417Encoder
             ? Start.Length + ((c + 1) * Pdf417Patterns.ElementCount) + 1
             : Start.Length + ((c + 2) * Pdf417Patterns.ElementCount) + Stop.Length;
 
-        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        double xDimension = options.ResolveXDimension(BarcodeSymbology.DefaultXDimension);
+
+        // Section 5.8.2: the row height is "Y >= 3X".
+        if (options.IsBarHeightUnder(NominalRowHeight * xDimension))
+        {
+            double minimum = NominalRowHeight * xDimension;
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                options.BarHeight,
+                $"A row is at least 3X high, {minimum:0.##} mm at its X dimension; the bar height is {options.BarHeight:0.##} mm.");
+        }
+
         float rowHeight = options.ResolveBarHeight(xDimension, NominalRowHeight);
 
         ReadOnlySpan<int> patterns = Pdf417Patterns.Modules;

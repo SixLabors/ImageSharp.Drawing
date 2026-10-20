@@ -70,7 +70,7 @@ public sealed class RectangularMicroQrCodeSymbology : BarcodeSymbology
             QrFormat.Rectangular,
             this.ErrorCorrectionLevel,
             (int?)this.Version ?? 0,
-            options.XDimension ?? PointXDimension,
+            options.ResolveXDimension(DefaultMatrixXDimension),
             ref symbol);
     }
 }

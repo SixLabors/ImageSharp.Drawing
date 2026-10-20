@@ -36,7 +36,7 @@ public class Gs1DataBarTruncatedSymbologyTests
     [Fact]
     public void Gs1DataBarTruncated_BarHeightOptionSetsTheHeight()
     {
-        BarcodeOptions options = new() { BarHeight = 20F * DataBarEncoder.NominalXDimension };
+        BarcodeOptions options = new() { Dpi = SymbolEncoder.MillimetreDpi, BarHeight = 20F * DataBarEncoder.NominalXDimension };
         float height = SymbolEncoder.Read(new Gs1DataBarTruncatedSymbology(), "(01)00012345678905", options, static (ref symbol) => symbol.HeightInModules);
         Assert.Equal(20F, height, new ApproximateFloatComparer(1e-4F));
     }

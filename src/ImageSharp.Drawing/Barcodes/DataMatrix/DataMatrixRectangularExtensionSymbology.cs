@@ -53,7 +53,7 @@ public sealed class DataMatrixRectangularExtensionSymbology : BarcodeSymbology
             DataMatrixFormat.RectangularExtension,
             this.Rows ?? 0,
             this.Columns ?? 0,
-            options.XDimension ?? PointXDimension,
+            options.ResolveXDimension(DefaultMatrixXDimension),
             ref symbol);
     }
 }

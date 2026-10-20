@@ -24,7 +24,7 @@ public class FourStateMailmarkSymbologyTests
     [InlineData("11000000000000000XY11     ", "TTDTTATDDTTATTDTAATTDTAATDDTTATTDTTDATFTAATDDTAATDDTATATFAADDAATAATDDTAADFTFTA")]
     [InlineData("41038422416563762EF61AH8T ", "DTTFATTDDTATTTATFTDFFFTFDFDAFTTTADTTFDTFDDDTDFDDFTFAADTFDTDTDTFAATAFDDTAATTDTT")]
     public void EncodesTheExamplesOfTheInstructions(string text, string bars)
-        => Assert.Equal(bars, SymbolEncoder.Read(new FourStateMailmarkSymbology(), text, new BarcodeOptions(), States));
+        => Assert.Equal(bars, SymbolEncoder.Read(new FourStateMailmarkSymbology(), text, new BarcodeOptions(), SymbolEncoder.FourStates));
 
     /// <summary>
     /// Section 2.2.2 of barcode C, Table 12: the destination "JW5O9QA6Y" has the internal user field value 118,259,964,139, and Table 9 gives the international
@@ -75,24 +75,64 @@ public class FourStateMailmarkSymbologyTests
     }
 
     /// <summary>
-    /// The bars are the Royal Mail 4-state bars of Table 11 of the Mailmark barcode definition document.
+    /// The bars are the Royal Mail 4-state bars of Table 11 of the Mailmark barcode definition document, 66 of them.
     /// </summary>
     [Fact]
     public void DrawsTheRoyalMailDimensions()
         => SymbolEncoder.Encode(new FourStateMailmarkSymbology(), "21B2254800659JW5O9QA6Y", new BarcodeOptions(), static (ref symbol) =>
         {
-            Assert.Equal(1F / 54F, symbol.RunUnit);
             Assert.Equal(131, symbol.Runs.Length);
-            Assert.Equal((float)(2 / 0.54), symbol.LeadingQuietZone);
-            Assert.Equal((float)(2 / 0.54), symbol.TrailingQuietZone);
+            AssertTableEleven(ref symbol);
         });
 
+    /// <summary>
+    /// Asserts the acceptable sizes of Table 11 of the Mailmark barcode definition document: an ascender and a descender of 1.60 to 2.16 mm, a tracker of 1.02
+    /// to 1.52 mm, a full bar of 4.22 to 5.84 mm and a bar width of 0.38 to 0.63 mm. The text below Table 11: "It is required that there are between 20 and 24
+    /// bars per inch (25.4mm) and they must be equally spaced." Section 3.5.2: "There must be a clear zone of at least 2mm around all edges".
+    /// </summary>
+    /// <param name="symbol">The encoded symbol.</param>
+    internal static void AssertTableEleven(ref BarcodeSymbol symbol)
+    {
+        double unit = symbol.RunUnit * symbol.XDimension;
+        int pitch = symbol.Runs[0] + symbol.Runs[1];
+        for (int i = 0; i < symbol.Runs.Length; i += 2)
+        {
+            Assert.InRange(symbol.Runs[i] * unit, 0.38, 0.63);
+        }
+
+        for (int i = 1; i < symbol.Runs.Length; i += 2)
+        {
+            Assert.Equal(pitch, symbol.Runs[i - 1] + symbol.Runs[i]);
+        }
+
+        Assert.InRange(25.4 / (pitch * unit), 20, 24);
+
+        // A tracker stands below the ascender part and above the descender part, and the full bar spans all three.
+        string states = SymbolEncoder.FourStates(ref symbol);
+        int tracker = states.IndexOf('T');
+        float trackerTop = symbol.BarTops[tracker];
+        float trackerBottom = trackerTop + symbol.BarHeights[tracker];
+        float bottom = SymbolEncoder.BarBottom(ref symbol);
+        Assert.InRange(trackerTop * symbol.XDimension, 1.60, 2.16);
+        Assert.InRange(symbol.BarHeights[tracker] * symbol.XDimension, 1.02, 1.52);
+        Assert.InRange((bottom - trackerBottom) * symbol.XDimension, 1.60, 2.16);
+        Assert.InRange(bottom * symbol.XDimension, 4.22, 5.84);
+
+        Assert.True(symbol.LeadingQuietZone * symbol.XDimension >= 2 - 1e-4);
+        Assert.True(symbol.TrailingQuietZone * symbol.XDimension >= 2 - 1e-4);
+        Assert.True(symbol.TopQuietZone * symbol.XDimension >= 2 - 1e-4);
+        Assert.True(symbol.BottomQuietZone * symbol.XDimension >= 2 - 1e-4);
+    }
+
+    /// <summary>
+    /// The Mailmark barcode definition document and the barcode C and L instructions define no text line, so a font prints none.
+    /// </summary>
     [Fact]
-    public void PrintsTheApplicationStringAsGiven()
+    public void PrintsNoText()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        string[] texts = SymbolEncoder.Read(new FourStateMailmarkSymbology(), "21B2254800659JW5O9QA6Y", options, SymbolEncoder.Texts);
-        Assert.Equal("21B2254800659JW5O9QA6Y", Assert.Single(texts));
+
+        Assert.Empty(SymbolEncoder.Read(new FourStateMailmarkSymbology(), "21B2254800659JW5O9QA6Y", options, SymbolEncoder.Texts));
     }
 
     [Theory]
@@ -108,24 +148,4 @@ public class FourStateMailmarkSymbologyTests
     [InlineData("21B2254800659jw5o9qa6y")]
     public void RejectsMalformedInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => SymbolEncoder.Encode(new FourStateMailmarkSymbology(), text, new BarcodeOptions()));
-
-    /// <summary>
-    /// Reads the bar states of a symbol from the bar tops and heights: F for a full bar, A for an ascender, D for a descender and T for a tracker.
-    /// </summary>
-    /// <param name="symbol">The encoded symbol.</param>
-    /// <returns>The bar states.</returns>
-    private static string States(ref BarcodeSymbol symbol)
-    {
-        float ascender = (float)(1.90 / 0.54);
-        float tracker = (float)(1.30 / 0.54);
-        char[] states = new char[symbol.BarHeights.Length];
-        for (int i = 0; i < states.Length; i++)
-        {
-            bool up = symbol.BarTops[i] == 0F;
-            bool down = symbol.BarTops[i] + symbol.BarHeights[i] > ascender + tracker + 0.001F;
-            states[i] = up && down ? 'F' : up ? 'A' : down ? 'D' : 'T';
-        }
-
-        return new string(states);
-    }
 }
