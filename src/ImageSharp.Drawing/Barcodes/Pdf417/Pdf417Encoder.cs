@@ -151,6 +151,18 @@ internal static class Pdf417Encoder
         int k = 2 << level;
         int c = columns ?? (int)Math.Floor(Math.Sqrt((m + k) / 3D) + 0.5D);
         int r = Math.Max(MinimumRows, (m + 1 + k + c - 1) / c);
+
+        // Section 5.1.1 gives a symbol 925 data codewords. Near that capacity the rows of the chosen column count can hold more than the 928 codewords of
+        // section 5.2.3, or more than 90 rows, so without chosen columns the matrix widens until it fits.
+        if (!columns.HasValue)
+        {
+            while ((r > MaximumRows || c * r > MaximumCodewords) && c < MaximumColumns)
+            {
+                c++;
+                r = Math.Max(MinimumRows, (m + 1 + k + c - 1) / c);
+            }
+        }
+
         if (r > MaximumRows || c * r > MaximumCodewords)
         {
             throw new ArgumentException($"The data takes {m} codewords and does not fit in a PDF417 symbol of {c} columns.");

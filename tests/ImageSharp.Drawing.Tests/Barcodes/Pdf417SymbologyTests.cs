@@ -237,6 +237,20 @@ public class Pdf417SymbologyTests
         => Assert.Throws<ArgumentException>(() => Encode(new Pdf417Symbology(1, 2), new string('A', 200)));
 
     /// <summary>
+    /// Section 5.1.1 c) of ISO/IEC 15438 gives the maximum data of a symbol at error correction level 0: 925 data codewords, which encode 1 850 Text
+    /// Compaction characters, 1 108 Byte Compaction characters or 2 710 Numeric Compaction characters. A symbology that chooses its own columns and level
+    /// encodes each maximum.
+    /// </summary>
+    /// <param name="character">The character the data repeats: an upper case letter for Text Compaction, é for Byte Compaction, or the digits.</param>
+    /// <param name="length">The number of characters.</param>
+    [Theory]
+    [InlineData('A', 1850)]
+    [InlineData('é', 1108)]
+    [InlineData('0', 2710)]
+    public void Pdf417_HoldsTheMaximumDataOfSectionFiveOneOne(char character, int length)
+        => Assert.Null(Record.Exception(() => SymbolEncoder.Encode(new Pdf417Symbology(), new string(character, length), new BarcodeOptions())));
+
+    /// <summary>
     /// Section 5.2.1 and Table 9: 1 to 30 columns and error correction levels 0 to 8.
     /// </summary>
     [Fact]
