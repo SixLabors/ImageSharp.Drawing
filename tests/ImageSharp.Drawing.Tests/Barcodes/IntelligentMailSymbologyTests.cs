@@ -102,7 +102,8 @@ public class IntelligentMailSymbologyTests
     /// Section 2.3.1: "an overall barcode height of 0.125 inch to 0.165 inch", "an overall barcode pitch of 22±2 bars per inch", "a width of 0.020±0.005 inch",
     /// "spacing between bars of 0.012 inch to 0.040 inch", a distance from the lead edge of the 1st bar to the lead edge of the 65th that "shall never be less
     /// than 2.667 inches", and from the lead edge of the 1st to the trail edge of the 65th that "shall never be greater than 3.225 inches". Section 2.3.2: "A
-    /// minimum clear zone shall be 0.028 inch above and below the barcode and 0.125 inch on each end of the barcode."
+    /// minimum clear zone shall be 0.028 inch above and below the barcode and 0.125 inch on each end of the barcode." The two lengths are the pitch range over
+    /// 64 pitches: 3.225 inches is 64 / 20 inch and the widest bar of 0.025 inch, and 2.667 inches is 64 / 24 inch, rounded up.
     /// </summary>
     [Fact]
     public void DrawsTheDimensionsOfFigureSix()
@@ -121,7 +122,7 @@ public class IntelligentMailSymbologyTests
 
             Assert.InRange(symbol.Runs[^1] * unit, 0.015, 0.025);
             Assert.InRange(64 / (leadToLead * unit), 20, 24);
-            Assert.True(leadToLead * unit >= 2.667);
+            Assert.True(leadToLead * unit >= 64.0 / 24);
             Assert.True((leadToLead + symbol.Runs[^1]) * unit <= 3.225);
 
             Assert.InRange(SymbolEncoder.BarBottom(ref symbol) * symbol.XDimension / Inch, 0.125, 0.165);

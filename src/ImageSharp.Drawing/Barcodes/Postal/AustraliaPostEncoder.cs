@@ -45,7 +45,8 @@ internal static class AustraliaPostEncoder
     /// "1.0" to "1.6", an ascender or descender bar of 3.15 mm from "2.6" to "3.7", so an extender of 1.85 mm, and a bar density of 23.5 bars per 25.4 mm from
     /// "22 to 25 bars per 25.4mm", so a pitch of 1.08 mm. A run unit of 0.01 mm is 1/50 module, a bar is 50 units and a space 58, inside the bar gap of "0.4"
     /// to "0.7". Diagram 14 gives a quiet zone of 6 mm at each end and 2 mm above and below, and the text representation "should appear above the barcode" and
-    /// "must be outside of the barcode's minimum Quiet Zone". The bar width the symbol draws at is clamped to the "0.4" to "0.6" mm of the table on page 12.
+    /// "must be outside of the barcode's minimum Quiet Zone". The bar width the symbol draws at is clamped to the "0.4" to "0.6" mm of the table on page 12,
+    /// and the bars per inch to the 22 to 25 of the bar density on page 13.
     /// </summary>
     public static readonly FourStateMetrics Metrics = new(
         0.5,
@@ -63,6 +64,8 @@ internal static class AustraliaPostEncoder
     {
         MinimumXDimension = 0.4,
         MaximumXDimension = 0.6,
+        MinimumBarsPerInch = 22,
+        MaximumBarsPerInch = 25,
     };
 
     /// <summary>

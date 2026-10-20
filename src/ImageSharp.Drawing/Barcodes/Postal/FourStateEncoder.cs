@@ -47,11 +47,25 @@ internal static class FourStateEncoder
     {
         int barCount = states.Length;
         double xDimension = options.ResolveXDimension(metrics.MinimumXDimension, metrics.XDimension, metrics.MaximumXDimension);
-        int spaceUnits = metrics.SpaceUnitsAt(xDimension);
+
+        // The emitter draws every run of these uniform bars at a whole number of pixels, so the runs count pixels: a bar is one module of whole pixels, and
+        // the space is the space of the metrics at the nearest whole pixel, at least one, as the emitter rounds a run.
+        int barPixels = options.ModulePixels(xDimension);
+        double spacePixels = Math.Max(1, Math.Round(metrics.SpaceUnitsAt(xDimension) * (double)metrics.RunUnit * barPixels, MidpointRounding.AwayFromZero));
+
+        // A specification that limits the bars per inch limits the pitch, a bar and a space: a pitch of Dpi / n pixels is n bars per inch. Whole pixels can
+        // leave that range, at a bar width at the end of its range or at a low resolution, so the pitch is clamped in whole pixels as ResolveXDimension clamps
+        // the module: the largest whole number of pixels at or under the largest pitch, and the smallest at or over the smallest pitch with a space of at
+        // least one pixel. The smallest pitch applies last.
+        double highest = Math.Floor((options.Dpi / metrics.MinimumBarsPerInch) + BarcodeOptions.LimitTolerance);
+        double lowest = Math.Max(barPixels + 1, Math.Ceiling((options.Dpi / metrics.MaximumBarsPerInch) - BarcodeOptions.LimitTolerance));
+        int space = (int)Math.Max(Math.Min(barPixels + spacePixels, highest), lowest) - barPixels;
+        float runUnit = 1F / barPixels;
+
         Span<int> runs = symbol.BeginLinear((barCount * 2) - 1, xDimension, out Span<float> heights, out Span<float> tops);
         for (int i = 0; i < runs.Length; i++)
         {
-            runs[i] = (i & 1) == 0 ? metrics.BarUnits : spaceUnits;
+            runs[i] = (i & 1) == 0 ? barPixels : space;
         }
 
         // The clear zones and the text clearance are millimetres or inches in each specification, given in modules of the nominal bar width. The module the
@@ -72,7 +86,7 @@ internal static class FourStateEncoder
             heights[i] = tracker + (up ? ascender : 0F) + (down ? descender : 0F);
         }
 
-        float widthInModules = ((barCount * metrics.BarUnits) + ((barCount - 1) * spaceUnits)) * metrics.RunUnit;
+        float widthInModules = ((barCount * barPixels) + ((barCount - 1) * space)) * runUnit;
         if (options.Font is not null && readable.Length > 0)
         {
             float textClearance = metrics.TextClearance * nominal;
@@ -86,6 +100,6 @@ internal static class FourStateEncoder
 
         float quietZone = metrics.QuietZone * nominal;
         float verticalQuietZone = metrics.VerticalQuietZone * nominal;
-        symbol.EndLinear(quietZone, quietZone, verticalQuietZone, verticalQuietZone, 0F, metrics.RunUnit, true);
+        symbol.EndLinear(quietZone, quietZone, verticalQuietZone, verticalQuietZone, 0F, runUnit, true);
     }
 }

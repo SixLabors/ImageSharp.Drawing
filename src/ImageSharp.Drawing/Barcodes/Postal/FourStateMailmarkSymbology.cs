@@ -13,9 +13,16 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 public sealed class FourStateMailmarkSymbology : BarcodeSymbology
 {
     /// <summary>
-    /// The dimensions of Table 11, with the bar width clamped to the acceptable sizes of the same table: "Bar width (all) 0.54 0.38 - 0.63".
+    /// The dimensions of Table 11, with the bar width clamped to the acceptable sizes of the same table, "Bar width (all) 0.54 0.38 - 0.63", and the bars per
+    /// inch to "Bar pitch ... 20 - 24 bars per inch (25.4mm)".
     /// </summary>
-    private static readonly FourStateMetrics Metrics = FourStateEncoder.RoyalMail with { MinimumXDimension = 0.38, MaximumXDimension = 0.63 };
+    private static readonly FourStateMetrics Metrics = FourStateEncoder.RoyalMail with
+    {
+        MinimumXDimension = 0.38,
+        MaximumXDimension = 0.63,
+        MinimumBarsPerInch = 20,
+        MaximumBarsPerInch = 24,
+    };
 
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)

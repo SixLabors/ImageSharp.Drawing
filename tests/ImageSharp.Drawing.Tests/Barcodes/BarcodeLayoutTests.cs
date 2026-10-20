@@ -250,53 +250,57 @@ public class BarcodeLayoutTests
             foreach (float fraction in (ReadOnlySpan<float>)[0F, 0.3F, 0.5F, 0.7F])
             {
                 BarcodeOptions options = new() { Dpi = dpi, IncludeQuietZones = false };
-                PointF origin = new(Margin + fraction, Margin + fraction);
-                RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(symbology, options, origin, text);
-                using Image<L8> image = new((int)MathF.Ceiling(bounds.Right) + Margin, (int)MathF.Ceiling(bounds.Bottom) + Margin, new L8(255));
-                image.Mutate(x => x.Paint(canvas => canvas.DrawBarcode(symbology, options, origin, text)));
-
-                // One pass over the rows marks every column that holds a dark pixel.
-                bool[] darkColumns = new bool[image.Width];
-                image.ProcessPixelRows(accessor =>
-                {
-                    for (int y = 0; y < accessor.Height; y++)
-                    {
-                        Span<L8> row = accessor.GetRowSpan(y);
-                        for (int x = 0; x < row.Length; x++)
-                        {
-                            darkColumns[x] |= row[x].PackedValue < 128;
-                        }
-                    }
-                });
-
-                HashSet<int> bars = [];
-                HashSet<int> spaces = [];
-                int run = 0;
-                bool? dark = null;
-                foreach (bool column in darkColumns)
-                {
-                    if (column != dark)
-                    {
-                        if (dark == true)
-                        {
-                            bars.Add(run);
-                        }
-                        else if (dark == false && bars.Count > 0 && column)
-                        {
-                            spaces.Add(run);
-                        }
-
-                        dark = column;
-                        run = 0;
-                    }
-
-                    run++;
-                }
-
+                (HashSet<int> bars, HashSet<int> spaces) = MeasurePostalRuns(symbology, text, options, new PointF(Margin + fraction, Margin + fraction));
                 if (bars.Count != 1 || spaces.Count != 1)
                 {
                     failures.Add($"{dpi} dpi at {fraction}: bars {string.Join('/', bars)} px, spaces {string.Join('/', spaces)} px");
                 }
+            }
+        }
+
+        Assert.True(failures.Count == 0, string.Join("; ", failures));
+    }
+
+    /// <summary>
+    /// The drawn bars keep the bar density of the specification at every resolution and at both ends of the bar width range. Mailmark, Table 11 of the Mailmark
+    /// barcode definition document: "Bar pitch ... 20 - 24 bars per inch (25.4mm)", with a bar width of "0.38 - 0.63". Australia Post, page 13 of the
+    /// customer barcoding technical specifications: "a bar density of 22 to 25 bars per 25.4mm", with a bar width of 0.4 to 0.6 mm. Intelligent Mail, section
+    /// 2.3.1 of USPS-B-3200: "an overall barcode pitch of 22±2 bars per inch", with a bar width of "0.020±0.005 inch". The bars per inch are the resolution
+    /// divided by the drawn pitch, a bar and a space in whole pixels.
+    /// </summary>
+    /// <param name="kind">The symbology.</param>
+    /// <param name="xDimension">The bar width in millimetres, or <see langword="null"/> for the nominal bar width.</param>
+    /// <param name="minimumBarsPerInch">The fewest bars per inch the specification permits.</param>
+    /// <param name="maximumBarsPerInch">The most bars per inch the specification permits.</param>
+    [Theory]
+    [InlineData("FourStateMailmark", null, 20, 24)]
+    [InlineData("FourStateMailmark", 0.38, 20, 24)]
+    [InlineData("FourStateMailmark", 0.63, 20, 24)]
+    [InlineData("AustraliaPost", null, 22, 25)]
+    [InlineData("AustraliaPost", 0.4, 22, 25)]
+    [InlineData("AustraliaPost", 0.6, 22, 25)]
+    [InlineData("IntelligentMail", null, 20, 24)]
+    [InlineData("IntelligentMail", 0.015 * 25.4, 20, 24)]
+    [InlineData("IntelligentMail", 0.025 * 25.4, 20, 24)]
+    public void DrawsThePostalBarDensityOfTheSpecification(string kind, double? xDimension, int minimumBarsPerInch, int maximumBarsPerInch)
+    {
+        (BarcodeSymbology symbology, string text) = kind switch
+        {
+            "FourStateMailmark" => ((BarcodeSymbology)new FourStateMailmarkSymbology(), "21B2254800659JW5O9QA6Y"),
+            "AustraliaPost" => (new AustraliaPostSymbology(), "6254516251ABC123"),
+            _ => (new IntelligentMailSymbology(), "0123456709498765432101234567891"),
+        };
+
+        // Every failing case is collected, so a failure shows every resolution it happens at.
+        List<string> failures = [];
+        foreach (float dpi in (ReadOnlySpan<float>)[72F, 96F, 144F, 150F, 203.2F, 300F, 600F])
+        {
+            BarcodeOptions options = new() { Dpi = dpi, XDimension = xDimension, IncludeQuietZones = false };
+            (HashSet<int> bars, HashSet<int> spaces) = MeasurePostalRuns(symbology, text, options, new PointF(Margin, Margin));
+            double barsPerInch = dpi / (double)(bars.Single() + spaces.Single());
+            if (barsPerInch < minimumBarsPerInch || barsPerInch > maximumBarsPerInch)
+            {
+                failures.Add($"{dpi} dpi: {barsPerInch:0.##} bars per inch");
             }
         }
 
@@ -441,6 +445,62 @@ public class BarcodeLayoutTests
     /// </summary>
     /// <param name="moduleWidth">The width of one module, in pixels.</param>
     /// <returns>The options.</returns>
+    /// <summary>
+    /// Draws a postal symbol and measures its bars and spaces in whole pixels. A column of the drawing is dark when any of its pixels is dark, so a run of dark
+    /// columns is a bar whatever its height.
+    /// </summary>
+    /// <param name="symbology">The postal symbology.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="options">The options to draw with.</param>
+    /// <param name="origin">The top left corner of the symbol.</param>
+    /// <returns>The distinct bar widths and the distinct space widths in pixels.</returns>
+    private static (HashSet<int> Bars, HashSet<int> Spaces) MeasurePostalRuns(BarcodeSymbology symbology, string text, BarcodeOptions options, PointF origin)
+    {
+        RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(symbology, options, origin, text);
+        using Image<L8> image = new((int)MathF.Ceiling(bounds.Right) + Margin, (int)MathF.Ceiling(bounds.Bottom) + Margin, new L8(255));
+        image.Mutate(x => x.Paint(canvas => canvas.DrawBarcode(symbology, options, origin, text)));
+
+        // One pass over the rows marks every column that holds a dark pixel.
+        bool[] darkColumns = new bool[image.Width];
+        image.ProcessPixelRows(accessor =>
+        {
+            for (int y = 0; y < accessor.Height; y++)
+            {
+                Span<L8> row = accessor.GetRowSpan(y);
+                for (int x = 0; x < row.Length; x++)
+                {
+                    darkColumns[x] |= row[x].PackedValue < 128;
+                }
+            }
+        });
+
+        HashSet<int> bars = [];
+        HashSet<int> spaces = [];
+        int run = 0;
+        bool? dark = null;
+        foreach (bool column in darkColumns)
+        {
+            if (column != dark)
+            {
+                if (dark == true)
+                {
+                    bars.Add(run);
+                }
+                else if (dark == false && bars.Count > 0 && column)
+                {
+                    spaces.Add(run);
+                }
+
+                dark = column;
+                run = 0;
+            }
+
+            run++;
+        }
+
+        return (bars, spaces);
+    }
+
     private static BarcodeOptions CreateOptions(float moduleWidth)
         => new()
         {

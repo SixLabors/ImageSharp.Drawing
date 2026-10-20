@@ -18,9 +18,9 @@ public sealed class BarcodeOptions
     internal const double MillimetresPerInch = 25.4;
 
     /// <summary>
-    /// The tolerance in pixels that keeps an X dimension limit on the whole pixel it falls on against the rounding error of the millimetre to pixel conversion.
+    /// The tolerance in pixels that keeps a millimetre limit on the whole pixel it falls on against the rounding error of the millimetre to pixel conversion.
     /// </summary>
-    private const double LimitTolerance = 1E-9;
+    internal const double LimitTolerance = 1E-9;
 
     private float dpi = 96F;
     private double? xDimension;
@@ -162,7 +162,11 @@ public sealed class BarcodeOptions
         double highest = Math.Floor((maximum * pixelsPerMillimetre) + LimitTolerance);
         double lowest = Math.Max(1, Math.Ceiling((minimum * pixelsPerMillimetre) - LimitTolerance));
         pixels = Math.Max(Math.Min(pixels, highest), lowest);
-        return pixels / pixelsPerMillimetre;
+
+        // An inch is 254 tenths of a millimetre. The product 254 x pixels is a whole number, and 10 x Dpi is exact in a double because Dpi is a float. So
+        // the division is the only rounding, and IEEE 754 rounds it to the nearest double of the true size. Division by pixelsPerMillimetre rounds twice,
+        // and the size can then miss the nearest double by one bit.
+        return pixels * 254 / (10 * (double)this.Dpi);
     }
 
     /// <summary>

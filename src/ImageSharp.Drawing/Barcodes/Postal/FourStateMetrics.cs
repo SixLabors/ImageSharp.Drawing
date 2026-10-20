@@ -200,6 +200,18 @@ internal readonly struct FourStateMetrics
     public double MaximumXDimension { get; init; } = double.PositiveInfinity;
 
     /// <summary>
+    /// Gets the fewest bars per inch that the specification permits, or zero where it gives no limit. It sets the largest pitch, a bar and a space, that the
+    /// symbol draws at in whole pixels.
+    /// </summary>
+    public double MinimumBarsPerInch { get; init; }
+
+    /// <summary>
+    /// Gets the most bars per inch that the specification permits, or <see cref="double.PositiveInfinity"/> where it gives no limit. It sets the smallest
+    /// pitch, a bar and a space, that the symbol draws at in whole pixels.
+    /// </summary>
+    public double MaximumBarsPerInch { get; init; } = double.PositiveInfinity;
+
+    /// <summary>
     /// Gets the width of one run unit in modules.
     /// </summary>
     public float RunUnit { get; }
