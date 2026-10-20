@@ -34,4 +34,21 @@ public class Gs1DataBarTruncatedSymbologyTests
 
         Assert.Equal(20F, height, new ApproximateFloatComparer(1e-4F));
     }
+
+    /// <summary>
+    /// Table 5-56 of the GS1 General Specifications gives a minimum symbol height of 4.29 millimetres at the target X dimension of 0.330 millimetre, and "the
+    /// symbol height SHALL NOT be truncated below the minimum". A bar height of 4.29 mm encodes, and 4.28 mm throws.
+    /// </summary>
+    [Fact]
+    public void Gs1DataBarTruncated_RejectsABarHeightUnderTheMinimum()
+    {
+        Assert.Null(Record.Exception(() => Encode(4.29)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Encode(4.28));
+
+        static void Encode(double barHeight)
+            => SymbolEncoder.Encode(
+                new Gs1DataBarTruncatedSymbology(),
+                "(01)00012345678905",
+                new BarcodeOptions { Dpi = SymbolEncoder.MicrometreDpi, XDimension = 0.330, BarHeight = barHeight });
+    }
 }

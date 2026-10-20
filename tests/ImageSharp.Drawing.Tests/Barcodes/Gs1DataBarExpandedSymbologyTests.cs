@@ -84,6 +84,26 @@ public class Gs1DataBarExpandedSymbologyTests
     }
 
     /// <summary>
+    /// Table 5-56 of the GS1 General Specifications gives GS1 DataBar Expanded a minimum symbol height of 11.22 millimetres at the target X dimension of 0.330
+    /// millimetre, and GS1 DataBar Expanded Stacked 23.43 millimetres for two rows, two rows of 11.22 mm and the 3X separator. "The symbol height SHALL NOT be
+    /// truncated below the minimum." The bar height sets every row: 11.22 mm encodes, and 11.21 mm throws.
+    /// </summary>
+    [Fact]
+    public void Gs1DataBarExpanded_RejectsABarHeightUnderTheMinimum()
+    {
+        Assert.Null(Record.Exception(() => Encode(new Gs1DataBarExpandedSymbology(), 11.22)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Encode(new Gs1DataBarExpandedSymbology(), 11.21));
+        Assert.Null(Record.Exception(() => Encode(new Gs1DataBarExpandedStackedSymbology(), 11.22)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Encode(new Gs1DataBarExpandedStackedSymbology(), 11.21));
+
+        static void Encode(BarcodeSymbology symbology, double barHeight)
+            => SymbolEncoder.Encode(
+                symbology,
+                "(01)90614141000015(3202)000150",
+                new BarcodeOptions { Dpi = SymbolEncoder.MicrometreDpi, XDimension = 0.330, BarHeight = barHeight });
+    }
+
+    /// <summary>
     /// Encodes the text with the default options and checks the symbol.
     /// </summary>
     /// <param name="text">The text to encode.</param>

@@ -37,7 +37,7 @@ public sealed class Gs1DataBarTruncatedCompositeSymbology : CompositeBarcodeSymb
         InlineArray14<char> gtinStorage = default;
         Span<char> gtin = gtinStorage;
         Gs1Data.ReadGtin(first, gtin);
-        DataBarEncoder.BuildLinear(gtin, true, DataBarEncoder.TruncatedHeight, 0F, options, ref parts[0]);
+        DataBarEncoder.BuildLinear(gtin, true, DataBarEncoder.TruncatedHeight, DataBarEncoder.TruncatedHeight, options, ref parts[0]);
 
         // Section 11.4: the separator is light over the four modules at each end and treats the two finder patterns apart. The left finder starts after the
         // guard pair and the first character of 16 modules. The right finder stands reversed, so its elements 1 to 3 start two modules into it, at module 65.

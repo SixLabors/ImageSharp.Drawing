@@ -46,7 +46,9 @@ internal static class DataBarEncoder
     public const float OmnidirectionalMinimumHeight = 33F;
 
     /// <summary>
-    /// The height of GS1 DataBar Truncated in modules. Section 5.5.2.1.2 of the GS1 General Specifications gives "96X wide by 13X high".
+    /// The height of GS1 DataBar Truncated in modules. Section 5.5.2.1.2 of the GS1 General Specifications gives "96X wide by 13X high". It is also the
+    /// minimum: Table 5-56 gives 3.43 millimetres, 13X, at the X dimension of 0.264 millimetre, and "the symbol height SHALL NOT be truncated below the
+    /// minimum".
     /// </summary>
     public const float TruncatedHeight = 13F;
 
@@ -199,6 +201,7 @@ internal static class DataBarEncoder
     /// <param name="linked">Whether a 2D component of a GS1 Composite symbol is linked to the symbol.</param>
     /// <param name="options">The options that control the bar height and the text.</param>
     /// <param name="symbol">The symbol to write.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The bar height is under the minimum height of the lower row.</exception>
     public static void BuildStacked(ReadOnlySpan<char> gtin, bool linked, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         InlineArray64<int> widthStorage = default;
@@ -225,6 +228,18 @@ internal static class DataBarEncoder
         separator[1..4].Clear();
 
         double xDimension = options.ResolveXDimension(MinimumXDimension, NominalXDimension, MaximumXDimension);
+
+        // Table 5-56 of the GS1 General Specifications gives a minimum symbol height of 3.43 millimetres, 13X, at the X dimension of 0.264 millimetre. The bar
+        // height sets the lower row, and the upper row keeps its ratio of five to seven, so a symbol of 13X has a lower row of 7X.
+        if (options.IsBarHeightUnder(StackedLowerRowHeight * xDimension))
+        {
+            double minimum = StackedLowerRowHeight * xDimension;
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                options.BarHeight,
+                $"The lower row is at least {StackedLowerRowHeight}X high, {minimum:0.##} mm at its X dimension; the bar height is {options.BarHeight:0.##} mm.");
+        }
+
         float lowerHeight = options.ResolveBarHeight(xDimension, StackedLowerRowHeight);
         float upperHeight = lowerHeight * StackedUpperRowHeight / StackedLowerRowHeight;
         int upperRuns = DataBarRows.RunCount(upper);
