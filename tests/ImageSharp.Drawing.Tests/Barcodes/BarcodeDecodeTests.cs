@@ -621,14 +621,15 @@ public class BarcodeDecodeTests
 
     /// <summary>
     /// Sections 6.4.8.1 and 13.4 of ISO/IEC 18004: in FNC1 first position mode, a separator is "%" in Alphanumeric mode or &lt;GS&gt; in Byte mode, both
-    /// transmitted as &lt;GS&gt;, and "%%" is a "%" in the data. The decoder reports the mode as the symbology identifier ]Q3 of section 5.7.4.3 of the GS1
-    /// General Specifications.
+    /// transmitted as &lt;GS&gt;, and "%%" is a "%" in the data "while in Alphanumeric mode". A "%" of the data in a Byte segment, between lower case letters,
+    /// is one byte. The decoder reports the mode as the symbology identifier ]Q3 of section 5.7.4.3 of the GS1 General Specifications.
     /// </summary>
     /// <param name="text">The element strings to encode.</param>
     /// <param name="expected">The transmitted data.</param>
     [Theory]
     [InlineData("(01)09521234543213(10)ABC123(21)XYZ789", "0109521234543213" + "10ABC123\u001d" + "21XYZ789")]
     [InlineData("(01)09521234543213(10)AB%CD(21)12%34", "0109521234543213" + "10AB%CD\u001d" + "2112%34")]
+    [InlineData("(01)09521234543213(10)ab%cd", "0109521234543213" + "10ab%cd")]
     [InlineData("(01)09521234543213(21)abc-def/123(10)xyz", "0109521234543213" + "21abc-def/123\u001d" + "10xyz")]
     public void Gs1QrCode_RoundTrips(string text, string expected)
         => AssertDecodes(new Gs1QrCodeSymbology(), text, BarcodeFormat.QRCode, "]Q3", expected);

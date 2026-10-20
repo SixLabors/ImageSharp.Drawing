@@ -27,6 +27,12 @@ internal static class QrEncoder
     public const int Fnc1 = -1;
 
     /// <summary>
+    /// The message value of a % of the data in a symbol in FNC1 first position mode. Clause 13.4 of ISO/IEC 18004 writes it as %% in Alphanumeric mode,
+    /// because a single % there is the FNC1 character, and Byte mode writes it as the one byte %.
+    /// </summary>
+    private const int DataPercent = -2;
+
+    /// <summary>
     /// The version group of Micro QR Code version M1. Groups 0 to 2 are QR Code versions 1 to 9, 10 to 26 and 27 to 40, whose character count indicators differ
     /// in length (Table 3), groups 3 to 6 are versions M1 to M4, and groups 7 to 38 are Rectangular Micro QR Code versions R7x43 to R17x139, each with
     /// indicators of its own length.
@@ -502,8 +508,7 @@ internal static class QrEncoder
                 nameof(text));
         }
 
-        // Section 6.4.8.1: in FNC1 first position mode a % of the data doubles, because a single % stands for the FNC1 character.
-        int length = fnc1First ? text.Length + text.Count('%') : text.Length;
+        int length = text.Length;
         if (length > MaximumLength)
         {
             throw new ArgumentException($"The data takes {length} characters; a {name} symbol carries at most {MaximumLength}.", nameof(text));
@@ -527,11 +532,8 @@ internal static class QrEncoder
                     continue;
                 }
 
-                message[m++] = c;
-                if (fnc1First && c == '%')
-                {
-                    message[m++] = c;
-                }
+                // Clause 13.4: a % of the data doubles in Alphanumeric mode only, so it stays one value until its segment's mode is known.
+                message[m++] = fnc1First && c == '%' ? DataPercent : c;
             }
 
             CharacterRuns runs = new(message, analysis.Span.Slice(length, RunRows * stride));
@@ -556,7 +558,7 @@ internal static class QrEncoder
                 {
                     segmentedGroup = size.Group;
                     segmentCount = runs.BuildSegments(segmentedGroup, segments);
-                    bits = segmentCount < 0 ? -1 : BitLength(segments[..segmentCount], segmentedGroup, fnc1First);
+                    bits = segmentCount < 0 ? -1 : BitLength(message, segments[..segmentCount], segmentedGroup, fnc1First);
                 }
 
                 if (bits >= 0 && bits <= size.DataBits(level))
@@ -608,16 +610,19 @@ internal static class QrEncoder
     /// Returns the number of bits the segments take in a version group, or -1 when a segment holds more characters than its character count indicator counts or
     /// its mode does not exist in the group.
     /// </summary>
+    /// <param name="message">The message values the segments cover.</param>
     /// <param name="segments">The segments.</param>
     /// <param name="group">The version group.</param>
     /// <param name="fnc1First">Whether the FNC1 first position mode indicator precedes the segments.</param>
     /// <returns>The number of bits.</returns>
-    private static int BitLength(ReadOnlySpan<Segment> segments, int group, bool fnc1First)
+    private static int BitLength(ReadOnlySpan<int> message, ReadOnlySpan<Segment> segments, int group, bool fnc1First)
     {
         int bits = fnc1First ? ModeBits[group] : 0;
+        int start = 0;
         foreach (Segment segment in segments)
         {
-            int count = segment.Count;
+            int count = EncodedCount(message.Slice(start, segment.Count), segment.Mode);
+            start += segment.Count;
             int countBits = CountBits[(group * 3) + (int)segment.Mode];
             if (countBits == 0 || count >= 1 << countBits)
             {
@@ -637,6 +642,16 @@ internal static class QrEncoder
 
         return bits;
     }
+
+    /// <summary>
+    /// Returns the number of characters a segment encodes, the value of its character count indicator. Clause 13.4 of ISO/IEC 18004 writes a % of the data
+    /// as %% in Alphanumeric mode, so each one counts twice there.
+    /// </summary>
+    /// <param name="data">The message values of the segment.</param>
+    /// <param name="mode">The mode of the segment.</param>
+    /// <returns>The number of characters the segment encodes.</returns>
+    private static int EncodedCount(ReadOnlySpan<int> data, SegmentMode mode)
+        => mode == SegmentMode.Alphanumeric ? data.Length + data.Count(DataPercent) : data.Length;
 
     /// <summary>
     /// Builds the data codewords of a symbol, its error correction codewords and its module grid.
@@ -687,11 +702,11 @@ internal static class QrEncoder
             {
                 int mode = (int)segment.Mode;
                 int count = segment.Count;
-                int modeIndicator = group < GroupM1 ? 1 << mode : group >= GroupR7x43 ? mode + 1 : mode;
-                position = WriteBits(codewords, position, modeIndicator, ModeBits[group]);
-                position = WriteBits(codewords, position, count, CountBits[(group * 3) + mode]);
                 ReadOnlySpan<int> data = message.Slice(start, count);
                 start += count;
+                int modeIndicator = group < GroupM1 ? 1 << mode : group >= GroupR7x43 ? mode + 1 : mode;
+                position = WriteBits(codewords, position, modeIndicator, ModeBits[group]);
+                position = WriteBits(codewords, position, EncodedCount(data, segment.Mode), CountBits[(group * 3) + mode]);
 
                 if (segment.Mode == SegmentMode.Numeric)
                 {
@@ -709,21 +724,37 @@ internal static class QrEncoder
                 }
                 else if (segment.Mode == SegmentMode.Alphanumeric)
                 {
-                    // Section 6.4.8.1: Alphanumeric mode writes the FNC1 character as %.
-                    for (int i = 0; i < count; i += 2)
+                    // Section 6.4.8.1 writes the FNC1 character as %, and clause 13.4 a % of the data as %%. Each pair of characters takes 11 bits, so a
+                    // character waits for the next one, and a last unpaired character takes 6 bits.
+                    int pending = -1;
+                    foreach (int value in data)
                     {
-                        int first = AlphanumericValue(data[i] == Fnc1 ? '%' : data[i]);
-                        position = i + 1 < count
-                            ? WriteBits(codewords, position, (first * 45) + AlphanumericValue(data[i + 1] == Fnc1 ? '%' : data[i + 1]), 11)
-                            : WriteBits(codewords, position, first, 6);
+                        int alphanumeric = AlphanumericValue(value < 0 ? '%' : value);
+                        for (int repeat = value == DataPercent ? 2 : 1; repeat > 0; repeat--)
+                        {
+                            if (pending < 0)
+                            {
+                                pending = alphanumeric;
+                            }
+                            else
+                            {
+                                position = WriteBits(codewords, position, (pending * 45) + alphanumeric, 11);
+                                pending = -1;
+                            }
+                        }
+                    }
+
+                    if (pending >= 0)
+                    {
+                        position = WriteBits(codewords, position, pending, 6);
                     }
                 }
                 else
                 {
-                    // Section 6.4.8.1: Byte mode writes the FNC1 character as GS.
-                    for (int i = 0; i < count; i++)
+                    // Section 6.4.8.1: Byte mode writes the FNC1 character as GS, and a % of the data as the one byte %.
+                    foreach (int value in data)
                     {
-                        position = WriteBits(codewords, position, data[i] == Fnc1 ? Gs1Data.Separator : data[i], 8);
+                        position = WriteBits(codewords, position, value switch { Fnc1 => Gs1Data.Separator, DataPercent => '%', _ => value }, 8);
                     }
                 }
             }
@@ -1721,7 +1752,7 @@ internal static class QrEncoder
             {
                 int value = message[i];
                 bool digit = value is >= '0' and <= '9';
-                bool alpha = value == Fnc1 || AlphanumericValue(value) >= 10;
+                bool alpha = value is Fnc1 or DataPercent || AlphanumericValue(value) >= 10;
 
                 numeric[i] = digit ? numeric[i + 1] + 1 : 0;
                 nextNumeric[i] = digit ? 0 : nextNumeric[i + 1] + 1;
