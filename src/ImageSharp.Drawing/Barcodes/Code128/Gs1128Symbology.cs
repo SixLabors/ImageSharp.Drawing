@@ -29,7 +29,7 @@ public sealed class Gs1128Symbology : BarcodeSymbology
     /// <summary>
     /// The largest length of a symbol in millimetres. Section 5.4.4.3: "The length, including Quiet Zones, cannot exceed 165.10 millimetres (6.500 inches)."
     /// </summary>
-    private const double MaximumLength = 165.10;
+    internal const double MaximumLength = 165.10;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Gs1128Symbology"/> class.
@@ -61,6 +61,7 @@ public sealed class Gs1128Symbology : BarcodeSymbology
                 [],
                 Gs1Data.Gs1128MinimumXDimension,
                 Gs1Data.Gs1128MaximumXDimension,
+                Code128Linkage.None,
                 options,
                 ref symbol);
 

@@ -27,6 +27,6 @@ public sealed class Gs1DataBarOmnidirectionalSymbology : BarcodeSymbology
         InlineArray14<char> gtinStorage = default;
         Span<char> gtin = gtinStorage;
         Gs1Data.ReadGtin(text, gtin);
-        DataBarEncoder.BuildLinear(gtin, DataBarEncoder.OmnidirectionalHeight, DataBarEncoder.OmnidirectionalMinimumHeight, options, ref symbol);
+        DataBarEncoder.BuildLinear(gtin, false, DataBarEncoder.OmnidirectionalHeight, DataBarEncoder.OmnidirectionalMinimumHeight, options, ref symbol);
     }
 }

@@ -33,6 +33,6 @@ public sealed class Gs1DataBarLimitedSymbology : BarcodeSymbology
             throw new ArgumentException($"GS1 DataBar Limited carries a GTIN whose first digit is 0 or 1; got {gtin[0]}.", nameof(text));
         }
 
-        DataBarLimitedEncoder.Build(gtin, options, ref symbol);
+        DataBarLimitedEncoder.Build(gtin, false, options, ref symbol);
     }
 }

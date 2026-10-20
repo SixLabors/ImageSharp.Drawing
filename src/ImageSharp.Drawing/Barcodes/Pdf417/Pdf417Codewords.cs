@@ -51,7 +51,7 @@ internal static class Pdf417Codewords
     /// <summary>
     /// The mode latch to Byte Compaction mode for a byte count that is not a multiple of six, Table 2.
     /// </summary>
-    private const int ByteLatch = 901;
+    public const int ByteLatch = 901;
 
     /// <summary>
     /// The mode latch to Numeric Compaction mode, Table 2.
@@ -66,7 +66,7 @@ internal static class Pdf417Codewords
     /// <summary>
     /// The mode latch to Byte Compaction mode for a byte count that is a multiple of six, Table 2.
     /// </summary>
-    private const int ByteLatchSix = 924;
+    public const int ByteLatchSix = 924;
 
     /// <summary>
     /// The MicroPDF417 codeword that stands for the header [)&gt;RS05GS and the trailer RS EOT of a message in format 05, and that puts the encoder in Numeric
@@ -521,7 +521,7 @@ internal static class Pdf417Codewords
     /// </summary>
     /// <param name="bytes">The bytes, each a character U+0000 to U+00FF.</param>
     /// <param name="codewords">The builder the codewords are written to.</param>
-    private static void EncodeBytes(ReadOnlySpan<char> bytes, ref ValueListBuilder<int> codewords)
+    public static void EncodeBytes(ReadOnlySpan<char> bytes, ref ValueListBuilder<int> codewords)
     {
         int position = 0;
         for (; position + ByteGroup <= bytes.Length; position += ByteGroup)

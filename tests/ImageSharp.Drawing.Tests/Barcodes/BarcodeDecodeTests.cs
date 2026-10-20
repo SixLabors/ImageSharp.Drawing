@@ -371,6 +371,63 @@ public class BarcodeDecodeTests
     }
 
     /// <summary>
+    /// The linear component of a GS1 Composite symbol decodes to its data with its linkage flag set and the separator pattern above it. zxing-cpp reads the
+    /// linear component only and has no decoder for the 2D component. The data is that of the figures of ISO/IEC 24723.
+    /// </summary>
+    /// <param name="kind">The composite symbology.</param>
+    /// <param name="linear">The element strings of the linear component.</param>
+    /// <param name="component">The element strings of the 2D component.</param>
+    /// <param name="expected">The transmitted data.</param>
+    [Theory]
+    [InlineData("Omnidirectional", "(01)03612345678904", "(11)990102", "0103612345678904")]
+    [InlineData("Truncated", "(01)03612345678904", "(11)990102", "0103612345678904")]
+    [InlineData("Stacked", "(01)03412345678900", "(17)010200", "0103412345678900")]
+    [InlineData("StackedOmnidirectional", "(01)03612345678904", "(11)990102", "0103612345678904")]
+    [InlineData("Limited", "(01)13112345678906", "(17)010615(10)A123456", "0113112345678906")]
+    [InlineData("Expanded", "(01)93712345678904(3103)001234", "(91)1A2B3C4D5E", "01937123456789043103001234")]
+    [InlineData("ExpandedStacked", "(01)00012345678905(10)ABCDEF", "(21)12345678", "010001234567890510ABCDEF")]
+    [InlineData("Gs1128", "(01)03212345678906", "(21)A1B2C3D4E5F6G7H8", "0103212345678906")]
+    [InlineData("Gs1128CcC", "(01)93812345678901", "(10)ABCD123456(410)3898765432108", "0193812345678901")]
+    public void Gs1Composite_LinearComponentRoundTrips(string kind, string linear, string component, string expected)
+    {
+        (CompositeBarcodeSymbology symbology, BarcodeFormat format) = kind switch
+        {
+            "Omnidirectional" => ((CompositeBarcodeSymbology)new Gs1DataBarOmnidirectionalCompositeSymbology(), BarcodeFormat.DataBarOmni),
+            "Truncated" => (new Gs1DataBarTruncatedCompositeSymbology(), BarcodeFormat.DataBarOmni),
+            "Stacked" => (new Gs1DataBarStackedCompositeSymbology(), BarcodeFormat.DataBarStk),
+            "StackedOmnidirectional" => (new Gs1DataBarStackedOmnidirectionalCompositeSymbology(), BarcodeFormat.DataBarStkOmni),
+            "Limited" => (new Gs1DataBarLimitedCompositeSymbology(), BarcodeFormat.DataBarLtd),
+            "Expanded" => (new Gs1DataBarExpandedCompositeSymbology(), BarcodeFormat.DataBarExp),
+            "ExpandedStacked" => (new Gs1DataBarExpandedStackedCompositeSymbology(), BarcodeFormat.DataBarExpStk),
+            "Gs1128" => (new Gs1128CompositeSymbology(), BarcodeFormat.Code128),
+            _ => (new Gs1128CompositeSymbology(Gs1CompositeComponent.CcC), BarcodeFormat.Code128),
+        };
+
+        PointF origin = new(20, 20);
+        BarcodeOptions options = CreateOptions();
+        RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(symbology, options, origin, linear, component);
+        using Image<L8> image = new((int)MathF.Ceiling(bounds.Right) + 20, (int)MathF.Ceiling(bounds.Bottom) + 20, new L8(255));
+        image.Mutate(x => x.Paint(canvas => canvas.DrawBarcode(symbology, options, origin, linear, component)));
+        byte[] pixels = new byte[image.Width * image.Height];
+        image.CopyPixelDataTo(pixels);
+
+        using ReaderOptions reader = new() { Formats = format, TryHarder = true, TextMode = TextMode.Plain };
+        Barcode[] barcodes = BarcodeReader.Read(new ImageView(pixels, image.Width, image.Height, ImageFormat.Lum, 0, 0), reader);
+        try
+        {
+            Barcode barcode = Assert.Single(barcodes);
+            Assert.Equal(expected, barcode.Text);
+        }
+        finally
+        {
+            foreach (Barcode barcode in barcodes)
+            {
+                barcode.Dispose();
+            }
+        }
+    }
+
+    /// <summary>
     /// The GS1 North American Coupon is a GS1 DataBar Expanded Stacked symbol of the element string (8110).
     /// </summary>
     [Fact]

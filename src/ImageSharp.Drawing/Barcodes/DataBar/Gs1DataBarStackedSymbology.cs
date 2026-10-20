@@ -27,6 +27,6 @@ public sealed class Gs1DataBarStackedSymbology : BarcodeSymbology
         InlineArray14<char> gtinStorage = default;
         Span<char> gtin = gtinStorage;
         Gs1Data.ReadGtin(text, gtin);
-        DataBarEncoder.BuildStacked(gtin, options, ref symbol);
+        DataBarEncoder.BuildStacked(gtin, false, options, ref symbol);
     }
 }

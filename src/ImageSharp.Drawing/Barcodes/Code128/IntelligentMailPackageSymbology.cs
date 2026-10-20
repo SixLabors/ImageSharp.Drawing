@@ -276,7 +276,17 @@ public sealed class IntelligentMailPackageSymbology : BarcodeSymbology
                 VerticalQuietZone = (float)(VerticalClearZone / xDimension),
             };
 
-            Code128Encoder.BuildSymbol(encoded.AsSpan(), true, [], readable[..readableLength], [], this.Banner, in layout, options, ref symbol);
+            Code128Encoder.BuildSymbol(
+                encoded.AsSpan(),
+                true,
+                [],
+                readable[..readableLength],
+                [],
+                this.Banner,
+                Code128Linkage.None,
+                in layout,
+                options,
+                ref symbol);
 
             symbol.AddIdentificationBars((float)(IdentificationBarThickness / xDimension), (float)(IdentificationBarClearance / xDimension));
             symbol.SetTextHeight((float)(MinimumTextHeight / xDimension), (float)(MaximumTextHeight / xDimension));

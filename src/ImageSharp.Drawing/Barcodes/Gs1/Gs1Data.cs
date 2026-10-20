@@ -392,7 +392,7 @@ internal static class Gs1Data
     /// <param name="text">The element strings to parse.</param>
     /// <param name="elements">The builder the positions are written to.</param>
     /// <exception cref="ArgumentException">The text is not valid element string syntax.</exception>
-    private static void Parse(ReadOnlySpan<char> text, ref ValueListBuilder<Gs1Element> elements)
+    public static void Parse(ReadOnlySpan<char> text, ref ValueListBuilder<Gs1Element> elements)
     {
         int position = 0;
         while (position < text.Length)

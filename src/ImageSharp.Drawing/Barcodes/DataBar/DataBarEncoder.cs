@@ -157,12 +157,19 @@ internal static class DataBarEncoder
     /// Builds a single row symbol, GS1 DataBar Omnidirectional or GS1 DataBar Truncated.
     /// </summary>
     /// <param name="gtin">The 14 digit GTIN.</param>
+    /// <param name="linked">Whether a 2D component of a GS1 Composite symbol is linked to the symbol.</param>
     /// <param name="nominalHeight">The nominal height of the variation in modules.</param>
     /// <param name="minimumHeight">The minimum height that the variation requires in modules, or 0 for none.</param>
     /// <param name="options">The options that control the bar height and the text.</param>
     /// <param name="symbol">The symbol to write.</param>
     /// <exception cref="ArgumentOutOfRangeException">The bar height is under the minimum height.</exception>
-    public static void BuildLinear(ReadOnlySpan<char> gtin, float nominalHeight, float minimumHeight, BarcodeOptions options, ref BarcodeSymbol symbol)
+    public static void BuildLinear(
+        ReadOnlySpan<char> gtin,
+        bool linked,
+        float nominalHeight,
+        float minimumHeight,
+        BarcodeOptions options,
+        ref BarcodeSymbol symbol)
     {
         // The element widths start with the guard space, so a zero width bar leads the runs and the widths follow it.
         double xDimension = options.ResolveXDimension(MinimumXDimension, NominalXDimension, MaximumXDimension);
@@ -176,7 +183,7 @@ internal static class DataBarEncoder
         }
 
         Span<int> runs = symbol.BeginLinear(ElementCount + 1, xDimension, out Span<float> heights, out _);
-        _ = EncodeWidths(gtin, runs[1..]);
+        _ = EncodeWidths(gtin, linked, runs[1..]);
 
         float barHeight = options.ResolveBarHeight(xDimension, nominalHeight);
         heights.Fill(barHeight);
@@ -189,13 +196,14 @@ internal static class DataBarEncoder
     /// sets the lower row, and the upper row keeps its ratio of five to seven.
     /// </summary>
     /// <param name="gtin">The 14 digit GTIN.</param>
+    /// <param name="linked">Whether a 2D component of a GS1 Composite symbol is linked to the symbol.</param>
     /// <param name="options">The options that control the bar height and the text.</param>
     /// <param name="symbol">The symbol to write.</param>
-    public static void BuildStacked(ReadOnlySpan<char> gtin, BarcodeOptions options, ref BarcodeSymbol symbol)
+    public static void BuildStacked(ReadOnlySpan<char> gtin, bool linked, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         InlineArray64<int> widthStorage = default;
         Span<int> widths = ((Span<int>)widthStorage)[..ElementCount];
-        _ = EncodeWidths(gtin, widths);
+        _ = EncodeWidths(gtin, linked, widths);
 
         // The three rows share one buffer, which starts zeroed. The separator loop leaves its first module and the last four at zero, light.
         InlineArray256<byte> moduleStorage = default;
@@ -236,13 +244,14 @@ internal static class DataBarEncoder
     /// bar height of the options sets each row.
     /// </summary>
     /// <param name="gtin">The 14 digit GTIN.</param>
+    /// <param name="linked">Whether a 2D component of a GS1 Composite symbol is linked to the symbol.</param>
     /// <param name="options">The options that control the bar height and the text.</param>
     /// <param name="symbol">The symbol to write.</param>
-    public static void BuildStackedOmnidirectional(ReadOnlySpan<char> gtin, BarcodeOptions options, ref BarcodeSymbol symbol)
+    public static void BuildStackedOmnidirectional(ReadOnlySpan<char> gtin, bool linked, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         InlineArray64<int> widthStorage = default;
         Span<int> widths = ((Span<int>)widthStorage)[..ElementCount];
-        int rightFinder = EncodeWidths(gtin, widths);
+        int rightFinder = EncodeWidths(gtin, linked, widths);
 
         // The five rows share one buffer, which starts zeroed. The separator rows write only some of their modules, and the rest stay light.
         InlineArray256<byte> moduleStorage = default;
@@ -315,12 +324,14 @@ internal static class DataBarEncoder
     /// character reversed, the fourth character, the right finder reversed, the third character reversed and the guard pair.
     /// </summary>
     /// <param name="gtin">The 14 digit GTIN.</param>
+    /// <param name="linked">Whether a 2D component of a GS1 Composite symbol is linked to the symbol.</param>
     /// <param name="widths">The buffer of 46 element widths.</param>
     /// <returns>The value of the right finder pattern.</returns>
-    private static int EncodeWidths(ReadOnlySpan<char> gtin, Span<int> widths)
+    private static int EncodeWidths(ReadOnlySpan<char> gtin, bool linked, Span<int> widths)
     {
-        // The check digit is not encoded: the 13 digits before it are the data value.
-        long value = 0;
+        // The check digit is not encoded: the 13 digits before it are the data value. The linkage flag stands before them as a fourteenth digit, so a linked
+        // symbol adds 10^13.
+        long value = linked ? 1 : 0;
         for (int i = 0; i < 13; i++)
         {
             value = (value * 10) + (gtin[i] - '0');

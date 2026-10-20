@@ -62,7 +62,7 @@ public sealed class HibcCode128Symbology : BarcodeSymbology
                 HorizontalQuietZone = Code128Encoder.QuietZone,
             };
 
-            Code128Encoder.BuildSymbol(data, false, [], readable[..written], [], [], in layout, options, ref symbol);
+            Code128Encoder.BuildSymbol(data, false, [], readable[..written], [], [], Code128Linkage.None, in layout, options, ref symbol);
         }
         finally
         {

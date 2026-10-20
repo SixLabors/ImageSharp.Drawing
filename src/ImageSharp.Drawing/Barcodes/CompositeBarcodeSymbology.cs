@@ -186,6 +186,11 @@ public abstract class CompositeBarcodeSymbology
         Span<BarcodeSymbol> symbols = ((Span<BarcodeSymbol>)partStorage)[..count];
         try
         {
+            if (this.symbologies.Length != count)
+            {
+                throw new ArgumentException($"The composite has {this.symbologies.Length} parts; got {count} texts.");
+            }
+
             this.EncodeParts(symbols, options, first, second, third);
 
             // The lines of all the parts share one buffer, and the lines of part i are the range from lineStarts[i] to lineStarts[i + 1].
@@ -225,21 +230,22 @@ public abstract class CompositeBarcodeSymbology
     }
 
     /// <summary>
-    /// Encodes each text with the symbology of its part.
+    /// Encodes each text with the symbology of its part. A composite whose parts depend on each other overrides this: the 2D component of a GS1 Composite
+    /// symbol takes its X dimension from the linear component, for example.
     /// </summary>
-    /// <param name="parts">The parts to write, one for each text the caller gives.</param>
+    /// <param name="parts">The parts to write, one for each symbology of <see cref="Symbologies"/>.</param>
     /// <param name="options">The options that control layout choices made during encoding.</param>
     /// <param name="first">The text of the first symbology.</param>
     /// <param name="second">The text of the second symbology.</param>
     /// <param name="third">The text of the third symbology, unused when there are two parts.</param>
-    /// <exception cref="ArgumentException">The composite has a different number of parts, or a text is not valid for its symbology.</exception>
-    private void EncodeParts(Span<BarcodeSymbol> parts, BarcodeOptions options, ReadOnlySpan<char> first, ReadOnlySpan<char> second, ReadOnlySpan<char> third)
+    /// <exception cref="ArgumentException">A text is not valid for its symbology, or the parts do not join.</exception>
+    internal virtual void EncodeParts(
+        Span<BarcodeSymbol> parts,
+        BarcodeOptions options,
+        ReadOnlySpan<char> first,
+        ReadOnlySpan<char> second,
+        ReadOnlySpan<char> third)
     {
-        if (this.symbologies.Length != parts.Length)
-        {
-            throw new ArgumentException($"The composite has {this.symbologies.Length} parts; got {parts.Length} texts.");
-        }
-
         this.EncodePart(0, first, options, ref parts[0]);
         this.EncodePart(1, second, options, ref parts[1]);
         if (parts.Length == 3)

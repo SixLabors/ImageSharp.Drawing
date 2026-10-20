@@ -102,6 +102,7 @@ public sealed class Sscc18Symbology : BarcodeSymbology
             suffix,
             Gs1Data.SsccMinimumXDimension,
             Gs1Data.SsccMaximumXDimension,
+            Code128Linkage.None,
             options,
             ref symbol);
     }

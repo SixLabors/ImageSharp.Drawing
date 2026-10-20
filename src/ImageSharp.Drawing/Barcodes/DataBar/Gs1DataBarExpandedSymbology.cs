@@ -39,7 +39,7 @@ public sealed class Gs1DataBarExpandedSymbology : BarcodeSymbology
             InlineArray128<char> readableStorage = default;
             Span<char> readable = readableStorage;
             int readableLength = options.Font is null ? 0 : Gs1Data.WriteReadable(text, false, readable);
-            DataBarExpandedEncoder.BuildLinear(encoded.AsSpan(), readable[..readableLength], options, ref symbol);
+            DataBarExpandedEncoder.BuildLinear(encoded.AsSpan(), readable[..readableLength], false, options, ref symbol);
         }
         finally
         {

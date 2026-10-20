@@ -371,6 +371,84 @@ internal struct BarcodeSymbol : IDisposable
     }
 
     /// <summary>
+    /// Inserts a row into an ended linear or stacked symbol that has no bearer bar and no edge bars, so the symbol becomes a stacked symbol. The rows from the
+    /// index down and the text lines at or below the top of the new row move down by its height. A GS1 Composite symbol joins its parts with such a row:
+    /// section 11.4 of ISO/IEC 24723 puts a separator pattern between the linear component and the 2D component.
+    /// </summary>
+    /// <param name="index">The index the new row takes: 0 for a row above the symbol, or the row count for a row below it.</param>
+    /// <param name="runs">The runs of the new row, as wide as the symbol.</param>
+    /// <param name="height">The height of the new row in modules.</param>
+    public void InsertRow(int index, ReadOnlySpan<int> runs, float height)
+    {
+        // The layout buffer holds the rows, the runs and the bars in one block sized when the symbol began, so the rows copy into a new block with room for the
+        // new row. The old block stays rented until the copy ends.
+        PooledBuffer<byte> old = this.layoutBuffer;
+        int oldRowCount = this.rowCount;
+        int oldRunCount = this.runCount;
+        int oldBarCount = this.barCount;
+        int oldRunOffset = this.runOffset;
+        int oldBarOffset = this.barOffset;
+        int oldBarCapacity = this.barCapacity;
+        float insertTop = index < oldRowCount ? this.Rows[index].Top : this.HeightInModules;
+        try
+        {
+            ReadOnlySpan<BarcodeRow> oldRows = Slice<BarcodeRow>(old, 0, oldRowCount);
+            ReadOnlySpan<int> oldRuns = Slice<int>(old, oldRunOffset, oldRunCount);
+            ReadOnlySpan<float> oldHeights = Slice<float>(old, oldBarOffset, oldBarCount);
+            ReadOnlySpan<float> oldTops = Slice<float>(old, oldBarOffset + (oldBarCapacity * sizeof(float)), oldBarCount);
+
+            this.Reserve(oldRowCount + 1, oldRunCount + runs.Length, oldBarCount + ((runs.Length + 1) >> 1));
+            this.rowCount = 0;
+            this.runCount = 0;
+            this.barCount = 0;
+            for (int r = 0; r <= oldRowCount; r++)
+            {
+                if (r == index)
+                {
+                    runs.CopyTo(this.AddRow(runs.Length, out Span<float> newHeights, out _));
+                    newHeights.Fill(height);
+                }
+
+                if (r < oldRowCount)
+                {
+                    BarcodeRow row = oldRows[r];
+                    oldRuns.Slice(row.RunStart, row.RunCount).CopyTo(this.AddRow(row.RunCount, out Span<float> heights, out Span<float> tops));
+                    oldHeights.Slice(row.BarStart, row.BarCount).CopyTo(heights);
+                    oldTops.Slice(row.BarStart, row.BarCount).CopyTo(tops);
+                }
+            }
+        }
+        finally
+        {
+            old.Dispose();
+        }
+
+        this.Kind = BarcodeSymbolKind.Stacked;
+        this.HeightInModules = this.EndRows(0F);
+
+        // A text line at or below the new row keeps its place relative to the bars it belongs to.
+        Span<BarcodeTextPlacement> placements = Slice<BarcodeTextPlacement>(this.textBuffer, 0, this.textCount);
+        for (int i = 0; i < placements.Length; i++)
+        {
+            BarcodeTextPlacement placement = placements[i];
+            if (placement.TextEdge >= insertTop)
+            {
+                placements[i] = new BarcodeTextPlacement(
+                    placement.TextStart,
+                    placement.TextLength,
+                    placement.Left,
+                    placement.Right,
+                    placement.Side,
+                    placement.TextEdge + height,
+                    placement.FontScale,
+                    placement.IsCaption,
+                    placement.Alignment,
+                    placement.WithinSpan);
+            }
+        }
+    }
+
+    /// <summary>
     /// Ends a linear symbol with no bearer bar, whose runs are whole modules.
     /// </summary>
     /// <param name="leadingQuietZone">The quiet zone before the symbol, in modules.</param>

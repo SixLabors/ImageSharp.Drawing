@@ -26,6 +26,6 @@ public sealed class Gs1DataBarTruncatedSymbology : BarcodeSymbology
         InlineArray14<char> gtinStorage = default;
         Span<char> gtin = gtinStorage;
         Gs1Data.ReadGtin(text, gtin);
-        DataBarEncoder.BuildLinear(gtin, DataBarEncoder.TruncatedHeight, 0F, options, ref symbol);
+        DataBarEncoder.BuildLinear(gtin, false, DataBarEncoder.TruncatedHeight, 0F, options, ref symbol);
     }
 }

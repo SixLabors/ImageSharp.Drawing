@@ -63,6 +63,7 @@ public sealed class Gs1DataBarExpandedStackedSymbology : BarcodeSymbology
             DataBarExpandedEncoder.BuildStacked(
                 encoded.AsSpan(),
                 this.Segments,
+                false,
                 [],
                 readable[..readableLength],
                 [],

@@ -42,6 +42,11 @@ internal static class DataBarLimitedEncoder
     private const int CharacterModulus = 2013571;
 
     /// <summary>
+    /// The value a linked symbol adds to its data value.
+    /// </summary>
+    private const long LinkedOffset = 2015133531096;
+
+    /// <summary>
     /// The modulus of the check value.
     /// </summary>
     private const int CheckModulus = 89;
@@ -101,16 +106,20 @@ internal static class DataBarLimitedEncoder
     /// Builds the symbol.
     /// </summary>
     /// <param name="gtin">The 14 digit GTIN, whose first digit is 0 or 1.</param>
+    /// <param name="linked">Whether a 2D component of a GS1 Composite symbol is linked to the symbol.</param>
     /// <param name="options">The options that control the bar height and the text.</param>
     /// <param name="symbol">The symbol to write.</param>
-    public static void Build(ReadOnlySpan<char> gtin, BarcodeOptions options, ref BarcodeSymbol symbol)
+    public static void Build(ReadOnlySpan<char> gtin, bool linked, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        // The check digit is not encoded: the 13 digits before it are the data value.
-        long value = 0;
+        // The check digit is not encoded: the 13 digits before it are the data value, and a linked symbol adds LinkedOffset to it.
+        long value = linked ? LinkedOffset : 0;
+        long digits = 0;
         for (int i = 0; i < 13; i++)
         {
-            value = (value * 10) + (gtin[i] - '0');
+            digits = (digits * 10) + (gtin[i] - '0');
         }
+
+        value += digits;
 
         // The element widths start with the guard space, so a zero width bar leads the runs, and the symbol ends on the five module space, so a zero width bar
         // closes them. Both zero width bars are the zeros the symbol storage starts with.

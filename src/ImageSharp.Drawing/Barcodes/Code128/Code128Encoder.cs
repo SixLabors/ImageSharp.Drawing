@@ -169,7 +169,7 @@ internal static class Code128Encoder
         ReadOnlySpan<char> readableSuffix,
         BarcodeOptions options,
         ref BarcodeSymbol symbol)
-        => BuildSymbol(text, gs1, readablePrefix, readableBody, readableSuffix, 0, double.PositiveInfinity, options, ref symbol);
+        => BuildSymbol(text, gs1, readablePrefix, readableBody, readableSuffix, 0, double.PositiveInfinity, Code128Linkage.None, options, ref symbol);
 
     /// <summary>
     /// Encodes text and builds the symbol at an X dimension clamped to the range of the application standard. The steps are those of
@@ -183,6 +183,7 @@ internal static class Code128Encoder
     /// <param name="readableSuffix">The characters of the human readable interpretation after its body.</param>
     /// <param name="minimumXDimension">The smallest X dimension the application standard permits, in millimetres.</param>
     /// <param name="maximumXDimension">The largest X dimension the application standard permits, in millimetres.</param>
+    /// <param name="linkage">The linkage flag of a GS1-128 symbol to which a 2D component of a GS1 Composite symbol is linked.</param>
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="symbol">The symbol to write.</param>
     /// <exception cref="ArgumentException">The text carries a character the symbology cannot encode.</exception>
@@ -194,6 +195,7 @@ internal static class Code128Encoder
         ReadOnlySpan<char> readableSuffix,
         double minimumXDimension,
         double maximumXDimension,
+        Code128Linkage linkage,
         BarcodeOptions options,
         ref BarcodeSymbol symbol)
     {
@@ -207,7 +209,7 @@ internal static class Code128Encoder
             HorizontalQuietZone = QuietZone,
         };
 
-        BuildSymbol(text, gs1, readablePrefix, readableBody, readableSuffix, [], in layout, options, ref symbol);
+        BuildSymbol(text, gs1, readablePrefix, readableBody, readableSuffix, [], linkage, in layout, options, ref symbol);
 
         // Section 4.14 rule 2.a.iii of the GS1 General Specifications: "The font size SHOULD be at least 2 mm (0.08 in) in height".
         if (gs1)
@@ -227,6 +229,7 @@ internal static class Code128Encoder
     /// <param name="readableBody">The body of the human readable interpretation.</param>
     /// <param name="readableSuffix">The characters of the human readable interpretation after its body.</param>
     /// <param name="above">The line above the bars, or empty for none.</param>
+    /// <param name="linkage">The linkage flag of a GS1-128 symbol to which a 2D component of a GS1 Composite symbol is linked.</param>
     /// <param name="layout">The dimensions of the application standard.</param>
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="symbol">The symbol to write.</param>
@@ -238,6 +241,7 @@ internal static class Code128Encoder
         ReadOnlySpan<char> readableBody,
         ReadOnlySpan<char> readableSuffix,
         ReadOnlySpan<char> above,
+        Code128Linkage linkage,
         in Code128Layout layout,
         BarcodeOptions options,
         ref BarcodeSymbol symbol)
@@ -253,10 +257,10 @@ internal static class Code128Encoder
             throw new ArgumentException($"Code 128 encodes ASCII 0 to 127; {text.CodePointAt(invalid).ToDisplayString()} is outside that range.", nameof(text));
         }
 
-        // A shift costs one extra symbol character, so two per input character bounds the run, and the start, the optional Function 1, the check and the stop
-        // add four more. The text is at most MaximumLength characters, so the buffers are bounded: short text works inline, and longer text rents each buffer
-        // once.
-        int capacity = (text.Length * 2) + 4;
+        // A shift costs one extra symbol character, so two per input character bounds the run, and the start, the optional Function 1, the optional linkage
+        // flag, the check and the stop add five more. The text is at most MaximumLength characters, so the buffers are bounded: short text works inline, and
+        // longer text rents each buffer once.
+        int capacity = (text.Length * 2) + 5;
         int lookahead = text.Length + 1;
         InlineArray128<int> valueStorage = default;
         InlineArray256<byte> distanceStorage = default;
@@ -271,7 +275,7 @@ internal static class Code128Encoder
 
         try
         {
-            int count = new Encodation(text, gs1, values, distances[..(lookahead * 3)]).Run();
+            int count = new Encodation(text, gs1, linkage, values, distances[..(lookahead * 3)]).Run();
 
             // The stop character is always the last value, so every other value takes the six elements and eleven modules of an ordinary character.
             Span<int> runs = symbol.BeginLinear(((count - 1) * ElementsPerCharacter) + StopElements, xDimension, out Span<float> heights, out _);
@@ -406,6 +410,11 @@ internal static class Code128Encoder
         private readonly bool gs1;
 
         /// <summary>
+        /// The linkage flag the symbol carries before its check character.
+        /// </summary>
+        private readonly Code128Linkage linkage;
+
+        /// <summary>
         /// The buffer the symbol character values are written to.
         /// </summary>
         private readonly Span<int> values;
@@ -435,13 +444,15 @@ internal static class Code128Encoder
         /// </summary>
         /// <param name="text">The text to encode.</param>
         /// <param name="gs1">Whether this is a GS1 symbol.</param>
-        /// <param name="values">The buffer the symbol character values are written to, of at least twice the text length plus four.</param>
+        /// <param name="linkage">The linkage flag the symbol carries before its check character.</param>
+        /// <param name="values">The buffer the symbol character values are written to, of at least twice the text length plus five.</param>
         /// <param name="lookahead">Scratch for the three look-ahead tables, each one entry longer than the text.</param>
-        public Encodation(ReadOnlySpan<char> text, bool gs1, Span<int> values, Span<byte> lookahead)
+        public Encodation(ReadOnlySpan<char> text, bool gs1, Code128Linkage linkage, Span<int> values, Span<byte> lookahead)
         {
             int stride = text.Length + 1;
             this.text = text;
             this.gs1 = gs1;
+            this.linkage = linkage;
             this.values = values;
             this.nextOnlyInA = lookahead[..stride];
             this.nextOnlyInB = lookahead.Slice(stride, stride);
@@ -542,6 +553,18 @@ internal static class Code128Encoder
 
                 this.values[this.written++] = ValueIn(set, character);
                 position++;
+            }
+
+            // Section 7.4 of ISO/IEC 24723: a linked symbol ends its data with an extra code set character, which Table 8 chooses from the active code set.
+            if (this.linkage != Code128Linkage.None)
+            {
+                bool ccC = this.linkage == Code128Linkage.CcC;
+                this.values[this.written++] = set switch
+                {
+                    Code128CodeSet.A => ccC ? LatchC : LatchB,
+                    Code128CodeSet.B => ccC ? LatchA : LatchC,
+                    _ => ccC ? LatchB : LatchA,
+                };
             }
 
             this.values[this.written] = ComputeCheckCharacter(this.values[..this.written]);

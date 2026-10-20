@@ -1080,6 +1080,192 @@ public class DrawBarcodeTests
         RunTest(provider, new Ean13Symbology(), "5901234123457", options);
     }
 
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1CompositeComponentAlone<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1CompositeComponentSymbology(), "(01)09521234543213(3103)000123", CreateNominalOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1CompositeComponentAlone_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1CompositeComponentSymbology(), "(01)09521234543213(3103)000123", CreateNominalTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Ean13Composite<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Ean13CompositeSymbology(), "3312345678903", "(99)1234-abcd", CreateNominalOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Ean13Composite_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Ean13CompositeSymbology(), "3312345678903", "(99)1234-abcd", CreateNominalTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Ean8Composite<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Ean8CompositeSymbology(), "12345670", "(21)A12345678", CreateNominalOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Ean8Composite_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Ean8CompositeSymbology(), "12345670", "(21)A12345678", CreateNominalTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void UpcAComposite<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new UpcACompositeSymbology(), "416000336108", "(99)1234-abcd", CreateNominalOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void UpcAComposite_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new UpcACompositeSymbology(), "416000336108", "(99)1234-abcd", CreateNominalTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void UpcEComposite<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new UpcECompositeSymbology(), "01234558", "(15)021231", CreateNominalOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void UpcEComposite_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new UpcECompositeSymbology(), "01234558", "(15)021231", CreateNominalTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1128Composite<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1128CompositeSymbology(), "(01)03212345678906", "(21)A1B2C3D4E5F6G7H8", CreateNominalOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1128Composite_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1128CompositeSymbology(), "(01)03212345678906", "(21)A1B2C3D4E5F6G7H8", CreateNominalTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1128CompositeCcC<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1128CompositeSymbology(Gs1CompositeComponent.CcC), "(01)93812345678901", "(10)ABCD123456(410)3898765432108", CreateNominalOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1128CompositeCcC_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1128CompositeSymbology(Gs1CompositeComponent.CcC), "(01)93812345678901", "(10)ABCD123456(410)3898765432108", CreateNominalTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarOmnidirectionalComposite<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarOmnidirectionalCompositeSymbology(), "(01)03612345678904", "(11)990102", CreateNominalOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarOmnidirectionalComposite_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarOmnidirectionalCompositeSymbology(), "(01)03612345678904", "(11)990102", CreateNominalTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarTruncatedComposite<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarTruncatedCompositeSymbology(), "(01)03612345678904", "(11)990102", CreateNominalOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarTruncatedComposite_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarTruncatedCompositeSymbology(), "(01)03612345678904", "(11)990102", CreateNominalTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarStackedComposite<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarStackedCompositeSymbology(), "(01)03412345678900", "(17)010200", CreateNominalOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarStackedComposite_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarStackedCompositeSymbology(), "(01)03412345678900", "(17)010200", CreateNominalTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarStackedOmnidirectionalComposite<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarStackedOmnidirectionalCompositeSymbology(), "(01)03612345678904", "(11)990102", CreateNominalOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarStackedOmnidirectionalComposite_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarStackedOmnidirectionalCompositeSymbology(), "(01)03612345678904", "(11)990102", CreateNominalTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarLimitedComposite<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarLimitedCompositeSymbology(), "(01)13112345678906", "(17)010615(10)A123456", CreateNominalOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarLimitedComposite_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarLimitedCompositeSymbology(), "(01)13112345678906", "(17)010615(10)A123456", CreateNominalTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarExpandedComposite<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarExpandedCompositeSymbology(), "(01)93712345678904(3103)001234", "(91)1A2B3C4D5E", CreateNominalOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarExpandedComposite_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarExpandedCompositeSymbology(), "(01)93712345678904(3103)001234", "(91)1A2B3C4D5E", CreateNominalTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarExpandedStackedComposite<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarExpandedStackedCompositeSymbology(), "(01)00012345678905(10)ABCDEF", "(21)12345678", CreateNominalOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarExpandedStackedComposite_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarExpandedStackedCompositeSymbology(), "(01)00012345678905(10)ABCDEF", "(21)12345678", CreateNominalTextOptions());
+
+    private static void RunTest<TPixel>(
+        TestImageProvider<TPixel> provider,
+        CompositeBarcodeSymbology symbology,
+        string first,
+        string second,
+        BarcodeOptions options)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => provider.RunValidatingProcessorTest(
+            x =>
+            {
+                // The image is the composite, with no slack around it, as for one symbol.
+                RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(symbology, options, PointF.Empty, first, second);
+                x.Resize(new Size((int)MathF.Ceiling(bounds.Width), (int)MathF.Ceiling(bounds.Height)));
+                x.Paint(canvas => canvas.DrawBarcode(symbology, options, new PointF(-bounds.X, -bounds.Y), first, second));
+            },
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
+
     private static void RunTest<TPixel>(TestImageProvider<TPixel> provider, BarcodeSymbology symbology, string text, BarcodeOptions options)
         where TPixel : unmanaged, IPixel<TPixel>
         => provider.RunValidatingProcessorTest(

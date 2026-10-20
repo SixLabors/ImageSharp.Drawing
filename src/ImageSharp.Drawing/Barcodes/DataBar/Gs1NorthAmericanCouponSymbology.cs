@@ -98,6 +98,7 @@ public sealed class Gs1NorthAmericanCouponSymbology : BarcodeSymbology
             DataBarExpandedEncoder.BuildStacked(
                 encoded.AsSpan(),
                 this.Segments,
+                false,
                 data.Slice(1, prefixLength),
                 "-",
                 data.Slice(1 + prefixLength, NorthAmericanCouponCode.OfferCodeLength),

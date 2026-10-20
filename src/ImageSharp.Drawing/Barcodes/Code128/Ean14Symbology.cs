@@ -102,6 +102,7 @@ public sealed class Ean14Symbology : BarcodeSymbology
             suffix,
             Gs1Data.Gs1128MinimumXDimension,
             Gs1Data.Gs1128MaximumXDimension,
+            Code128Linkage.None,
             options,
             ref symbol);
     }

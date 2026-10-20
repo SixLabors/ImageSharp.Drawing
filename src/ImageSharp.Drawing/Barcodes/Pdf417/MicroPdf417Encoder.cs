@@ -143,6 +143,70 @@ internal static class MicroPdf417Encoder
     }
 
     /// <summary>
+    /// Returns the number of data codewords of a symbol size: its matrix less its error correction codewords.
+    /// </summary>
+    /// <param name="columns">The number of data columns of the size.</param>
+    /// <param name="rows">The number of rows of the size.</param>
+    /// <returns>The number of data codewords.</returns>
+    public static int DataCodewords(int columns, int rows)
+    {
+        SymbolSize size = FindSize(columns, rows);
+        return (size.Columns * size.Rows) - size.ErrorCorrection;
+    }
+
+    /// <summary>
+    /// Builds a symbol of one size from its data codewords. Section 9 of ISO/IEC 24723 builds the CC-B 2D component of a GS1 Composite symbol this way, at the
+    /// size its bit stream fills.
+    /// </summary>
+    /// <param name="data">The data codewords, at most <see cref="DataCodewords"/> of the size.</param>
+    /// <param name="columns">The number of data columns of the size.</param>
+    /// <param name="rows">The number of rows of the size.</param>
+    /// <param name="xDimension">The X dimension in millimetres.</param>
+    /// <param name="rowHeight">The height of a row in modules.</param>
+    /// <param name="verticalQuietZone">The quiet zone above and below the symbol in modules.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildSymbol(
+        ReadOnlySpan<int> data,
+        int columns,
+        int rows,
+        double xDimension,
+        float rowHeight,
+        float verticalQuietZone,
+        ref BarcodeSymbol symbol)
+    {
+        SymbolSize size = FindSize(columns, rows);
+        int k = size.ErrorCorrection;
+        InlineArray256<int> codewordStorage = default;
+        Span<int> codewords = ((Span<int>)codewordStorage)[..(size.Columns * size.Rows)];
+        data.CopyTo(codewords);
+        codewords[data.Length..^k].Fill(Pdf417Codewords.Pad);
+
+        InlineArray256<int> alphaStorage = default;
+        Pdf417Codewords.AppendErrorCorrection(codewords, k, alphaStorage);
+
+        AddressPatterns patterns = new(size.LeftPattern, size.CentrePattern, size.RightPattern, true);
+        BuildRows(codewords, size.Columns, size.Rows, patterns, xDimension, rowHeight, verticalQuietZone, ref symbol);
+    }
+
+    /// <summary>
+    /// Returns the symbol size of a number of columns and rows. The caller gives a size of <see cref="Sizes"/>.
+    /// </summary>
+    /// <param name="columns">The number of data columns.</param>
+    /// <param name="rows">The number of rows.</param>
+    /// <returns>The size.</returns>
+    private static SymbolSize FindSize(int columns, int rows)
+    {
+        ReadOnlySpan<byte> sizes = Sizes;
+        int offset = 0;
+        while (sizes[offset] != columns || sizes[offset + 1] != rows)
+        {
+            offset += SymbolSize.Length;
+        }
+
+        return new SymbolSize(sizes.Slice(offset, SymbolSize.Length));
+    }
+
+    /// <summary>
     /// Builds the symbol from its data codewords in the first size that holds them.
     /// </summary>
     /// <param name="data">The data codewords.</param>
@@ -192,46 +256,124 @@ internal static class MicroPdf417Encoder
     /// <param name="symbol">The symbol to write.</param>
     private static void BuildRows(ReadOnlySpan<int> codewords, SymbolSize size, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        int c = size.Columns;
-        int r = size.Rows;
-        bool hasCentre = c >= 3;
-        int centreAfter = c - 2;
-        int runCount = (2 * AddressPatternElements) + (c * Pdf417Patterns.ElementCount) + 1 + (hasCentre ? AddressPatternElements : 0);
-
         double xDimension = options.ResolveXDimension(BarcodeSymbology.DefaultXDimension);
         float rowHeight = options.ResolveBarHeight(xDimension, NominalRowHeight);
+        BuildRows(
+            codewords,
+            size.Columns,
+            size.Rows,
+            new AddressPatterns(size.LeftPattern, size.CentrePattern, size.RightPattern, true),
+            xDimension,
+            rowHeight,
+            QuietZone,
+            ref symbol);
+    }
 
-        ReadOnlySpan<int> patterns = Pdf417Patterns.Modules;
-        symbol.BeginStacked(r, r * runCount, r * ((runCount + 1) >> 1), xDimension);
-        for (int row = 0; row < r; row++)
+    /// <summary>
+    /// Builds the rows of a MicroPDF417 symbol or of the 2D component of a GS1 Composite symbol, whose rows section 8.2 of ISO/IEC 24723 takes from
+    /// MicroPDF417: the left row address pattern, if the symbol has one, the codewords of the row with the centre row address pattern after the first column of
+    /// three or the second of four, the right row address pattern and a single module bar.
+    /// </summary>
+    /// <param name="codewords">The codewords in row order, error correction codewords included.</param>
+    /// <param name="columns">The number of data columns, 1 to 4.</param>
+    /// <param name="rows">The number of rows.</param>
+    /// <param name="patterns">The row address patterns of the first row.</param>
+    /// <param name="xDimension">The X dimension in millimetres.</param>
+    /// <param name="rowHeight">The height of a row in modules.</param>
+    /// <param name="verticalQuietZone">The quiet zone above and below the symbol in modules.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildRows(
+        ReadOnlySpan<int> codewords,
+        int columns,
+        int rows,
+        AddressPatterns patterns,
+        double xDimension,
+        float rowHeight,
+        float verticalQuietZone,
+        ref BarcodeSymbol symbol)
+    {
+        int c = columns;
+        bool hasCentre = c >= 3;
+        int centreAfter = c - 2;
+        int runCount = ((patterns.HasLeft ? 2 : 1) * AddressPatternElements) + (c * Pdf417Patterns.ElementCount) + 1 + (hasCentre ? AddressPatternElements : 0);
+
+        ReadOnlySpan<int> characters = Pdf417Patterns.Modules;
+        symbol.BeginStacked(rows, rows * runCount, rows * ((runCount + 1) >> 1), xDimension);
+        for (int row = 0; row < rows; row++)
         {
             // Each row address pattern steps through its table from the first one of the size, and the cluster of the row follows the left pattern: every third
-            // pattern shares one of the three clusters.
-            int leftIndex = (row + size.LeftPattern - 1) % AddressPatternCount;
-            int cluster = (row + size.LeftPattern - 1) % 3;
-            ReadOnlySpan<int> clusterPatterns = patterns.Slice(cluster * Pdf417Patterns.CodewordCount, Pdf417Patterns.CodewordCount);
+            // pattern shares one of the three clusters. A symbol without a left pattern takes the cluster of the left pattern its row would have.
+            int leftIndex = (row + patterns.Left - 1) % AddressPatternCount;
+            int cluster = (row + patterns.Left - 1) % 3;
+            ReadOnlySpan<int> clusterPatterns = characters.Slice(cluster * Pdf417Patterns.CodewordCount, Pdf417Patterns.CodewordCount);
 
             Span<int> runs = symbol.AddRow(runCount, out Span<float> heights, out _);
             heights.Fill(rowHeight);
             int index = 0;
-            Pdf417Patterns.AppendElements(runs, ref index, SideAddressPatterns[leftIndex], AddressPatternModules, AddressPatternElements);
+            if (patterns.HasLeft)
+            {
+                Pdf417Patterns.AppendElements(runs, ref index, SideAddressPatterns[leftIndex], AddressPatternModules, AddressPatternElements);
+            }
+
             for (int column = 0; column < c; column++)
             {
                 if (hasCentre && column == centreAfter)
                 {
-                    int centreModules = CentreAddressPatterns[(row + size.CentrePattern - 1) % AddressPatternCount];
+                    int centreModules = CentreAddressPatterns[(row + patterns.Centre - 1) % AddressPatternCount];
                     Pdf417Patterns.AppendElements(runs, ref index, centreModules, AddressPatternModules, AddressPatternElements);
                 }
 
                 Pdf417Patterns.AppendCharacter(runs, ref index, clusterPatterns[codewords[(row * c) + column]]);
             }
 
-            int rightModules = SideAddressPatterns[(row + size.RightPattern - 1) % AddressPatternCount];
+            int rightModules = SideAddressPatterns[(row + patterns.Right - 1) % AddressPatternCount];
             Pdf417Patterns.AppendElements(runs, ref index, rightModules, AddressPatternModules, AddressPatternElements);
             runs[index] = 1;
         }
 
-        symbol.EndStacked(0F, QuietZone, QuietZone, QuietZone, QuietZone);
+        symbol.EndStacked(0F, QuietZone, QuietZone, verticalQuietZone, verticalQuietZone);
+    }
+
+    /// <summary>
+    /// The row address patterns of the first row of a symbol, each counted from 1. Every row after it takes the next pattern of each table.
+    /// </summary>
+    internal readonly struct AddressPatterns
+    {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="AddressPatterns"/> struct.
+        /// </summary>
+        /// <param name="left">The left row address pattern of the first row. A symbol without a left pattern gives the one its first row would have, which
+        /// sets the cluster of the row.</param>
+        /// <param name="centre">The centre row address pattern of the first row, or 0 for a symbol of one or two columns.</param>
+        /// <param name="right">The right row address pattern of the first row.</param>
+        /// <param name="hasLeft">Whether the rows draw the left row address pattern.</param>
+        public AddressPatterns(int left, int centre, int right, bool hasLeft)
+        {
+            this.Left = left;
+            this.Centre = centre;
+            this.Right = right;
+            this.HasLeft = hasLeft;
+        }
+
+        /// <summary>
+        /// Gets the left row address pattern of the first row.
+        /// </summary>
+        public int Left { get; }
+
+        /// <summary>
+        /// Gets the centre row address pattern of the first row, or 0 for a symbol of one or two columns.
+        /// </summary>
+        public int Centre { get; }
+
+        /// <summary>
+        /// Gets the right row address pattern of the first row.
+        /// </summary>
+        public int Right { get; }
+
+        /// <summary>
+        /// Gets a value indicating whether the rows draw the left row address pattern. The 3-column 2D component of a GS1 Composite symbol omits it.
+        /// </summary>
+        public bool HasLeft { get; }
     }
 
     /// <summary>

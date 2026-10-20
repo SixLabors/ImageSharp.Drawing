@@ -267,14 +267,15 @@ internal static class DataBarExpandedEncoder
     /// </summary>
     /// <param name="text">The prepared element strings, with a separator after every variable length element string but the last.</param>
     /// <param name="caption">The human readable interpretation.</param>
+    /// <param name="linked">Whether a 2D component of a GS1 Composite symbol is linked to the symbol: section 7.3 of ISO/IEC 24723 sets the linkage bit.</param>
     /// <param name="options">The options that control the bar height and the text.</param>
     /// <param name="symbol">The symbol to write.</param>
     /// <exception cref="ArgumentException">The data carries a character the symbology cannot encode, or more data than 21 data characters hold.</exception>
-    public static void BuildLinear(ReadOnlySpan<char> text, ReadOnlySpan<char> caption, BarcodeOptions options, ref BarcodeSymbol symbol)
+    public static void BuildLinear(ReadOnlySpan<char> text, ReadOnlySpan<char> caption, bool linked, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         InlineArray256<int> characterStorage = default;
         Span<int> characters = ((Span<int>)characterStorage)[..(MaximumSymbolCharacters * 8)];
-        int symbolCharacters = EncodeCharacters(text, MaximumSymbolCharacters, characters);
+        int symbolCharacters = EncodeCharacters(text, MaximumSymbolCharacters, linked, characters);
         ReadOnlySpan<byte> finders = Finders(symbolCharacters);
 
         // A zero width bar, the guard space and bar, the characters with a finder after every second one, and the guard space and bar. The symbol ends on a bar
@@ -324,6 +325,7 @@ internal static class DataBarExpandedEncoder
     /// </summary>
     /// <param name="text">The prepared element strings, with a separator after every variable length element string but the last.</param>
     /// <param name="segments">The number of segments in a full row, even and from 2 to 20.</param>
+    /// <param name="linked">Whether a 2D component of a GS1 Composite symbol is linked to the symbol: section 7.3 of ISO/IEC 24723 sets the linkage bit.</param>
     /// <param name="captionPrefix">The characters of the human readable interpretation before its body.</param>
     /// <param name="captionBody">The body of the human readable interpretation.</param>
     /// <param name="captionSuffix">The characters of the human readable interpretation after its body.</param>
@@ -336,6 +338,7 @@ internal static class DataBarExpandedEncoder
     public static void BuildStacked(
         ReadOnlySpan<char> text,
         int segments,
+        bool linked,
         ReadOnlySpan<char> captionPrefix,
         ReadOnlySpan<char> captionBody,
         ReadOnlySpan<char> captionSuffix,
@@ -347,7 +350,7 @@ internal static class DataBarExpandedEncoder
     {
         InlineArray256<int> characterStorage = default;
         Span<int> characters = ((Span<int>)characterStorage)[..(MaximumSymbolCharacters * 8)];
-        int symbolCharacters = EncodeCharacters(text, segments, characters);
+        int symbolCharacters = EncodeCharacters(text, segments, linked, characters);
         double xDimension = options.ResolveXDimension(minimumXDimension, NominalXDimension, maximumXDimension);
         float rowHeight = options.ResolveBarHeight(xDimension, RowHeight);
 
@@ -423,13 +426,14 @@ internal static class DataBarExpandedEncoder
     /// </summary>
     /// <param name="text">The prepared element strings.</param>
     /// <param name="segments">The number of segments in a row, which the symbol length avoids leaving one alone on the last row.</param>
+    /// <param name="linked">Whether a 2D component of a GS1 Composite symbol is linked to the symbol.</param>
     /// <param name="characters">The buffer of 8 widths per symbol character.</param>
     /// <returns>The number of symbol characters.</returns>
-    private static int EncodeCharacters(ReadOnlySpan<char> text, int segments, Span<int> characters)
+    private static int EncodeCharacters(ReadOnlySpan<char> text, int segments, bool linked, Span<int> characters)
     {
         InlineArray24<int> valueStorage = default;
         Span<int> values = ((Span<int>)valueStorage)[..MaximumDataSymbolCharacters];
-        int dataCharacters = EncodeBits(text, segments, values) / BitsPerSymbolCharacter;
+        int dataCharacters = EncodeBits(text, segments, linked, values) / BitsPerSymbolCharacter;
         int symbolCharacters = dataCharacters + 1;
         ReadOnlySpan<byte> finders = Finders(symbolCharacters);
 
@@ -510,9 +514,10 @@ internal static class DataBarExpandedEncoder
     /// </summary>
     /// <param name="text">The prepared element strings.</param>
     /// <param name="segments">The number of segments in a row.</param>
+    /// <param name="linked">Whether a 2D component of a GS1 Composite symbol is linked to the symbol, which sets the linkage bit.</param>
     /// <param name="values">The buffer that receives the 12 bit value of each data character.</param>
     /// <returns>The number of bits, a multiple of 12.</returns>
-    private static int EncodeBits(ReadOnlySpan<char> text, int segments, Span<int> values)
+    private static int EncodeBits(ReadOnlySpan<char> text, int segments, bool linked, Span<int> values)
     {
         int length = text.Length;
         EncodationMethod method = length >= 16 && text[0] == '0' && text[1] == '1' ? EncodationMethod.Gtin : EncodationMethod.GeneralPurpose;
@@ -577,7 +582,7 @@ internal static class DataBarExpandedEncoder
         }
 
         BitWriter bits = new(values);
-        bits.Append(0, 1);
+        bits.Append(linked ? 1 : 0, 1);
         int variableLength = -1;
         int read;
         switch (method)

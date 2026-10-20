@@ -28,6 +28,6 @@ public sealed class Gs1DataBarStackedOmnidirectionalSymbology : BarcodeSymbology
         InlineArray14<char> gtinStorage = default;
         Span<char> gtin = gtinStorage;
         Gs1Data.ReadGtin(text, gtin);
-        DataBarEncoder.BuildStackedOmnidirectional(gtin, options, ref symbol);
+        DataBarEncoder.BuildStackedOmnidirectional(gtin, false, options, ref symbol);
     }
 }

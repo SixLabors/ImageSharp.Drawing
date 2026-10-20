@@ -160,15 +160,71 @@ internal static class Pdf417Encoder
         if (!errorCorrectionLevel.HasValue)
         {
             int roomLevel = Math.Min(BitOperations.Log2((uint)((c * r) - 1 - m)) - 1, MaximumErrorCorrectionLevel);
-            if (roomLevel > level)
-            {
-                level = roomLevel;
-                k = 2 << level;
-            }
+            level = Math.Max(level, roomLevel);
         }
 
+        double xDimension = options.ResolveXDimension(BarcodeSymbology.DefaultXDimension);
+
+        // Section 5.8.2: the row height is "Y >= 3X".
+        if (options.IsBarHeightUnder(NominalRowHeight * xDimension))
+        {
+            double minimum = NominalRowHeight * xDimension;
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                options.BarHeight,
+                $"A row is at least 3X high, {minimum:0.##} mm at its X dimension; the bar height is {options.BarHeight:0.##} mm.");
+        }
+
+        float rowHeight = options.ResolveBarHeight(xDimension, NominalRowHeight);
+        BuildMatrix(data, c, r, level, compact, xDimension, rowHeight, QuietZone, ref symbol);
+    }
+
+    /// <summary>
+    /// Builds a symbol of a chosen number of columns and error correction level from its data codewords, in the fewest rows that hold them. Section 10 of
+    /// ISO/IEC 24723 builds the CC-C 2D component of a GS1 Composite symbol this way: its bit stream fills the data region, so the symbol takes no pad codewords,
+    /// and section 11.5 gives it no quiet zone above or below.
+    /// </summary>
+    /// <param name="data">The data codewords, without the Symbol Length Descriptor.</param>
+    /// <param name="columns">The number of data columns, 1 to 30.</param>
+    /// <param name="level">The error correction level, 0 to 8.</param>
+    /// <param name="xDimension">The X dimension in millimetres.</param>
+    /// <param name="verticalQuietZone">The quiet zone above and below the symbol in modules.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildSymbol(ReadOnlySpan<int> data, int columns, int level, double xDimension, float verticalQuietZone, ref BarcodeSymbol symbol)
+    {
+        int k = 2 << level;
+        int r = Math.Max(MinimumRows, (data.Length + 1 + k + columns - 1) / columns);
+        BuildMatrix(data, columns, r, level, false, xDimension, NominalRowHeight, verticalQuietZone, ref symbol);
+    }
+
+    /// <summary>
+    /// Builds the symbol matrix of section 5.9 from the data codewords: the Symbol Length Descriptor, the data, the pad codewords and the error correction
+    /// codewords, then the rows.
+    /// </summary>
+    /// <param name="data">The data codewords, without the Symbol Length Descriptor.</param>
+    /// <param name="c">The number of data columns.</param>
+    /// <param name="r">The number of rows.</param>
+    /// <param name="level">The error correction level.</param>
+    /// <param name="compact">Whether the symbol is Compact PDF417.</param>
+    /// <param name="xDimension">The X dimension in millimetres.</param>
+    /// <param name="rowHeight">The height of a row in modules.</param>
+    /// <param name="verticalQuietZone">The quiet zone above and below the symbol in modules.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    private static void BuildMatrix(
+        ReadOnlySpan<int> data,
+        int c,
+        int r,
+        int level,
+        bool compact,
+        double xDimension,
+        float rowHeight,
+        float verticalQuietZone,
+        ref BarcodeSymbol symbol)
+    {
         // Section 5.9.2: the Symbol Length Descriptor n = c x r - k counts itself, the data and the pad codewords, which fill the rest of the data region with
         // 900. One rental holds the codewords and the generator coefficients of the error correction.
+        int m = data.Length;
+        int k = 2 << level;
         int total = c * r;
         int n = total - k;
         PooledBuffer<int> rented = new(total + k + 1);
@@ -180,7 +236,7 @@ internal static class Pdf417Encoder
             codewords[(m + 1)..n].Fill(Pdf417Codewords.Pad);
             Pdf417Codewords.AppendErrorCorrection(codewords, k, rented.Span[total..]);
 
-            BuildRows(codewords, c, r, level, compact, options, ref symbol);
+            BuildRows(codewords, c, r, level, compact, xDimension, rowHeight, verticalQuietZone, ref symbol);
         }
         finally
         {
@@ -197,29 +253,26 @@ internal static class Pdf417Encoder
     /// <param name="r">The number of rows.</param>
     /// <param name="level">The error correction level.</param>
     /// <param name="compact">Whether the symbol is Compact PDF417.</param>
-    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="xDimension">The X dimension in millimetres.</param>
+    /// <param name="rowHeight">The height of a row in modules.</param>
+    /// <param name="verticalQuietZone">The quiet zone above and below the symbol in modules.</param>
     /// <param name="symbol">The symbol to write.</param>
-    private static void BuildRows(ReadOnlySpan<int> codewords, int c, int r, int level, bool compact, BarcodeOptions options, ref BarcodeSymbol symbol)
+    private static void BuildRows(
+        ReadOnlySpan<int> codewords,
+        int c,
+        int r,
+        int level,
+        bool compact,
+        double xDimension,
+        float rowHeight,
+        float verticalQuietZone,
+        ref BarcodeSymbol symbol)
     {
         // A row of a full symbol is the start character, c + 2 symbol characters and the stop character; a compact row is the start character, c + 1 symbol
         // characters and one bar.
         int runCount = compact
             ? Start.Length + ((c + 1) * Pdf417Patterns.ElementCount) + 1
             : Start.Length + ((c + 2) * Pdf417Patterns.ElementCount) + Stop.Length;
-
-        double xDimension = options.ResolveXDimension(BarcodeSymbology.DefaultXDimension);
-
-        // Section 5.8.2: the row height is "Y >= 3X".
-        if (options.IsBarHeightUnder(NominalRowHeight * xDimension))
-        {
-            double minimum = NominalRowHeight * xDimension;
-            throw new ArgumentOutOfRangeException(
-                nameof(options),
-                options.BarHeight,
-                $"A row is at least 3X high, {minimum:0.##} mm at its X dimension; the bar height is {options.BarHeight:0.##} mm.");
-        }
-
-        float rowHeight = options.ResolveBarHeight(xDimension, NominalRowHeight);
 
         ReadOnlySpan<int> patterns = Pdf417Patterns.Modules;
         symbol.BeginStacked(r, r * runCount, r * ((runCount + 1) >> 1), xDimension);
@@ -264,6 +317,6 @@ internal static class Pdf417Encoder
             }
         }
 
-        symbol.EndStacked(0F, QuietZone, QuietZone, QuietZone, QuietZone);
+        symbol.EndStacked(0F, QuietZone, QuietZone, verticalQuietZone, verticalQuietZone);
     }
 }
