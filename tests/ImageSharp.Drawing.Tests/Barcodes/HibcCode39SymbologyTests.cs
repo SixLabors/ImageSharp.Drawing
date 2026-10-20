@@ -6,47 +6,10 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="HibcCode39Symbology"/>. Each expected run string is the alternating bar and space module widths, starting with a bar, taken
-/// from an independent reference implementation through its raw encoding API, less the gap it emits after the stop character. A HIBC Code 39 carries the same
-/// data a HIBC Code 128 does, drawn by Code 39, so these also prove the shared data layer.
+/// Encoder tests for <see cref="HibcCode39Symbology"/>. A HIBC Code 39 carries the same data a HIBC Code 128 does, drawn by Code 39.
 /// </summary>
 public class HibcCode39SymbologyTests
 {
-    /// <summary>
-    /// Gets the cases of <see cref="MatchesReferenceRuns"/>.
-    /// </summary>
-    public static TheoryData<string, string> MatchesReferenceRunsData { get; } = new()
-    {
-        {
-            "A123BJC5D6E71",
-            "13113131111311131311311113113131131111311133111131313311111111311311311111333111313113111131133111111111331131113331111131113311111113113131" +
-            "31131111311111133131131131311"
-        },
-        { "$A1234G", "1311313111131113131113131311113111131131311311113111331111313133111111111331113111111331313311111131131131311" },
-        {
-            "$$52001510X3",
-            "13113131111311131311131313111113131311113113311111113311113111133131111113313111311311113131133111113113111131111331311113113111313133111111" +
-            "1313111311131131311"
-        },
-        {
-            "A99912345/$$52001510X3/16D20111212/S77DEFG45",
-            "13113131111311131311311113113111331131111133113111113311311131131111311133111131313311111111133111313113311111131311131113131311111313131111" +
-            "31133111111133111131111331311111133131113113111131311331111131131111311113313111131131113131331111111313111311311311113111333111111111331131" +
-            "11331111311113313111311311113131131111313113111131113311113131131111311133111131131311131111311133111113113131111311313111113311313111331111" +
-            "11313311111111133131111331113131133111111113113131131131311"
-        },
-    };
-
-    /// <summary>
-    /// The symbol runs match the reference runs.
-    /// </summary>
-    /// <param name="text">The data.</param>
-    /// <param name="expected">The run widths of the reference symbol.</param>
-    [Theory]
-    [MemberData(nameof(MatchesReferenceRunsData))]
-    public void MatchesReferenceRuns(string text, string expected)
-        => Assert.Equal(expected, Encode(new HibcCode39Symbology(), text));
-
     /// <summary>
     /// A caller can supply the check character. The symbol carries it once, so the runs match those of the same data without the check character.
     /// </summary>

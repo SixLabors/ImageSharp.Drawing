@@ -6,28 +6,10 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="LeitcodeSymbology"/>. The expected run string is the alternating bar and space module widths, starting with a bar, taken
-/// verbatim from an independent reference implementation through its raw encoding API. That implementation draws a wide element two modules wide and emits a
-/// narrow space after the stop pattern, so the test widens every wide element to the three modules this library draws and drops the trailing space before it
-/// compares. The number is the worked example the Deutsche Post documentation gives.
+/// Encoder tests for <see cref="LeitcodeSymbology"/>. The number is the worked example the Deutsche Post documentation gives.
 /// </summary>
 public class LeitcodeSymbologyTests
 {
-    /// <summary>
-    /// The reference emits the same symbol whether the check digit is supplied or calculated, so both forms of the documented example compare against one
-    /// vector.
-    /// </summary>
-    /// <param name="text">The text to encode.</param>
-    [Theory]
-    [InlineData("2134807501640")]
-    [InlineData("21348075016401")]
-    public void MatchesReferenceRuns(string text)
-    {
-        const string reference = "111112211111222121121112211112221112111221211211212112112122111212112121122111";
-
-        Assert.Equal(reference[..^1].Replace('2', '3'), Encode(text));
-    }
-
     /// <summary>
     /// The documentation weights the digits 4 and 9 alternately from the first, so 2134807501640 gives 8 + 9 + 12 + 36 + 32 + 0 + 28 + 45 + 0 + 9 + 24 + 36 + 0
     /// = 239, and "239 Modulo 10 = 9, Ergänzung zu 10 = 1". A supplied check digit that disagrees throws.

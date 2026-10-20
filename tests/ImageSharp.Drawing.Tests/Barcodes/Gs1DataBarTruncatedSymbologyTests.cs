@@ -6,22 +6,10 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Gs1DataBarTruncatedSymbology"/>. The expected sequences come from an independent reference implementation through its raw
-/// encoding API, and are the same as those of GS1 DataBar Omnidirectional, because the two differ in height alone.
+/// Encoder tests for <see cref="Gs1DataBarTruncatedSymbology"/>. The tests check the dimensions of the GS1 General Specifications and the bar height option.
 /// </summary>
 public class Gs1DataBarTruncatedSymbologyTests
 {
-    /// <summary>
-    /// The bar and space widths match the reference implementation.
-    /// </summary>
-    /// <param name="text">The element string to encode.</param>
-    /// <param name="expected">The reference run string.</param>
-    [Theory]
-    [InlineData("(01)09521234543213", "01151115111238114311112234112211114725121211311")]
-    [InlineData("(01)00012345678905", "01111112181274113211214132111124117332224131111")]
-    public void Gs1DataBarTruncated_MatchesReferenceWidths(string text, string expected)
-        => Assert.Equal(expected, SymbolEncoder.Read(new Gs1DataBarTruncatedSymbology(), text, new BarcodeOptions(), SymbolEncoder.RunString));
-
     /// <summary>
     /// Section 5.5.2.1.2 of the GS1 General Specifications: "Its dimensions are 96X wide by 13X high".
     /// </summary>

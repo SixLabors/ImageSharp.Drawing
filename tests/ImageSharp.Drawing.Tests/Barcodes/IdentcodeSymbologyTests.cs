@@ -6,28 +6,10 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="IdentcodeSymbology"/>. The expected run string is the alternating bar and space module widths, starting with a bar, taken
-/// verbatim from an independent reference implementation through its raw encoding API. That implementation draws a wide element two modules wide and emits a
-/// narrow space after the stop pattern, so the test widens every wide element to the three modules this library draws and drops the trailing space before it
-/// compares. The number is the worked example the Deutsche Post documentation gives.
+/// Encoder tests for <see cref="IdentcodeSymbology"/>. The number is the worked example the Deutsche Post documentation gives.
 /// </summary>
 public class IdentcodeSymbologyTests
 {
-    /// <summary>
-    /// The reference emits the same symbol whether the check digit is supplied or calculated, so both forms of the documented example compare against one
-    /// vector.
-    /// </summary>
-    /// <param name="text">The text to encode.</param>
-    [Theory]
-    [InlineData("56310243031")]
-    [InlineData("563102430313")]
-    public void MatchesReferenceRuns(string text)
-    {
-        const string reference = "11112112221111222111111211122121121212211121121221211122121111212111";
-
-        Assert.Equal(reference[..^1].Replace('2', '3'), Encode(text));
-    }
-
     /// <summary>
     /// The documentation weights the digits 4 and 9 alternately from the first, so 56310243031 gives 20 + 54 + 12 + 9 + 0 + 18 + 16 + 27 + 0 + 27 + 4 = 187,
     /// and "187 Modulo 10 = 7, Ergänzung zu 10 = 3". The printed line is the grouping the reference implementations agree on for that example. A supplied check

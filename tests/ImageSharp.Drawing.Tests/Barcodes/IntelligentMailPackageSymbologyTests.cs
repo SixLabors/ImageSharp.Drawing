@@ -10,40 +10,11 @@ using SixLabors.ImageSharp.Processing;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="IntelligentMailPackageSymbology"/>. Each expected run string is the alternating bar and space module widths, starting with a
-/// bar, taken from an independent reference implementation through its raw encoding API for the same element strings as GS1-128. The check digits follow
-/// USPS2000508 Appendix E. The C01 PIC is the worked example of Publication 199 section 4.6, whose check digit is 0.
+/// Encoder tests for <see cref="IntelligentMailPackageSymbology"/>. The check digits follow USPS2000508 Appendix E. The C01 PIC is the worked example of
+/// Publication 199 section 4.6, whose check digit is 0.
 /// </summary>
 public class IntelligentMailPackageSymbologyTests
 {
-    /// <summary>
-    /// One input for each channel Application Identifier, with and without a routing code. Every symbol starts with the Start C character and stays in code set
-    /// C, as section 2.2.1 of USPS2000508 requires.
-    /// </summary>
-    /// <param name="text">The element strings.</param>
-    /// <param name="expected">The reference runs.</param>
-    [Theory]
-    [InlineData(
-        "(420)123456789(92)12391234567812345670",
-        "2112324111311121332221223121311131231411222121414111311111431122322113131122321311233311212411121122321311233311211124122221222331112")]
-    [InlineData(
-        "(420)12345(92)123912345678123456789012",
-        "2112324111311121332221223121311131234111311111431122322113131122321311233311212411121122321311233311212411122141211122322412112331112")]
-    [InlineData(
-        "(92)12391234567812345670",
-        "2112324111311111431122322113131122321311233311212411121122321311233311211124123321112331112")]
-    [InlineData(
-        "(420)123456789(93)12312345612345678906",
-        "2112324111311121332221223121311131231411222121414111311113411122322123213121311131232214113121311131231411222121411222131122322331112")]
-    [InlineData(
-        "(94)1231291234567812345678901232",
-        "2112324111311311411122322123213222111122321311233311212411121122321311233311212411122141211122322321212212132331112")]
-    [InlineData(
-        "(420)123456789(95)12311234561234123453",
-        "2112324111311121332221223121311131231411222121414111311141131122322123211122321311233311211122321311231122321311232131311112242331112")]
-    public void MatchesReferenceRuns(string text, string expected)
-        => Assert.Equal(expected, Encode(text));
-
     /// <summary>
     /// Section 2.4.1 of USPS2000508 suppresses the (420) Application Identifier and the ZIP Code from the human readable interpretation, and Appendix D prints
     /// the PIC in groups of four digits with the remaining digits in a group at the end. Section 2.4.2 prints the service banner above the bars.

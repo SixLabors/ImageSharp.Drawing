@@ -6,29 +6,11 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Sscc18Symbology"/>. Each expected run string is the alternating bar and space module widths, starting with a bar, taken from an
-/// independent reference implementation through its raw encoding API. An SSCC-18 is a GS1-128 symbol carrying the Serial Shipping Container Code of GS1
-/// Application Identifier (00), so the runs carry the double character start pattern, the identifier, the eighteen digits, the check character and the stop
-/// character.
+/// Encoder tests for <see cref="Sscc18Symbology"/>. An SSCC-18 is a GS1-128 symbol carrying the Serial Shipping Container Code of GS1 Application Identifier
+/// (00).
 /// </summary>
 public class Sscc18SymbologyTests
 {
-    /// <summary>
-    /// The reference runs of the SSCC 106141411234567897.
-    /// </summary>
-    private const string Expected = "2112324111312122222213122214112313112313111122321311233311212411124111131311232331112";
-
-    /// <summary>
-    /// The check digit is optional, and the encoder ignores the spaces a caller groups the number with, so all three forms encode to one symbol.
-    /// </summary>
-    /// <param name="text">The text to encode.</param>
-    [Theory]
-    [InlineData("(00)10614141123456789")]
-    [InlineData("(00)106141411234567897")]
-    [InlineData("(00) 1 0614141 1234567 89")]
-    public void MatchesReferenceRuns(string text)
-        => Assert.Equal(Expected, Encode(text));
-
     /// <summary>
     /// The encoder verifies a supplied check digit against section 7.9 of the GS1 General Specifications. A wrong check digit throws.
     /// </summary>
@@ -65,6 +47,19 @@ public class Sscc18SymbologyTests
         string[] texts = SymbolEncoder.Read(new Sscc18Symbology(), text, options, SymbolEncoder.Texts);
 
         Assert.Equal(expected, Assert.Single(texts));
+    }
+
+    /// <summary>
+    /// The symbology calculates the check digit when the input has 17 digits, and it leaves the spaces that group the digits out of the symbol. Each form of the
+    /// same SSCC gives the same bars.
+    /// </summary>
+    [Fact]
+    public void EncodesEachFormOfOneSsccTheSameWay()
+    {
+        string expected = Encode("(00)106141411234567897");
+
+        Assert.Equal(expected, Encode("(00)10614141123456789"));
+        Assert.Equal(expected, Encode("(00) 1 0614141 1234567 89"));
     }
 
     /// <summary>

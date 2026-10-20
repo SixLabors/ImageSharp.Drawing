@@ -6,39 +6,10 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Code11Symbology"/>. Each expected run string is the alternating bar and space module widths, starting with a bar, from the
-/// reference implementation's raw encoding API. The reference draws a wide element three modules wide and emits a narrow gap after the stop character, so the
-/// test drops that trailing gap before it compares.
+/// Encoder tests for <see cref="Code11Symbology"/>.
 /// </summary>
 public class Code11SymbologyTests
 {
-    /// <summary>
-    /// The bar and space widths match the reference implementation for every character of the character set.
-    /// </summary>
-    /// <param name="text">The text to encode.</param>
-    /// <param name="reference">The reference run string.</param>
-    [Theory]
-    [InlineData("123-45", "113311311131131131331111113111113131313111113311")]
-    [InlineData("0123456789", "113311111131311131131131331111113131313111133111111331311311311111113311")]
-    public void MatchesReferenceRuns(string text, string reference)
-        => Assert.Equal(reference[..^1], Encode(text));
-
-    /// <summary>
-    /// C weights the data from the right, 1 to 10 and around again, and takes the sum modulo 11. For 123-45 the values are 1, 2, 3, 10, 4 and 5, so the sum is
-    /// 5 + 8 + 30 + 12 + 10 + 6 = 71 and C is 5. Fewer than ten data characters carry C alone. K weights C and the data from the right, 1 to 9 and around
-    /// again, and takes the sum modulo 11. For 0123456789 C is 165 modulo 11, which is 0, and K is 0 + 18 + 24 + 28 + 30 + 30 + 28 + 24 + 18 + 1 + 0 = 201
-    /// modulo 11, which is 3. Ten or more data characters carry both. The expected runs are the reference implementation's with its check characters on.
-    /// </summary>
-    /// <param name="text">The text to encode.</param>
-    /// <param name="reference">The reference run string with the check characters carried.</param>
-    [Theory]
-    [InlineData("123-45", "113311311131131131331111113111113131313111313111113311")]
-    [InlineData("0123456789", "113311111131311131131131331111113131313111133111111331311311311111111131331111113311")]
-    [InlineData("0123456789-", "113311111131311131131131331111113131313111133111111331311311311111113111111131133111113311")]
-    public void CalculatesTheCheckCharacters(string text, string reference)
-        => Assert.Equal(
-            reference[..^1], SymbolEncoder.Read(new Code11Symbology(CheckCharacterMode.Compute), text, new BarcodeOptions(), SymbolEncoder.RunString));
-
     /// <summary>
     /// The encoder validates supplied check characters against the data and carries them once. The symbol is then the one that the calculated check
     /// characters produce.

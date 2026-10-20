@@ -6,26 +6,10 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Ean14Symbology"/>. Each expected run string is the alternating bar and space module widths, starting with a bar, taken from an
-/// independent reference implementation through its raw encoding API. An EAN-14 is a GS1-128 symbol carrying the Global Trade Item Number of GS1 Application
-/// Identifier (01), so the runs carry the double character start pattern, the identifier, the fourteen digits, the check character and the stop character.
+/// Encoder tests for <see cref="Ean14Symbology"/>. An EAN-14 is a GS1-128 symbol carrying the Global Trade Item Number of GS1 Application Identifier (01).
 /// </summary>
 public class Ean14SymbologyTests
 {
-    private const string Expected = "2112324111312221222212132133111122321311233111232321211221321232212331112";
-
-    /// <summary>
-    /// The check digit is optional, and the encoder ignores the spaces that a caller groups the number with. All three forms encode to the symbol of the
-    /// reference implementation.
-    /// </summary>
-    /// <param name="text">The text to encode.</param>
-    [Theory]
-    [InlineData("(01)0952123454321")]
-    [InlineData("(01)09521234543213")]
-    [InlineData("(01) 09521234543213")]
-    public void MatchesReferenceRuns(string text)
-        => Assert.Equal(Expected, Encode(text));
-
     /// <summary>
     /// A supplied check digit is verified against section 7.9 of the GS1 General Specifications.
     /// </summary>

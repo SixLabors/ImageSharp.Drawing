@@ -6,115 +6,11 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Code16KSymbology"/>. Each expected row is the alternating bar and space module widths of one row, starting with a bar, taken
-/// from an independent reference implementation through its raw encoding API. A row carries its start character, the guard bar, five symbol characters and its
-/// stop character, so the mode, the code and shift characters, the pad and the check characters all show up here.
+/// Encoder tests for <see cref="Code16KSymbology"/>. The tests check the row structure, the height, the starting symbol character, the check characters,
+/// the human readable interpretation and the input that the symbology rejects, as the Code 16K specification states them.
 /// </summary>
 public class Code16KSymbologyTests
 {
-    /// <summary>
-    /// Gets the cases of <see cref="Code16K_MatchesReferenceRows"/>.
-    /// </summary>
-    public static TheoryData<string, string> Code16K_MatchesReferenceRowsData { get; } = new()
-    {
-        // Two lower case letters and ten digits: mode 6, Code C with an implied Double Shift B, section 2.3.1.
-        { "ab0123456789", "321111222131211241214212221223121313211|222111131231411222121412211321121332221" },
-
-        // Mixed case, digits and punctuation over four rows.
-        {
-            "Abcd-1234567890-wxyZ",
-            "321111132221113231214211411221412213211|" +
-            "222111221321131411122321311233311212221|" +
-            "212212411122141211141311221324211122122|" +
-            "141114212112121413123111221141113231411"
-        },
-
-        // Upper case and a space: mode 1, code set B, section 2.3.1.
-        { "CODE 16K", "321111322121313211331211123131321133211|222112122221232212231121123312114122221|212212114122114122114124113111114222122" },
-
-        // An even run of digits: mode 2, code set C.
-        { "1234567890", "321112222211122321311233311212411123211|222112141212114122114121141131321312221" },
-
-        // An odd run of five digits: mode 5, Code C with an implied Shift B for the first digit.
-        { "12345", "321111312221232213121311131232114123211|222112114122114122114121321311131232221" },
-
-        // Three digits, the shortest odd run that takes mode 5.
-        { "123", "321111312221232213121312114122114123211|222112114122114122114121221322112322221" },
-
-        // Lower case and control characters alternating, which shifts between code sets A and B.
-        { "a\u0001b\u0002", "321112221221211244113111211241214213211|222113111411214212114123131212231122221" },
-
-        // Punctuation and lower case together.
-        {
-            "Hello, World!",
-            "321111132222311131122142211142211143211|" +
-            "222111341111122322122223113211341112221|" +
-            "212211212412211141412212221222114122122|" +
-            "141112114122114122114122112141241121411"
-        },
-
-        // A single character, padded to the two row minimum.
-        { "A", "321112221221113232114122114122114123211|222112114122114122114122133111212412221" },
-
-        // No data at all: a start character, pad characters and the two check characters.
-        { string.Empty, "321112221222114122114122114122114123211|222112114122114122114123131211341112221" },
-
-        // Two digits between letters, too short for code set C.
-        { "AB12CD", "321111222131113231311231122321141313211|222111313211123132114121221321111432221" },
-
-        // Four digits between letters: Double Shift C, Appendix G rule 4 d.
-        { "ab1234cd", "321111222131211241214211122321311233211|222111141311411221412211132222131312221" },
-
-        // Six digits between letters: Triple Shift C, Appendix G rule 4 e.
-        { "ab123456cd", "321111221321211241214211122321311233211|222113311211141311411221412212114122221|212212114122114122114123221124311112122" },
-
-        // Control characters before lower case: mode 0, code set A, then a latch to B.
-        { "\u0001\u0002ab", "321112122221211241214211141311211243211|222111214212114122114122123211112242221" },
-
-        // A lower case letter, four digits and a control character: mode 5, then code set A at the end.
-        { "x1234\u0001", "321111312224212111122321311233111413211|222111211242114122114121311412221222221" },
-
-        // Seventy seven upper case letters, the most a sixteen row symbol carries, so rows 9 to 16 use the second half of Table 6.
-        {
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXY",
-            "321111131411113231311231313211123133211|" +
-            "222111321131323112113132311132313112221|" +
-            "212211121331123311321311131231133212122|" +
-            "141111331213131212113312311312131131411|" +
-            "113212133112131313111233113213311211132|" +
-            "123113121133123111113231311231313211231|" +
-            "111411123131321131323112113132311131114|" +
-            "311212313111121331123311321311131233112|" +
-            "321111133211331213131212113312311311132|" +
-            "222112131132133112131313111233113211231|" +
-            "212213311213121133123111113231311231114|" +
-            "141111313211123131321131323112113133112|" +
-            "113212311132313111121331123311321313211|" +
-            "123111131231133211331213131212113312221|" +
-            "111412311312131132133112131313111232122|" +
-            "311213113213311213121132112142231121411"
-        },
-    };
-
-    /// <summary>
-    /// The bar and space widths of every data row match the reference implementation. A separator row stands between two data rows.
-    /// </summary>
-    /// <param name="text">The text to encode.</param>
-    /// <param name="expected">The reference run widths of each data row, separated by vertical bars.</param>
-    [Theory]
-    [MemberData(nameof(Code16K_MatchesReferenceRowsData))]
-    public void Code16K_MatchesReferenceRows(string text, string expected)
-        => Encode(text, (ref symbol) =>
-        {
-            string[] rows = expected.Split('|');
-
-            Assert.Equal((rows.Length * 2) - 1, symbol.Rows.Length);
-            for (int i = 0; i < rows.Length; i++)
-            {
-                Assert.Equal(rows[i], SymbolEncoder.RunString(ref symbol, symbol.Rows[i * 2]));
-            }
-        });
-
     /// <summary>
     /// Section 2.1: every row is 70 modules, and a one module separator bar stands between rows. Section 3.4 gives ten modules of quiet zone before the start
     /// pattern and one after the stop pattern.

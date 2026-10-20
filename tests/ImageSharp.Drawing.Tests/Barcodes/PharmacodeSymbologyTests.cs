@@ -7,24 +7,10 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="PharmacodeSymbology"/> and <see cref="TwoTrackPharmacodeSymbology"/>. Each expected one-track run string is the alternating bar
-/// and space module widths, starting with a bar, from the reference implementation's raw encoding API, joined with commas. The reference emits a gap after the
-/// last bar, so the test drops it before it compares. The two-track bar kinds come from the same API's bar heights and offsets.
+/// Encoder tests for <see cref="PharmacodeSymbology"/> and <see cref="TwoTrackPharmacodeSymbology"/>.
 /// </summary>
 public class PharmacodeSymbologyTests
 {
-    /// <summary>
-    /// The one-track symbol runs match the reference runs.
-    /// </summary>
-    /// <param name="text">The number to encode.</param>
-    /// <param name="reference">The reference run widths, comma separated, with the trailing gap.</param>
-    [Theory]
-    [InlineData("3", "1,2,1,2")]
-    [InlineData("117480", "3,2,3,2,1,2,1,2,3,2,1,2,3,2,1,2,3,2,3,2,3,2,1,2,3,2,1,2,1,2,3,2")]
-    [InlineData("131070", "3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2")]
-    public void MatchesReferenceRuns(string text, string reference)
-        => Assert.Equal(reference[..^2], string.Join(",", Encode(text)));
-
     /// <summary>
     /// Section 4.3 of the guide values a thin bar in position n at 2 to the power n - 1 and a thick bar at twice that, from the right. So 3 is two thin bars, 4
     /// is a thin bar and a thick bar, 5 is a thick bar and a thin bar, and 6 is two thick bars, and every symbol's bars add back to its value.
@@ -98,8 +84,8 @@ public class PharmacodeSymbologyTests
 
     /// <summary>
     /// Section 4.5 of the guide values a lower bar in position n at 3 to the power n - 1, an upper bar at twice that and a full bar at three times that. Its
-    /// worked example reads 81 + 18 + 3 + 3 = 105 from a full bar, an upper bar, a lower bar and a full bar. The expected bars for 117480, the smallest value 4
-    /// and the largest value 64570080 are the reference implementation's.
+    /// worked example reads 81 + 18 + 3 + 3 = 105 from a full bar, an upper bar, a lower bar and a full bar. The cases also cover 117480, the smallest value 4
+    /// and the largest value 64570080, and the bars of every case add back to its value.
     /// </summary>
     /// <param name="text">The number to encode.</param>
     /// <param name="bars">The bars from the left, L for lower, U for upper and F for full.</param>

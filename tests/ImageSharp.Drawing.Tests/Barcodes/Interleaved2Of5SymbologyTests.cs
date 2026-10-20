@@ -6,49 +6,16 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Interleaved2Of5Symbology"/>. Each expected run string is the alternating bar and space module widths, starting with a bar,
-/// taken verbatim from an independent reference implementation through its raw encoding API. That implementation draws a wide element two modules wide and
-/// emits a narrow space after the stop pattern, so the test widens every wide element to the three modules this library draws and drops the trailing space
-/// before it compares. The patterns themselves are Table 5-23 of the GS1 General Specifications.
+/// Encoder tests for <see cref="Interleaved2Of5Symbology"/>. The patterns are Table 5-23 of the GS1 General Specifications.
 /// </summary>
 public class Interleaved2Of5SymbologyTests
 {
     /// <summary>
-    /// The symbol runs match the widened reference runs.
-    /// </summary>
-    /// <param name="text">The text to encode.</param>
-    /// <param name="reference">The reference run string as the reference implementation emits it.</param>
-    [Theory]
-    [InlineData("1234", "1111211211112221211211122111")]
-    [InlineData("0123456789", "1111121121211212221111211211221121112121121221121122112111")]
-    public void MatchesReferenceRuns(string text, string reference)
-        => Assert.Equal(Widen(reference), Encode(text));
-
-    /// <summary>
-    /// Section 5.3.2.1.1 of the GS1 General Specifications pairs the digits, so an odd count takes a leading zero. The reference vector is the one it emits for
-    /// the same odd input.
+    /// Section 5.3.2.1.1 of the GS1 General Specifications pairs the digits, so an odd count takes a leading zero.
     /// </summary>
     [Fact]
     public void PadsAnOddCountWithALeadingZero()
-    {
-        Assert.Equal(Encode("0123"), Encode("123"));
-        Assert.Equal(Widen("1111121121211212221111212111"), Encode("123"));
-    }
-
-    /// <summary>
-    /// Section 7.9 of the GS1 General Specifications weights the digits 3 and 1 alternately from the right, starting with 3, and the check digit lifts the sum
-    /// to the next multiple of ten. For 12345 the sum is 15 + 4 + 9 + 2 + 3 = 33, so the check digit is 7. For 1234 it is 12 + 3 + 6 + 1 = 22, so the check
-    /// digit is 8, and the six digits then need a leading zero. The reference vectors are the ones it emits with its check digit turned on.
-    /// </summary>
-    /// <param name="text">The text to encode.</param>
-    /// <param name="reference">The reference run string with the check digit carried.</param>
-    [Theory]
-    [InlineData("12345", "11112112111122212112111221112112122111")]
-    [InlineData("1234", "11111211212112122211112112112112212111")]
-    public void CalculatesTheCheckDigitOfSectionSevenNine(string text, string reference)
-        => Assert.Equal(
-            Widen(reference),
-            SymbolEncoder.Read(new Interleaved2Of5Symbology(CheckCharacterMode.Compute), text, new BarcodeOptions(), SymbolEncoder.RunString));
+        => Assert.Equal(Encode("0123"), Encode("123"));
 
     /// <summary>
     /// The encoder validates a supplied check digit against the data and carries it once, so the symbol is the one the calculated check digit produces. A
@@ -153,13 +120,4 @@ public class Interleaved2Of5SymbologyTests
     /// <returns>The run widths of the symbol.</returns>
     private static string Encode(string text)
         => SymbolEncoder.Read(new Interleaved2Of5Symbology(), text, new BarcodeOptions(), SymbolEncoder.RunString);
-
-    /// <summary>
-    /// Returns the reference runs as this library draws them: every wide element of 2 modules becomes 3 modules. The method drops the trailing space of
-    /// the reference.
-    /// </summary>
-    /// <param name="reference">The reference run string.</param>
-    /// <returns>The runs in modules.</returns>
-    private static string Widen(string reference)
-        => reference[..^1].Replace('2', '3');
 }

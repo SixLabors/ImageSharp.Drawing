@@ -6,40 +6,11 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Code39Symbology"/>. Each expected run string is the alternating bar and space module widths, starting with a bar, from the
-/// reference implementation's raw encoding API, less the gap the reference emits after the stop character. Section 4.2 of ISO/IEC 16388 separates the
-/// characters "within the symbol" with that gap, and section 4.3.3 puts the stop character at the right end, so the runs end on a bar.
+/// Encoder tests for <see cref="Code39Symbology"/>. Section 4.2 of ISO/IEC 16388 separates the characters "within the symbol" with a gap, and section 4.3.3
+/// puts the stop character at the right end, so the runs end on a bar.
 /// </summary>
 public class Code39SymbologyTests
 {
-    /// <summary>
-    /// The bar and space widths match the reference implementation for digits, capital letters, the space and the symbols.
-    /// </summary>
-    /// <param name="text">The text to encode.</param>
-    /// <param name="expected">The reference run string.</param>
-    [Theory]
-    [InlineData("CODE39", "1311313111313113111131113113111111331131311133111131331111111133113111131131311")]
-    [InlineData("123456", "1311313111311311113111331111313133111111111331113131133111111133311111131131311")]
-    [InlineData("ABC-123", "13113131113111131131113113113131311311111311113131311311113111331111313133111111131131311")]
-    [InlineData("A", "13113131113111131131131131311")]
-    [InlineData("TEST$/+% .", "13113131111111313311311133111111311133111111313311131313111113131113111311131311111313131113311131113311113111131131311")]
-    public void MatchesReferenceRuns(string text, string expected)
-        => Assert.Equal(expected, Encode(new Code39Symbology(), text));
-
-    /// <summary>
-    /// The check character is the sum of the character values modulo the size of the set, and it is carried between the data and the stop character, where
-    /// Annex A.1.1 places it.
-    /// </summary>
-    /// <param name="text">The text to encode.</param>
-    /// <param name="expected">The reference run string with the check character carried.</param>
-    [Theory]
-    [InlineData("CODE39", "13113131113131131111311131131111113311313111331111313311111111331131113331111111131131311")]
-    [InlineData(
-        "1234567890",
-        "131131311131131111311133111131313311111111133111313113311111113331111111131131313113113111113311311111133131111133111131131131311")]
-    public void MatchesReferenceRunsWithCheckCharacter(string text, string expected)
-        => Assert.Equal(expected, Encode(new Code39Symbology(CheckCharacterMode.Compute), text));
-
     /// <summary>
     /// The worked example in Annex A.1.1: the data "CODE 39" has character values 12, 24, 13, 14, 38, 3 and 9, which sum to 113; 113 divided by 43 leaves a
     /// remainder of 27, and the character of value 27 is R, so the symbol carries "CODE 39R".

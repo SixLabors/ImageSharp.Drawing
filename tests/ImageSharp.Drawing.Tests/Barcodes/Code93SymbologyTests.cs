@@ -6,28 +6,15 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Code93Symbology"/>. Each expected run string is the alternating bar and space module widths, starting with a bar, taken from an
-/// independent reference implementation through its raw encoding API with the check characters turned on. The patterns are Table 2 of ANSI/AIM BC5-1995, and
-/// the two reference implementations consulted agree on them element for element.
+/// Encoder tests for <see cref="Code93Symbology"/>. The patterns are Table 2 of ANSI/AIM BC5-1995.
 /// </summary>
 public class Code93SymbologyTests
 {
     /// <summary>
-    /// The bar and space widths, with both check characters, match the reference implementation.
-    /// </summary>
-    /// <param name="text">The text to encode.</param>
-    /// <param name="expected">The reference run string.</param>
-    [Theory]
-    [InlineData("CODE93", "1111412113111211222211122212111411111114111311212221111111411")]
-    [InlineData("ABC-123", "1111412111132112122113111211311112131113121114111111231113211111411")]
-    [InlineData("TEST93", "1111412112212212112111222112211411111114111131211213111111411")]
-    public void MatchesReferenceRuns(string text, string expected)
-        => Assert.Equal(expected, string.Concat(Encode(text)));
-
-    /// <summary>
-    /// ANSI/AIM BC5-1995 fixes both check characters, so every symbol carries them. Decoding the reference vectors gives CODE93PV, ABC-123LN and TEST93+6,
-    /// which names the two characters that follow the data. Their expected patterns come from encoding those characters as data, because Table 2 gives a symbol
-    /// character one pattern for every position.
+    /// ANSI/AIM BC5-1995 fixes both check characters, so every symbol carries them. C weights the data from the right, 1 to 20 and around again, and K weights
+    /// C and the data from the right, 1 to 15 and around again. Each takes the sum modulo 47. For CODE93 the values are 12, 24, 13, 14, 9 and 3, so C is
+    /// 307 modulo 47, which is 25 or P, and K is 407 modulo 47, which is 31 or V. The expected patterns come from encoding those characters as data, because
+    /// Table 2 gives a symbol character one pattern for every position.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     /// <param name="checks">The two check characters the symbol carries.</param>

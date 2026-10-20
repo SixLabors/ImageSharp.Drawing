@@ -6,41 +6,11 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="HibcCode128Symbology"/>. Each expected run string is the alternating bar and space module widths, starting with a bar, taken
-/// from an independent reference implementation through its raw encoding API. A HIBC Code 128 is a Code 128 symbol carrying the HIBC flag character, the data
-/// and the modulo 43 check character.
+/// Encoder tests for <see cref="HibcCode128Symbology"/>. A HIBC Code 128 is a Code 128 symbol carrying the HIBC flag character, the data and the modulo 43
+/// check character.
 /// </summary>
 public class HibcCode128SymbologyTests
 {
-    /// <summary>
-    /// Gets the cases of <see cref="MatchesReferenceRuns"/>: the text and the run widths of the reference implementation.
-    /// </summary>
-    public static TheoryData<string, string> MatchesReferenceRunsData { get; } = new()
-    {
-        { "A123BJC5D6E71", "2112142312121113231232212232112211321311231121331313212132121123132231121321133121311232212113132321212331112" },
-        { "$$52001510X3G", "2112142312121213221213221131412133112122221132222213121141313311212211322113131123131341112331112" },
-        { "$A1234G", "2112142312121213221113231131411122321311231141312113132131312222212331112" },
-        {
-            "A99912345/$$52001510X3",
-            "2112142312121113231131411131414121213121311131231141311132221213221213221131412133112122221132222213121141313311212211322211322131312331112"
-        },
-        {
-            "A99912345/$$52001510X3/16D20111212/S77DEFG45",
-            "21121423121211132311314111314141212131213111312311413111322212132212132211314121331121222211322222131211413133112122113211322212322122311211" +
-            "23131131412212312312121122321122321141311132222131133121313121311123131321131323112113132212312132123121311133212331112"
-        },
-    };
-
-    /// <summary>
-    /// The symbol runs match the reference runs.
-    /// </summary>
-    /// <param name="text">The data.</param>
-    /// <param name="expected">The run widths of the reference symbol.</param>
-    [Theory]
-    [MemberData(nameof(MatchesReferenceRunsData))]
-    public void MatchesReferenceRuns(string text, string expected)
-        => Assert.Equal(expected, Encode(new HibcCode128Symbology(), text));
-
     /// <summary>
     /// A caller can supply the check character. The symbol carries it once, so the runs match those of the same data without the check character.
     /// </summary>

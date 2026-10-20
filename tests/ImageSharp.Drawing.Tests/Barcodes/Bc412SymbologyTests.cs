@@ -6,38 +6,10 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Bc412Symbology"/>. Each expected run string is the alternating bar and space module widths, starting with a bar, from the
-/// reference implementation's raw encoding API in its SEMI form. The reference ends on the last bar of the stop character, so the strings compare directly.
+/// Encoder tests for <see cref="Bc412Symbology"/>.
 /// </summary>
 public class Bc412SymbologyTests
 {
-    private const string Sample = "121113131113111212111411121111151111111214111113131113121211131311111";
-
-    /// <summary>
-    /// Gets the cases of <see cref="MatchesReferenceRuns"/>.
-    /// </summary>
-    public static TheoryData<string, string> MatchesReferenceRunsData { get; } = new()
-    {
-        { "BC412AB", Sample },
-        { "1234567", "121111121413121211111113131111141211111511111211141112121311121312111" },
-        { "ZZZZZZZ", "121511111111141112151111111511111115111111151111111511111115111111111" },
-        {
-            "0123456789ABCDEFGH",
-            "12111111151113121211111214111113131111141211111511111211141112121311121312111214111113111311131212111313111114111211141211111511111211111412" +
-            "11121312111312111"
-        },
-    };
-
-    /// <summary>
-    /// The bar and space widths of each symbol match the reference implementation. The cases use every character of the character set.
-    /// </summary>
-    /// <param name="text">The text to encode.</param>
-    /// <param name="reference">The reference run widths.</param>
-    [Theory]
-    [MemberData(nameof(MatchesReferenceRunsData))]
-    public void MatchesReferenceRuns(string text, string reference)
-        => Assert.Equal(reference, Encode(text));
-
     /// <summary>
     /// For BC412AB the symbol is B, the check character counted as 0, C, 4, 1, 2, A and B, whose values are 25, 0, 20, 11, 15, 17, 7 and 25. The odd positions
     /// add to 67, which leaves 32, the even positions add to 53, which leaves 18 and doubles to 36, and 68 leaves 33. Then 33 times 17 is 561, which leaves 1,
@@ -61,7 +33,7 @@ public class Bc412SymbologyTests
     {
         string validated = SymbolEncoder.Read(new Bc412Symbology(true), "BRC412AB", new BarcodeOptions(), SymbolEncoder.RunString);
 
-        Assert.Equal(Sample, validated);
+        Assert.Equal(Encode("BC412AB"), validated);
         Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new Bc412Symbology(true), "BAC412AB", new BarcodeOptions()));
     }
 

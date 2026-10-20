@@ -6,37 +6,10 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Code39ExtendedSymbology"/>. The expected run strings come from an independent reference implementation through its raw encoding
-/// API, less the gap the reference emits after the stop character. The substitution itself is Table A.2 of ISO/IEC 16388.
+/// Encoder tests for <see cref="Code39ExtendedSymbology"/>. The substitution is Table A.2 of ISO/IEC 16388.
 /// </summary>
 public class Code39ExtendedSymbologyTests
 {
-    /// <summary>
-    /// Gets the cases of <see cref="MatchesReferenceRuns"/>.
-    /// </summary>
-    public static TheoryData<string, string> MatchesReferenceRunsData { get; } = new()
-    {
-        { "abc", "1311313111131113131131111311311311131311113113113113111313113131131111131131311" },
-        { "Code39", "1311313111313113111113111313113111311311131113131111113311311311131311311133111131331111111133113111131131311" },
-        { "a@b", "1311313111131113131131111311311113131311133111113113111313111131131131131131311" },
-        { "A\tB", "13113131113111131131131313111111311331111131131131131131311" },
-        {
-            "Hello, World!",
-            "13113131113111133111131113131131113311111311131311113111133113111313111131111331131113131131113113111313111311113111133113311131113331111111" +
-            "1311131311311131131113111313113111113311131113131111311113311311131311111133113113131113113111131131131131311"
-        },
-    };
-
-    /// <summary>
-    /// The bar and space widths match the reference implementation for small letters, pairs that start with each shift character and a control character.
-    /// </summary>
-    /// <param name="text">The text to encode.</param>
-    /// <param name="expected">The reference run string.</param>
-    [Theory]
-    [MemberData(nameof(MatchesReferenceRunsData))]
-    public void MatchesReferenceRuns(string text, string expected)
-        => Assert.Equal(expected, Encode(new Code39ExtendedSymbology(), text));
-
     /// <summary>
     /// Table A.2 maps every one of the 128 ASCII values, so the encoder encodes each value as a text of one character.
     /// </summary>

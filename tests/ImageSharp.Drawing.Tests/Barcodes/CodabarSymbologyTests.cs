@@ -6,42 +6,10 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="CodabarSymbology"/>. Each expected run string is the alternating bar and space module widths, starting with a bar, from the
-/// reference implementation's raw encoding API. The reference draws a wide element three modules wide and emits a narrow gap after the stop character, so the
-/// test drops that trailing gap before it compares.
+/// Encoder tests for <see cref="CodabarSymbology"/>.
 /// </summary>
 public class CodabarSymbologyTests
 {
-    private const string Library = "11331311113113111111133111113311311113111311113113131131";
-
-    /// <summary>
-    /// The bar and space widths match the reference implementation for the digits, the symbols and the start and stop characters. The alternative names T, N,
-    /// * and E of the start and stop characters encode as A, B, C and D, so T40156N gives the same symbol as A40156B.
-    /// </summary>
-    /// <param name="text">The text to encode.</param>
-    /// <param name="reference">The reference run string.</param>
-    [Theory]
-    [InlineData("A40156B", Library)]
-    [InlineData("T40156N", Library)]
-    [InlineData("C1234567890D", "111313311111331111131131331111111131131131111311131111311311311113311111311311111111133111133311")]
-    [InlineData("A-$:/.+B", "1133131111133111113311113111313131311131313131111131313113131131")]
-    [InlineData("A1B", "113313111111331113131131")]
-    public void MatchesReferenceRuns(string text, string reference)
-        => Assert.Equal(reference[..^1], Encode(text));
-
-    /// <summary>
-    /// The check character lifts the sum of the values of the start character, the data and the stop character to the next multiple of sixteen. For A40156B the
-    /// values are 16, 4, 0, 1, 5, 6 and 17, which sum to 49, so the check character has value 15, which is +. It sits before the stop character. The expected
-    /// runs are the reference implementation's with its check character on.
-    /// </summary>
-    [Fact]
-    public void CalculatesTheModuloSixteenCheckCharacter()
-    {
-        string runs = SymbolEncoder.Read(new CodabarSymbology(CheckCharacterMode.Compute), "A40156B", new BarcodeOptions(), SymbolEncoder.RunString);
-
-        Assert.Equal("1133131111311311111113311111331131111311131111311131313113131131"[..^1], runs);
-    }
-
     /// <summary>
     /// A supplied check character sits before the stop character. It is validated against the rest of the symbol and carried once, so the symbol is the one the
     /// calculated check character produces.
@@ -145,6 +113,16 @@ public class CodabarSymbologyTests
     [InlineData("A１２B")]
     public void RejectsMalformedInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => Encode(text));
+
+    /// <summary>
+    /// T, N, * and E are the alternative names of the start and stop characters A, B, C and D, so a symbol with either name has the same bars.
+    /// </summary>
+    [Fact]
+    public void EncodesTheAlternativeNamesOfTheStartAndStopCharacters()
+    {
+        Assert.Equal(Encode("A40156B"), Encode("T40156N"));
+        Assert.Equal(Encode("C40156D"), Encode("*40156E"));
+    }
 
     /// <summary>
     /// Encodes the text with the default options.

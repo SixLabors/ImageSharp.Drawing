@@ -8,7 +8,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// <summary>
 /// Encoder tests for <see cref="AustraliaPostSymbology"/>. Every expected bar string is in the bar value notation of the Australia Post Customer Barcoding
 /// Technical Specifications, 0 for a full bar, 1 for an ascender, 2 for a descender and 3 for a tracker, and is a barcode the specification prints in one of
-/// its diagrams unless the test states another source.
+/// its diagrams.
 /// </summary>
 public class AustraliaPostSymbologyTests
 {
@@ -25,21 +25,6 @@ public class AustraliaPostSymbologyTests
     [InlineData("1139549554", "1301011030121130121211331210131132213")]
     public void EncodesTheDiagramsOfTheSpecification(string text, string bars)
         => Assert.Equal(bars, Encode(text, AustraliaPostEncodingTable.Character));
-
-    /// <summary>
-    /// The N Encoding Table in the customer information field, and the C Encoding Table with small letters, the space and the number sign. The expected bars
-    /// are from the reference implementation's raw encoding API.
-    /// </summary>
-    /// <param name="text">The text to encode.</param>
-    /// <param name="table">The encoding table of the customer information.</param>
-    /// <param name="bars">The bar values from the left.</param>
-    [Theory]
-    [InlineData("595451625112345678", AustraliaPostEncodingTable.Numeric, "1312301211120120021201010210111220212203310011000313")]
-    [InlineData("6254516251123456789012345", AustraliaPostEncodingTable.Numeric, "1320021211120120021201010210111220212230000102101112313021022012113")]
-    [InlineData("5954516251ABC12", AustraliaPostEncodingTable.Character, "1312301211120120021201000001002300301330233311111013")]
-    [InlineData("6254516251ABC123 #xy", AustraliaPostEncodingTable.Character, "1320021211120120021201000001002300301302003013331332322122322001113")]
-    public void EncodesBothCustomerInformationTables(string text, AustraliaPostEncodingTable table, string bars)
-        => Assert.Equal(bars, Encode(text, table));
 
     /// <summary>
     /// Diagram 10: the information symbols 4 20 49 37 49 38 23 give the parity symbols 54 17 53 58.

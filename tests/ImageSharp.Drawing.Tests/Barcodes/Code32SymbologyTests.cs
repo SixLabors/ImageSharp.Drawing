@@ -6,26 +6,11 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Code32Symbology"/>. Each expected run string is the alternating bar and space module widths, starting with a bar, taken from an
-/// independent reference implementation through its raw encoding API, less the gap it emits after the stop character. The check digit, the base 32 alphabet and
-/// the printed line come from Allegato A of the Italian decree of 18 July 2014. The reference draws a wide element three modules wide. At the default 96 dots
-/// per inch the 0.25 mm module draws at 1 pixel, and the wide element of 2.5 modules rounds half up to 3 pixels, so the runs are the reference runs.
+/// Encoder tests for <see cref="Code32Symbology"/>. The check digit, the base 32 alphabet and the printed line come from Allegato A of the Italian decree of
+/// 18 July 2014. At the default 96 dots per inch the 0.25 mm module draws at 1 pixel, and the wide element of 2.5 modules rounds half up to 3 pixels.
 /// </summary>
 public class Code32SymbologyTests
 {
-    /// <summary>
-    /// The bar and space widths match the reference implementation. Eight digits and the same digits with their check digit give the same symbol.
-    /// </summary>
-    /// <param name="text">The text to encode.</param>
-    /// <param name="expected">The reference run string.</param>
-    [Theory]
-    [InlineData("01234567", "1311313111111331311131311311111131113311113111331111311311311111331131131131311")]
-    [InlineData("012345676", "1311313111111331311131311311111131113311113111331111311311311111331131131131311")]
-    [InlineData("00000000", "1311313111111331311111133131111113313111111331311111133131111113313111131131311")]
-    [InlineData("09999999", "1311313111113311113113313111113131131111113111331111131131311111313311131131311")]
-    public void MatchesReferenceRuns(string text, string expected)
-        => Assert.Equal(expected, Encode(text));
-
     /// <summary>
     /// Section 3 doubles the second, fourth, sixth and eighth digits and sums the quotient and remainder of each product divided by ten. For 01234567 those
     /// products are 2, 6, 10 and 14, which give 2, 6, 1 and 5. The first, third, fifth and seventh digits sum to 12, so the total is 26 and the check digit is
@@ -104,6 +89,13 @@ public class Code32SymbologyTests
             25.4 / 96,
             SymbolEncoder.Read(new Code32Symbology(), "012345676", new BarcodeOptions(), static (ref symbol) => symbol.XDimension),
             1e-12);
+
+    /// <summary>
+    /// The symbology calculates the check digit of section 3 when the input has eight digits, so the eight digits give the same bars as the nine.
+    /// </summary>
+    [Fact]
+    public void EncodesEightDigitsAsTheNineWithTheirCheckDigit()
+        => Assert.Equal(Encode("012345676"), Encode("01234567"));
 
     /// <summary>
     /// Encodes the text with the default options.

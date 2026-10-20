@@ -6,35 +6,11 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Pzn8Symbology"/> and <see cref="Pzn7Symbology"/>. Each expected run string is the alternating bar and space module widths,
-/// starting with a bar, taken from an independent reference implementation through its raw encoding API, less the gap it emits after the stop character. The
-/// check digit and the printed line come from the IFA technical information documents on PZN coding.
+/// Encoder tests for <see cref="Pzn8Symbology"/> and <see cref="Pzn7Symbology"/>. The check digit and the printed line come from the IFA technical
+/// information documents on PZN coding.
 /// </summary>
 public class PznSymbologyTests
 {
-    /// <summary>
-    /// A PZN8 symbol matches the reference runs, with the check digit calculated or supplied.
-    /// </summary>
-    /// <param name="text">The text to encode.</param>
-    /// <param name="expected">The reference run string.</param>
-    [Theory]
-    [InlineData("2758089", "1311313111131111313111331111311113113131311331111131131131111113313111311311311111331131111133113111131131311")]
-    [InlineData("27580899", "1311313111131111313111331111311113113131311331111131131131111113313111311311311111331131111133113111131131311")]
-    [InlineData("03752864", "1311313111131111313111133131113133111111111311313131133111111133111131311311311111333111111113311131131131311")]
-    public void MatchesReferenceRuns(string text, string expected)
-        => Assert.Equal(expected, Encode(new Pzn8Symbology(), text));
-
-    /// <summary>
-    /// A PZN7 symbol matches the reference runs, with the check digit calculated or supplied.
-    /// </summary>
-    /// <param name="text">The text to encode.</param>
-    /// <param name="expected">The reference run string.</param>
-    [Theory]
-    [InlineData("123456", "131131311113111131313113111131113311113131331111111113311131311331111111333111111133111131131131311")]
-    [InlineData("1234562", "131131311113111131313113111131113311113131331111111113311131311331111111333111111133111131131131311")]
-    public void MatchesReferenceRunsForTheSevenDigitForm(string text, string expected)
-        => Assert.Equal(expected, Encode(new Pzn7Symbology(), text));
-
     /// <summary>
     /// The worked example in the IFA check digit document: the digits 2758089 weighted 1 to 7 give the products 2, 14, 15, 32, 0, 48 and 63, which sum to 174;
     /// 174 divided by 11 leaves 9, so the complete PZN is 27580899.

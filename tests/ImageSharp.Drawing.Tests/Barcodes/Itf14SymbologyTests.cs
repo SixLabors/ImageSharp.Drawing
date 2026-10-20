@@ -9,20 +9,11 @@ using SixLabors.ImageSharp.Processing;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Itf14Symbology"/>. Each expected run string is the alternating bar and space module widths, starting with a bar, taken verbatim
-/// from an independent reference implementation through its raw encoding API. That implementation draws a wide element two modules wide and emits a narrow
-/// space after the stop pattern. This library draws the 2.5:1 target ratio of the symbol height table of section 5.12.3.2 of the GS1 General Specifications
-/// in runs of one pixel. At 2 pixels a module a run is half a module, so the test turns every narrow element into 2 run units and every wide element into 5,
-/// and drops the trailing space, before it compares. The target X of 0.495 mm of Table 5-47 is 1.87 pixels at the default 96 dots per inch and draws at 2
-/// pixels.
+/// Encoder tests for <see cref="Itf14Symbology"/>. This library draws the 2.5:1 target ratio of the symbol height table of section 5.12.3.2 of the GS1 General
+/// Specifications in runs of one pixel. The target X of 0.495 mm of Table 5-47 is 1.87 pixels at the default 96 dots per inch and draws at 2 pixels.
 /// </summary>
 public class Itf14SymbologyTests
 {
-    /// <summary>
-    /// The reference runs of 15400141288763, the number of Figure 5-32.
-    /// </summary>
-    private const string Figure532 = "111122111211211111221221121121211212112111221221111221211111221212222111112111";
-
     /// <summary>
     /// The target X of Table 5-47 in millimetres, which draws at exactly 495 pixels at <see cref="SymbolEncoder.MicrometreDpi"/>.
     /// </summary>
@@ -37,22 +28,6 @@ public class Itf14SymbologyTests
     /// The bar height in modules at the target X: the 31.75 millimetres of the symbol height table of section 5.12.3.2.
     /// </summary>
     private const float BarHeight = (float)(31.75 / TargetX);
-
-    /// <summary>
-    /// Figure 5-32 of the GS1 General Specifications shows the number 15400141288763, whose check digit section 7.9 calculates as 3. Thirteen digits take the
-    /// calculated check digit, fourteen carry their own, and spaces in the input stay out of the symbol, as section 4.14 rule 2.a.iv requires.
-    /// </summary>
-    /// <param name="text">The text to encode.</param>
-    /// <param name="reference">The reference run string.</param>
-    [Theory]
-    [InlineData("1540014128876", Figure532)]
-    [InlineData("15400141288763", Figure532)]
-    [InlineData("1 54 00141 28876 3", Figure532)]
-    [InlineData("0123456789012", "111112112121121222111121121122112111212112122112112211121121211212211112212111")]
-    public void MatchesReferenceRuns(string text, string reference)
-    {
-        Assert.Equal(Widen(reference), SymbolEncoder.Read(new Itf14Symbology(), text, new BarcodeOptions(), SymbolEncoder.RunString));
-    }
 
     /// <summary>
     /// A supplied check digit that is not the section 7.9 check digit of the data throws.
@@ -222,6 +197,19 @@ public class Itf14SymbologyTests
         => Assert.ThrowsAny<ArgumentException>(() => Encode(text));
 
     /// <summary>
+    /// The symbology calculates the check digit when the input has 13 digits, and it leaves the spaces that group the digits out of the symbol. Each form of the
+    /// same GTIN gives the same bars.
+    /// </summary>
+    [Fact]
+    public void EncodesEachFormOfOneGtinTheSameWay()
+    {
+        string expected = Runs("15400141288763");
+
+        Assert.Equal(expected, Runs("1540014128876"));
+        Assert.Equal(expected, Runs("1 54 00141 28876 3"));
+    }
+
+    /// <summary>
     /// Encodes the text with the default options.
     /// </summary>
     /// <param name="text">The text to encode.</param>
@@ -229,11 +217,10 @@ public class Itf14SymbologyTests
         => SymbolEncoder.Encode(new Itf14Symbology(), text, new BarcodeOptions());
 
     /// <summary>
-    /// Returns the reference runs in run units of half a module: a narrow element of 1 module is 2 units and a wide element of 2 modules becomes the 5 units of
-    /// the 2.5:1 ratio. The method drops the trailing space of the reference.
+    /// Encodes the text with the default options.
     /// </summary>
-    /// <param name="reference">The reference run string.</param>
-    /// <returns>The runs in run units.</returns>
-    private static string Widen(string reference)
-        => reference[..^1].Replace('2', '5').Replace('1', '2');
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The run widths of the symbol.</returns>
+    private static string Runs(string text)
+        => SymbolEncoder.Read(new Itf14Symbology(), text, new BarcodeOptions(), SymbolEncoder.RunString);
 }

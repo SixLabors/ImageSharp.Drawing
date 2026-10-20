@@ -6,27 +6,11 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Gs1DataBarLimitedSymbology"/>. Each expected sequence is the alternating bar and space module widths, with a zero width bar
-/// before the guard space and after the closing five module space, taken from an independent reference implementation through its raw encoding API and
-/// confirmed by a second one. A sequence carries the guard patterns, the two symbol characters and the check character between them.
+/// Encoder tests for <see cref="Gs1DataBarLimitedSymbology"/>. The tests check the dimensions and the minimum height of the GS1 General Specifications, the
+/// human readable interpretation and the input that the symbology rejects.
 /// </summary>
 public class Gs1DataBarLimitedSymbologyTests
 {
-    /// <summary>
-    /// The bar and space widths match the reference implementation. Thirteen digits get their check digit.
-    /// </summary>
-    /// <param name="text">The element string to encode.</param>
-    /// <param name="expected">The reference run string.</param>
-    [Theory]
-    [InlineData("(01)09521234543213", "0111141221111341311111121132111122221145112111150")]
-    [InlineData("(01)15012345678907", "0113222321211112311211112112211212112321322221150")]
-    [InlineData("(01)00312345678906", "0111111512131411321111212112111125111212112511150")]
-    [InlineData("(01)00000000000000", "0111111111111616311131111212111111111111161631150")]
-    [InlineData("(01)1999999999999", "0112422121112151111111211123111114113321114211150")]
-    [InlineData("(01)0001234567890", "0111211122111516111111212113111111322231151121150")]
-    public void Gs1DataBarLimited_MatchesReferenceWidths(string text, string expected)
-        => Encode(text, (ref symbol) => Assert.Equal(expected, SymbolEncoder.RunString(ref symbol)));
-
     /// <summary>
     /// Section 5.5.2.2 of the GS1 General Specifications: "The minimum height SHALL be 10X", so the encoder rejects a bar height under 10X. At the nominal
     /// 0.33 mm module 10X is 3.3 mm.

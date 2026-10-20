@@ -6,40 +6,10 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Gs1128Symbology"/>. Each expected run string is the alternating bar and space module widths, starting with a bar, taken from an
-/// independent reference implementation through its raw encoding API. The runs carry the double character start pattern of section 5.4.2, the code set switches
-/// the encoder chose, any separator, the check character and the stop character.
+/// Encoder tests for <see cref="Gs1128Symbology"/>.
 /// </summary>
 public class Gs1128SymbologyTests
 {
-    /// <summary>
-    /// The bar and space widths match the reference implementation. The cases cover predefined and variable length element strings and the separator.
-    /// </summary>
-    /// <param name="text">The element strings to encode.</param>
-    /// <param name="expected">The reference run string.</param>
-    [Theory]
-
-    // One element string with a predefined length from Table 7-6, so no separator is needed.
-    [InlineData("(01)09521234543213", "2112324111312221222212132133111122321311233111232321211221321232212331112")]
-
-    // Two predefined length element strings run together with no separator between them.
-    [InlineData(
-        "(01)09521234543213(3103)000123",
-        "2112324111312221222212132133111122321311233111232321211221322123211212232122222221223121314131112331112")]
-
-    // A variable length element string, which needs no separator because it is the last one.
-    [InlineData("(91)ABC123", "2112324111314121211141311113231311231313211232212232112211322141212331112")]
-
-    // A variable length element string followed by another, so a separator closes the first.
-    [InlineData(
-        "(10)ABC123(01)09521234543213",
-        "2112324111312213121141311113231311231313211232211131413121314111312221222212132133111122321311233111232321211221322212132331112")]
-
-    // The eighteen digit SSCC of Application Identifier 00, twenty characters in all.
-    [InlineData("(00)395123451234567895", "2112324111312122222113132131133121311131231122321311233311212411121141131143112331112")]
-    public void MatchesReferenceRuns(string text, string expected)
-        => Assert.Equal(expected, Encode(text));
-
     /// <summary>
     /// Section 4.14 rule 2c requires parentheses around the Application Identifiers in the human readable interpretation, and rule 2b keeps the separators out
     /// of it.

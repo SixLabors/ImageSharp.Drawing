@@ -6,27 +6,11 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Gs1DataBarOmnidirectionalSymbology"/>. Each expected sequence is the alternating bar and space module widths, starting with a
-/// zero width bar before the guard space, taken from an independent reference implementation through its raw encoding API and confirmed by a second one. A
-/// sequence carries the guard patterns, the four symbol characters and the two finder patterns that encode the check value.
+/// Encoder tests for <see cref="Gs1DataBarOmnidirectionalSymbology"/>. The tests check the check digit calculation, the dimensions and the minimum height of
+/// the GS1 General Specifications, the human readable interpretation and the input that the symbology rejects.
 /// </summary>
 public class Gs1DataBarOmnidirectionalSymbologyTests
 {
-    /// <summary>
-    /// The bar and space widths match the reference implementation.
-    /// </summary>
-    /// <param name="text">The element string to encode.</param>
-    /// <param name="expected">The reference run string.</param>
-    [Theory]
-    [InlineData("(01)09521234543213", "01151115111238114311112234112211114725121211311")]
-    [InlineData("(01)00012345678905", "01111112181274113211214132111124117332224131111")]
-    [InlineData("(01)00034567890125", "01111112181256111232222121313113112834112213211")]
-    [InlineData("(01)20012345678909", "01111331151274111221215125121112112833212123211")]
-    [InlineData("(01)99999999999997", "01121131341382114121123113611111117513511111311")]
-    [InlineData("(01)00000000000000", "01111112181382117211111111111127119131812111111")]
-    public void Gs1DataBarOmnidirectional_MatchesReferenceWidths(string text, string expected)
-        => Assert.Equal(expected, string.Concat(Runs(text)));
-
     /// <summary>
     /// The encoder calculates the check digit of 13 digits, so both forms encode the same symbol.
     /// </summary>

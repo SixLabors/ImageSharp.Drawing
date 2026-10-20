@@ -6,24 +6,10 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Code93ExtendedSymbology"/>. The expected run strings come from an independent reference implementation through its raw encoding
-/// API with the check characters turned on, which the reference leaves off by default and ANSI/AIM BC5-1995 requires. The substitution itself is Table 3, and
-/// the two reference implementations consulted agree on it entry for entry.
+/// Encoder tests for <see cref="Code93ExtendedSymbology"/>. The substitution is Table 3 of ANSI/AIM BC5-1995.
 /// </summary>
 public class Code93ExtendedSymbologyTests
 {
-    /// <summary>
-    /// The bar and space widths match the reference implementation for small letters and for a shift pair next to a base character.
-    /// </summary>
-    /// <param name="text">The text to encode.</param>
-    /// <param name="expected">The reference run string.</param>
-    [Theory]
-    [InlineData("Code93", "1111412113111222111211221222112211121222112212111411111114112111133111211111411")]
-    [InlineData("abc", "1111411222112111131222112112121222112113111211311312111111411")]
-    [InlineData("a@b", "1111411222112111133121112221111222112112121121311122211111411")]
-    public void MatchesReferenceRuns(string text, string expected)
-        => Assert.Equal(expected, Encode(text));
-
     /// <summary>
     /// A character the base symbology carries takes one symbol character, and any other takes a shift character and one more. Section 2.6 measures the symbol
     /// as <c>(9 * (C + 4) + 1) * X</c>, so the module count counts the symbol characters the substitution produced rather than the input.

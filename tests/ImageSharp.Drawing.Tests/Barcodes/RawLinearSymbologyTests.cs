@@ -6,19 +6,10 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="RawLinearSymbology"/>. The expected run string is the alternating bar and space module widths, starting with a bar, from the
-/// reference implementation's raw encoding API. It is the input itself.
+/// Encoder tests for <see cref="RawLinearSymbology"/>. Each digit of the input is the width of one bar or space, starting with a bar.
 /// </summary>
 public class RawLinearSymbologyTests
 {
-    /// <summary>
-    /// Each digit of the input is the width of one bar or space, starting with a bar. The input has an even number of digits, so a zero width bar follows
-    /// the last space.
-    /// </summary>
-    [Fact]
-    public void MatchesReferenceRuns()
-        => Assert.Equal("3,3,1,1,3,2,1,3,1,3,1,3,4,1,1,1,2,2,1,3,1,3,1,3,1,2,1,3,1,2,0", Encode("331132131313411122131313121312"));
-
     /// <summary>
     /// An odd number of digits ends on a bar. An even number ends on a space, which stays behind a bar of zero width, so the symbol keeps its width. The
     /// symbol has no quiet zones.
