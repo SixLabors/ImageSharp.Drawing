@@ -12,16 +12,20 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 public class Code16KSymbologyTests
 {
     /// <summary>
-    /// Section 3.2: "The minimum standard X dimension used is 0.0075 inches (0.191 mm)". At 1000 pixels a millimetre the smallest whole number of pixels at
-    /// or over 0.1905 mm is 191 pixels, so an X dimension of 0.1 mm draws at 0.191 mm.
+    /// Section 4.5 d) of EN 12323: "row height (Y dimension): minimum 8X". At a 0.5 mm module 8X is 4 mm, so a bar height of 1 mm draws every row at 8X. The
+    /// three rows of CODE 16K and their four 1X separators are then 3 x 9 + 1 modules high.
     /// </summary>
     [Fact]
-    public void Code16K_ClampsAnXDimensionUnderTheMinimumStandardValue()
+    public void Code16K_DrawsARowUnderEightModulesAtEightModules()
         => SymbolEncoder.Encode(
             new Code16KSymbology(),
             "CODE 16K",
-            new BarcodeOptions { Dpi = SymbolEncoder.MicrometreDpi, XDimension = 0.1 },
-            static (ref symbol) => Assert.Equal(0.191, symbol.XDimension, 1e-9));
+            new BarcodeOptions { Dpi = SymbolEncoder.MillimetreDpi, XDimension = 0.5, BarHeight = 1 },
+            static (ref symbol) =>
+            {
+                Assert.Equal(28F, symbol.HeightInModules);
+                Assert.All(SymbolEncoder.RowBarHeights(ref symbol, symbol.Rows[0]), height => Assert.Equal(8F, height));
+            });
 
     /// <summary>
     /// Section 2.1: every row is 70 modules, and a one module separator bar stands between rows. Section 3.4 gives ten modules of quiet zone before the start

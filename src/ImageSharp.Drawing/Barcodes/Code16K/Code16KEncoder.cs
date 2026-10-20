@@ -44,15 +44,10 @@ internal static class Code16KEncoder
     public const int CharactersPerRow = 5;
 
     /// <summary>
-    /// The nominal bar height in modules: the "minimum bar height of 8X" of section 3.3.
+    /// The bar height of a row in modules, nominal and smallest. Section 4.5 d) of EN 12323: "row height (Y dimension): minimum 8X". The section gives no
+    /// largest row height.
     /// </summary>
     public const float NominalBarHeight = 8F;
-
-    /// <summary>
-    /// The smallest X dimension in millimetres. Section 3.2: "The minimum standard X dimension used is 0.0075 inches (0.191 mm)". Appendix F permits a
-    /// smaller X dimension only in a closed system, as a deviation "from standard tolerances". The specification gives no largest X dimension.
-    /// </summary>
-    private const double MinimumXDimension = 0.0075 * 25.4;
 
     /// <summary>
     /// The height in modules of the separator bars: the "1-module high separator bar" of section 2.1.
@@ -498,10 +493,10 @@ internal static class Code16KEncoder
     private static void WriteRows(ReadOnlySpan<int> values, ReadOnlySpan<char> readable, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         int rowCount = values.Length / CharactersPerRow;
-        double xDimension = options.ResolveXDimension(MinimumXDimension, BarcodeSymbology.DefaultXDimension, double.PositiveInfinity);
 
-        // Section 3.3 recommends "a minimum bar height of 8X" and sets no limit, so the bar height is not clamped.
-        float barHeight = options.ResolveBarHeight(xDimension, 0, NominalBarHeight, float.PositiveInfinity);
+        // Section 4.5 a) of EN 12323: the X dimension "should be defined by the application specification", so the symbology gives no limit.
+        double xDimension = options.ResolveXDimension(0, BarcodeSymbology.DefaultXDimension, double.PositiveInfinity);
+        float barHeight = options.ResolveBarHeight(xDimension, NominalBarHeight, NominalBarHeight, float.PositiveInfinity);
 
         // Section 2.1: start, guard bar, five characters and stop, 4 + 1 + 30 + 4 elements, on a bar at both ends. A separator between two rows is one bar
         // across the row width.
