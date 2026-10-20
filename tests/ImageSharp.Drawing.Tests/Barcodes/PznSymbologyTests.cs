@@ -105,6 +105,22 @@ public class PznSymbologyTests
     }
 
     /// <summary>
+    /// IFA: "The nominal ratio (proportion of narrow to wide bar) should be 1:2.5". At 100 pixels a millimetre the 0.25 mm module is 25 pixels, and a wide
+    /// element of 2.5 modules rounds half up to 63 pixels, so every element is 25 or 63 pixels wide.
+    /// </summary>
+    [Fact]
+    public void DrawsTheNominalWideToNarrowRatio()
+    {
+        int[] runs = SymbolEncoder.Read(
+            new Pzn8Symbology(),
+            "03752864",
+            new BarcodeOptions { Dpi = SymbolEncoder.MillimetreDpi },
+            static (ref symbol) => symbol.Runs.ToArray());
+
+        Assert.Equal([25, 63], runs.Distinct().Order());
+    }
+
+    /// <summary>
     /// The symbol carries the identifier, the digits and the check digit, and Code 39 adds no check character of its own.
     /// </summary>
     [Fact]

@@ -24,10 +24,19 @@ internal static class PznData
 
     /// <summary>
     /// The bar height in modules a symbol takes when the caller sets none. IFA gives a nominal code height of 10 mm at the nominal module width of 0.25 mm, and
-    /// says "the code height of nominally 10 mm changes proportionately to the nominal module width". IFA also gives a nominal wide to narrow ratio of 1:2.5
-    /// and permits 1:2 to 1:3. A run width is a whole number of modules, so the symbol draws the permitted 3.
+    /// says "the code height of nominally 10 mm changes proportionately to the nominal module width".
     /// </summary>
     private const float NominalBarHeight = 40F;
+
+    /// <summary>
+    /// The narrow term of the wide to narrow ratio, <see cref="WideElement"/> / <see cref="NarrowElement"/>.
+    /// </summary>
+    private const int NarrowElement = 2;
+
+    /// <summary>
+    /// The wide term of the wide to narrow ratio. IFA: "The nominal ratio (proportion of narrow to wide bar) should be 1:2.5. Permissible is 1:2 to 1:3."
+    /// </summary>
+    private const int WideElement = 5;
 
     /// <summary>
     /// The smallest bar height in modules. IFA: "For a normal size of X = 0.25 mm, the code can be between 8 and 20 mm high", and the height "changes
@@ -114,14 +123,20 @@ internal static class PznData
         text.Slice(0, digits).CopyTo(encoded[1..]);
         encoded[^1] = (char)('0' + check);
 
+        double xDimension = options.ResolveXDimension(MinimumXDimension, NominalXDimension, MaximumXDimension);
+
+        // The runs count pixels, so every element draws at a whole number of pixels. A wide element is WideElement / NarrowElement modules, rounded half up
+        // to a whole pixel: at an odd number of pixels a module the ratio of 2.5 becomes 3.0 at one pixel and 2.67 at three, both inside the permitted 1:2 to
+        // 1:3, and every wide element takes the same width.
+        int pixels = options.ModulePixels(xDimension);
         Code39Layout layout = new()
         {
-            XDimension = options.ResolveXDimension(MinimumXDimension, NominalXDimension, MaximumXDimension),
+            XDimension = xDimension,
             NominalBarHeight = NominalBarHeight,
             MinimumBarHeight = MinimumBarHeight,
             MaximumBarHeight = MaximumBarHeight,
-            NarrowElement = 1,
-            WideElement = Code39Encoder.WideElement,
+            NarrowElement = pixels,
+            WideElement = ((WideElement * pixels) + (NarrowElement / 2)) / NarrowElement,
         };
 
         Code39Encoder.BuildSymbol(encoded, null, ReadablePrefix, encoded[1..], [], in layout, options, ref symbol);

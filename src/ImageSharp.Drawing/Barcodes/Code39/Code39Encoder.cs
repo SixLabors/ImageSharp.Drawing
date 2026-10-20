@@ -50,7 +50,7 @@ internal static class Code39Encoder
     /// symbol character and its gap take the sixteen modules at the top of the range section 4.1 h) gives. An application standard that names a nominal ratio
     /// inside that range builds the symbol with a <see cref="Code39Layout"/>.
     /// </summary>
-    public const int WideElement = 3;
+    private const int WideElement = 3;
 
     /// <summary>
     /// The bar height as a fraction of the symbol width, quiet zones excluded, when the caller sets no height. Section 4.4 e) recommends a minimum of "5,0 mm
