@@ -185,8 +185,17 @@ internal static class DataMatrixEncoder
         double xDimension,
         ref BarcodeSymbol symbol)
     {
+        // A message in format 05 or 06, between the header [)>RS05GS or [)>RS06GS and the trailer RS EOT, takes one Macro character for the header and the
+        // trailer. The length limit applies to the message values, so it counts the Macro character, not the header and the trailer.
+        bool macro = !gs1
+            && text.Length >= MacroHeaderLength + MacroTrailerLength
+            && text.StartsWith("[)>\u001E0")
+            && text[5] is '5' or '6'
+            && text[6] == '\u001D'
+            && text.EndsWith("\u001E\u0004");
+
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
-        Guard.MustBeLessThanOrEqualTo(text.Length, MaximumLength, nameof(text));
+        Guard.MustBeLessThanOrEqualTo(macro ? text.Length - MacroHeaderLength - MacroTrailerLength + 1 : text.Length, MaximumLength, nameof(text));
 
         // Clause 5.2.2 of ISO/IEC 16022: the default character set is ISO/IEC 8859-1, so each character must be one byte value. The check runs by code point so
         // a surrogate pair reports as one character.
@@ -227,13 +236,7 @@ internal static class DataMatrixEncoder
             }
             else
             {
-                // A message in format 05 or 06, between the header [)>RS05GS or [)>RS06GS and the trailer RS EOT, takes one Macro character for the header and
-                // the trailer.
-                if (text.Length >= MacroHeaderLength + MacroTrailerLength
-                    && text.StartsWith("[)>\u001E0")
-                    && text[5] is '5' or '6'
-                    && text[6] == '\u001D'
-                    && text.EndsWith("\u001E\u0004"))
+                if (macro)
                 {
                     messageBuffer[messageLength++] = text[5] == '5' ? DataMatrixCodewords.Macro05 : DataMatrixCodewords.Macro06;
                     text = text[MacroHeaderLength..^MacroTrailerLength];

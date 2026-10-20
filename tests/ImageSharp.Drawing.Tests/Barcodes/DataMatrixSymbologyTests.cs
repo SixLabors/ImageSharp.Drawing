@@ -67,6 +67,25 @@ public class DataMatrixSymbologyTests
     }
 
     /// <summary>
+    /// The 144 x 144 symbol of ISO/IEC 16022 Table 10 holds 1558 data codewords. A Macro 05 message takes one codeword for the header [)&gt;RS05GS and the
+    /// trailer RS EOT, and its body of 3114 digits takes 1557 codewords at two digits a codeword, so the message fills the symbol. The header and the trailer
+    /// do not count against the 3116 digit limit of clause 6.1 d).
+    /// </summary>
+    [Fact]
+    public void DataMatrix_HoldsAMacroMessageThatFillsTheLargestSymbol()
+    {
+        string message = "[)>\u001E05\u001D" + new string('7', 3114) + "\u001E\u0004";
+
+        (int rows, int columns) = SymbolEncoder.Read(
+            new DataMatrixSymbology(),
+            message,
+            new BarcodeOptions(),
+            static (ref symbol) => (symbol.MatrixRows, symbol.Columns));
+
+        Assert.Equal((144, 144), (rows, columns));
+    }
+
+    /// <summary>
     /// Section 5.6.2 of the GS1 General Specifications: the finder pattern is a solid L one module wide on the left and bottom edges, and the opposite edges
     /// alternate, with the upper right corner module light. Section 5.6.3.2: alignment patterns divide a symbol of 32 x 32 or more into data regions.
     /// </summary>
