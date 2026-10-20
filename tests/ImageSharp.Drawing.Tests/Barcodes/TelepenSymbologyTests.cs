@@ -24,6 +24,21 @@ public class TelepenSymbologyTests
         => Assert.Equal(expected, TelepenEncoder.CheckCharacter(values));
 
     /// <summary>
+    /// The document sends each character as 8 bits with even parity, least significant bit first. Binary 1 is the first pattern, and binary 010 is the third
+    /// pattern, three times as wide. With a 3:1 ratio, the first pattern can only be a narrow bar and a narrow space, and the third pattern can only be a wide
+    /// bar and a wide space. The start code, binary 01011111, sends 1, 1, 1, 1, 1 and then 010. DEL, value 127, has 7 bits set and a parity bit of 1, so it
+    /// sends eight 1 bits. The stop code, binary 11111010, sends 010 and then 1, 1, 1, 1, 1. The runs end on the last bar.
+    /// </summary>
+    [Fact]
+    public void SendsTheStartCodeDataAndStopCodeAsTheBitPatternsOfTheDocument()
+    {
+        string runs = Encode(((char)127).ToString());
+
+        Assert.StartsWith("1111111111" + "33" + "1111111111111111", runs);
+        Assert.EndsWith("33" + "111111111", runs);
+    }
+
+    /// <summary>
     /// The printed line shows the text as given. It never shows the start code, the check character or the stop code.
     /// </summary>
     [Fact]
