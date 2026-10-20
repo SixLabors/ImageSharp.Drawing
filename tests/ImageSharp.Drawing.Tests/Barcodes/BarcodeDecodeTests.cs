@@ -108,12 +108,18 @@ public class BarcodeDecodeTests
         => AssertDecodes(new MandsSymbology(), "0642118", BarcodeFormat.EAN8, "00642118");
 
     /// <summary>
-    /// A Code 128 symbol decodes to its data.
+    /// A Code 128 symbol decodes to its data. Characters above 127 decode through FNC4: a single FNC4 before a character, extended mode for a run of five,
+    /// extended mode that ends before more data, and an FNC4 before a Shift, which code set A takes for á between two tabs.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     [Theory]
     [InlineData("CODE128")]
     [InlineData("ABC-123")]
+    [InlineData("café")]
+    [InlineData("ÀÉÎÕÜ")]
+    [InlineData("ÀÉÎÕÜ-123")]
+    [InlineData("Größe 42 ÄÖÜ")]
+    [InlineData("\tá\t")]
     public void Code128_RoundTrips(string text)
         => AssertDecodes(new Code128Symbology(), text, BarcodeFormat.Code128, text);
 

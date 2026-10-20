@@ -81,6 +81,16 @@ internal static class CodablockFEncoder
     private const int LatchA = 101;
 
     /// <summary>
+    /// The symbol character value of FNC4 in code set A, Table 1 of ISO/IEC 15417. It adds 128 to the next data character.
+    /// </summary>
+    private const int FunctionFourInA = 101;
+
+    /// <summary>
+    /// The symbol character value of FNC4 in code set B, Table 1 of ISO/IEC 15417. It adds 128 to the next data character.
+    /// </summary>
+    private const int FunctionFourInB = 100;
+
+    /// <summary>
     /// The symbol character value of Start A, which starts every row.
     /// </summary>
     private const int StartA = 103;
@@ -191,7 +201,7 @@ internal static class CodablockFEncoder
     /// patterns and fills the columns between them, a solid bar runs at the top and at the bottom, and the data prints as a text line below the bottom bar when
     /// a font is set. The check characters are not printed.
     /// </summary>
-    /// <param name="text">The text to encode. Every character must be ASCII 0 to 127.</param>
+    /// <param name="text">The text to encode. Every character must be U+0000 to U+00FF.</param>
     /// <param name="columns">The number of data columns in a row, 4 to 62.</param>
     /// <param name="readable">The human readable interpretation.</param>
     /// <param name="options">The options that control layout choices.</param>
@@ -205,11 +215,12 @@ internal static class CodablockFEncoder
             throw new ArgumentException($"Codablock F carries at most {MaximumText} characters in 44 rows of 62 columns; the text is longer.", nameof(text));
         }
 
-        int invalid = text.IndexOfAnyExceptInRange('\0', '\u007F');
+        // The rows are Code 128 characters, which carry ASCII 0 to 127 and, with FNC4, the byte values 128 to 255.
+        int invalid = text.IndexOfAnyExceptInRange('\0', '\u00FF');
         if (invalid >= 0)
         {
             throw new ArgumentException(
-                $"Codablock F encodes ASCII 0 to 127; {text.CodePointAt(invalid).ToDisplayString()} is outside that range.",
+                $"Codablock F encodes U+0000 to U+00FF; {text.CodePointAt(invalid).ToDisplayString()} is outside that range.",
                 nameof(text));
         }
 
@@ -292,7 +303,7 @@ internal static class CodablockFEncoder
     /// <summary>
     /// Encodes text into character values: the rows with their pad, the check characters and the row indicators.
     /// </summary>
-    /// <param name="text">The text to encode, ASCII 0 to 127.</param>
+    /// <param name="text">The text to encode, U+0000 to U+00FF.</param>
     /// <param name="columns">The number of data columns in a row.</param>
     /// <param name="lookahead">The scratch for the lookahead, one entry for every position and one past the end.</param>
     /// <param name="values">The buffer the character values are written to, one row after another, with room for 44 rows.</param>
@@ -362,6 +373,9 @@ internal static class CodablockFEncoder
 
                 char c = text[i];
                 int run = Math.Min(lookahead[i].DigitRun, 2 * remaining);
+
+                // A character above 127 takes a single FNC4 before it, which adds 128 to it, and the FNC4 stays in the row of its character.
+                int functionFour = c > '\u007F' ? 1 : 0;
                 if (set == CodeSet.C)
                 {
                     // Code set C carries the digit pairs, and gives way to code set A or B, whichever carries the first character only one of them carries.
@@ -372,13 +386,18 @@ internal static class CodablockFEncoder
                         continue;
                     }
 
-                    if (remaining < 2)
+                    if (remaining < 2 + functionFour)
                     {
                         break;
                     }
 
                     set = lookahead[i].First == FirstExclusive.SetA ? CodeSet.A : CodeSet.B;
                     values[count++] = set == CodeSet.A ? LatchA : LatchB;
+                    if (functionFour != 0)
+                    {
+                        values[count++] = FunctionFourIn(set);
+                    }
+
                     values[count++] = ValueIn(set, c);
                     i++;
                     continue;
@@ -413,20 +432,31 @@ internal static class CodablockFEncoder
                 CodeSet other = set == CodeSet.A ? CodeSet.B : CodeSet.A;
                 if (OnlyIn(other, c))
                 {
-                    if (remaining < 2)
+                    if (remaining < 2 + functionFour)
                     {
                         break;
                     }
 
+                    // A shifted character takes the order of clause 4.3.4.2 d) of ISO/IEC 15417, FNC4 then Shift, so the FNC4 is the one of the code set in
+                    // force. After a latch the FNC4 is the one of the new code set.
                     FirstExclusive ownFirst = set == CodeSet.A ? FirstExclusive.SetA : FirstExclusive.SetB;
                     if (lookahead[i + 1].First == ownFirst)
                     {
+                        if (functionFour != 0)
+                        {
+                            values[count++] = FunctionFourIn(set);
+                        }
+
                         values[count++] = Shift;
                     }
                     else
                     {
                         values[count++] = other == CodeSet.A ? LatchA : LatchB;
                         set = other;
+                        if (functionFour != 0)
+                        {
+                            values[count++] = FunctionFourIn(set);
+                        }
                     }
 
                     values[count++] = ValueIn(other, c);
@@ -434,9 +464,14 @@ internal static class CodablockFEncoder
                     continue;
                 }
 
-                if (remaining < 1)
+                if (remaining < 1 + functionFour)
                 {
                     break;
+                }
+
+                if (functionFour != 0)
+                {
+                    values[count++] = FunctionFourIn(set);
                 }
 
                 values[count++] = ValueIn(set, c);
@@ -551,22 +586,33 @@ internal static class CodablockFEncoder
 
     /// <summary>
     /// Returns the symbol character value of a character in code set A or B: code set A runs from the space at value 0 through to the control characters, and
-    /// code set B from the space through to the delete character.
+    /// code set B from the space through to the delete character. A character above 127 takes the value of the character 128 below it, which the FNC4 before
+    /// it shifts back up.
     /// </summary>
     /// <param name="set">The code set, A or B.</param>
     /// <param name="character">The character.</param>
     /// <returns>The symbol character value.</returns>
     private static int ValueIn(CodeSet set, char character)
-        => set == CodeSet.A && character < 32 ? character + 64 : character - 32;
+    {
+        int value = character & 0x7F;
+        return set == CodeSet.A && value < 32 ? value + 64 : value - 32;
+    }
 
     /// <summary>
     /// Returns whether only one code set of A and B carries a character: the control characters 0 to 31 for code set A, and the lower case letters and the
-    /// characters above them, 96 to 127, for code set B.
+    /// characters above them, 96 to 127, for code set B. A character above 127 classifies as the character 128 below it, which FNC4 shifts.
     /// </summary>
     /// <param name="set">The code set, A or B.</param>
     /// <param name="character">The character.</param>
     /// <returns><see langword="true"/> when only that code set carries it.</returns>
-    private static bool OnlyIn(CodeSet set, char character) => set == CodeSet.A ? character < 32 : character >= 96;
+    private static bool OnlyIn(CodeSet set, char character) => set == CodeSet.A ? (character & 0x7F) < 32 : (character & 0x7F) >= 96;
+
+    /// <summary>
+    /// Returns the symbol character value of FNC4 in code set A or B, Table 1 of ISO/IEC 15417.
+    /// </summary>
+    /// <param name="set">The code set, A or B. Code set C has no FNC4.</param>
+    /// <returns>The symbol character value.</returns>
+    private static int FunctionFourIn(CodeSet set) => set == CodeSet.A ? FunctionFourInA : FunctionFourInB;
 
     /// <summary>
     /// Writes digit pairs as code set C values, each pair the value 0 to 99 it reads as.

@@ -15,6 +15,12 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// one of them carries. A run of four or more digits changes to code set C, after its first digit when the run is odd, as step 3 does. A character that only
 /// the other of code sets A and B carries takes a Shift when the next such character is in the current code set, and a code set change otherwise.
 /// </para>
+/// <para>
+/// Clause 4.3.4.2 d) of ISO/IEC 15417 encodes the byte values 128 to 255, ISO/IEC 8859-1 by default, with the FNC4 character. A single FNC4 adds 128 to the
+/// next data character, and two FNC4 characters start or end extended mode, which adds 128 to every data character between them. Note 3 of Annex E chooses
+/// code set A or B for such a character by its value less 128, and takes extended mode for a run of five or more of them, or three or more at the end of the
+/// data. A shorter run takes a single FNC4 before each character.
+/// </para>
 /// </summary>
 internal static class Code128Encoder
 {
@@ -62,6 +68,28 @@ internal static class Code128Encoder
     private const int LatchA = 101;
 
     /// <summary>
+    /// The symbol character value of FNC4 in code set A, Table 1 of ISO/IEC 15417.
+    /// </summary>
+    private const int FunctionFourInA = 101;
+
+    /// <summary>
+    /// The symbol character value of FNC4 in code set B, Table 1 of ISO/IEC 15417. Code set C has no FNC4.
+    /// </summary>
+    private const int FunctionFourInB = 100;
+
+    /// <summary>
+    /// The shortest run of characters above 127 that takes extended mode, note 3 of Annex E of ISO/IEC 15417. The two FNC4 characters before the run and the
+    /// two after it cost four symbol characters, and a single FNC4 before each character of the run costs one each.
+    /// </summary>
+    private const int ShortestExtendedRun = 5;
+
+    /// <summary>
+    /// The shortest run of characters above 127 that takes extended mode when the run ends the data, note 3 of Annex E of ISO/IEC 15417. The data ends in
+    /// extended mode, so only the two FNC4 characters before the run are needed.
+    /// </summary>
+    private const int ShortestFinalExtendedRun = 3;
+
+    /// <summary>
     /// The symbol character value of Start A.
     /// </summary>
     private const int StartA = 103;
@@ -107,9 +135,9 @@ internal static class Code128Encoder
     private const int StopModules = 13;
 
     /// <summary>
-    /// The character count the inline buffers are sized for: 128 values, two for each character, and 192 distance bytes, three for each character. The
-    /// values also hold five characters that are not text, so text of at most 61 characters encodes inline. Section 5.4.4.3 caps a GS1-128 symbol at 48 data
-    /// characters, so every conforming GS1-128 symbol encodes inline.
+    /// The character count the inline buffers are sized for: 128 values, two for each ASCII character or three for each character above 127, and 256
+    /// look-ahead bytes, four for each character. The values also hold five characters that are not text, so ASCII text of at most 61 characters encodes
+    /// inline. Section 5.4.4.3 caps a GS1-128 symbol at 48 data characters of ASCII, so every conforming GS1-128 symbol encodes inline.
     /// </summary>
     private const int InlineLength = 64;
 
@@ -153,7 +181,7 @@ internal static class Code128Encoder
     /// 128 carries no guard bars, so every bar runs the full height. The human readable interpretation prints below the symbol, adjacent to it as rule 1 of
     /// section 4.14 asks.
     /// </summary>
-    /// <param name="text">The text to encode. Every character must be ASCII 0 to 127.</param>
+    /// <param name="text">The text to encode. Every character must be U+0000 to U+00FF.</param>
     /// <param name="gs1">Whether this is a GS1 symbol. Such a symbol carries a Function 1 character after its start character, and encodes every
     /// <see cref="Gs1Data.Separator"/> in the text as another one.</param>
     /// <param name="readablePrefix">The characters of the human readable interpretation before its body.</param>
@@ -176,7 +204,7 @@ internal static class Code128Encoder
     /// Encodes text and builds the symbol at an X dimension clamped to the range of the application standard. The steps are those of
     /// <see cref="BuildSymbol(ReadOnlySpan{char}, bool, ReadOnlySpan{char}, ReadOnlySpan{char}, ReadOnlySpan{char}, BarcodeOptions, ref BarcodeSymbol)"/>.
     /// </summary>
-    /// <param name="text">The text to encode. Every character must be ASCII 0 to 127.</param>
+    /// <param name="text">The text to encode. Every character must be U+0000 to U+00FF.</param>
     /// <param name="gs1">Whether this is a GS1 symbol. Such a symbol carries a Function 1 character after its start character, and encodes every
     /// <see cref="Gs1Data.Separator"/> in the text as another one.</param>
     /// <param name="readablePrefix">The characters of the human readable interpretation before its body.</param>
@@ -223,7 +251,7 @@ internal static class Code128Encoder
     /// Encodes text and builds the symbol at the dimensions of an application standard, which can print a second line above the bars. The ink of the line
     /// above the bars stays within the symbol and the quiet zones of <see cref="QuietZone"/>.
     /// </summary>
-    /// <param name="text">The text to encode. Every character must be ASCII 0 to 127.</param>
+    /// <param name="text">The text to encode. Every character must be U+0000 to U+00FF.</param>
     /// <param name="gs1">Whether this is a GS1 symbol. Such a symbol carries a Function 1 character after its start character, and encodes every
     /// <see cref="Gs1Data.Separator"/> in the text as another one.</param>
     /// <param name="readablePrefix">The characters of the human readable interpretation before its body.</param>
@@ -250,34 +278,37 @@ internal static class Code128Encoder
         double xDimension = layout.XDimension;
         Guard.MustBeLessThanOrEqualTo(text.Length, MaximumLength, nameof(text));
 
-        // Section 5.4.3.3 gives the three code sets ASCII 0 to 127 between them, so anything above that is rejected. The message decodes the code point at the
-        // first such unit, so a surrogate pair reports as the one character it is.
-        int invalid = text.IndexOfAnyExceptInRange('\0', '\u007F');
+        // The code sets carry ASCII 0 to 127 between them, and clause 4.3.4.2 d) of ISO/IEC 15417 adds the byte values 128 to 255 with FNC4, so anything above
+        // U+00FF is rejected. The message decodes the code point at the first such unit, so a surrogate pair reports as the one character it is.
+        int invalid = text.IndexOfAnyExceptInRange('\0', '\u00FF');
         if (invalid >= 0)
         {
-            throw new ArgumentException($"Code 128 encodes ASCII 0 to 127; {text.CodePointAt(invalid).ToDisplayString()} is outside that range.", nameof(text));
+            throw new ArgumentException(
+                $"Code 128 encodes U+0000 to U+00FF; {text.CodePointAt(invalid).ToDisplayString()} is outside that range.",
+                nameof(text));
         }
 
-        // A shift costs one extra symbol character, so two per input character bounds the run, and the start, the optional Function 1, the optional linkage
-        // flag, the check and the stop add five more. The text is at most MaximumLength characters, so the buffers are bounded: short text works inline, and
-        // longer text rents each buffer once.
-        int capacity = (text.Length * 2) + 5;
+        // A code set change or a shift costs one extra symbol character, so two per ASCII character bounds the run. A character above 127 can also take a
+        // single FNC4, so three per character bounds text that has one. Extended mode costs at most four FNC4 characters for a run of at least three, which
+        // the third value per character covers. The start, the optional Function 1, the optional linkage flag, the check and the stop add five more. The text
+        // is at most MaximumLength characters, so the buffers are bounded: short text works inline, and longer text rents each buffer once.
+        int capacity = (text.Length * (text.ContainsAnyExceptInRange('\0', '\u007F') ? 3 : 2)) + 5;
         int lookahead = text.Length + 1;
         InlineArray128<int> valueStorage = default;
-        InlineArray256<byte> distanceStorage = default;
+        InlineArray256<byte> lookaheadStorage = default;
         PooledBuffer<int> rentedValues = default;
-        PooledBuffer<byte> rentedDistances = default;
+        PooledBuffer<byte> rentedLookahead = default;
         Span<int> values = capacity <= InlineLength * 2
             ? valueStorage
             : (rentedValues = new PooledBuffer<int>(capacity)).Span;
 
-        Span<byte> distances = lookahead <= InlineLength
-            ? distanceStorage
-            : (rentedDistances = new PooledBuffer<byte>(lookahead * 3)).Span;
+        Span<byte> lookaheadTables = lookahead <= InlineLength
+            ? lookaheadStorage
+            : (rentedLookahead = new PooledBuffer<byte>(lookahead * 4)).Span;
 
         try
         {
-            int count = new Encodation(text, gs1, linkage, values, distances[..(lookahead * 3)]).Run();
+            int count = new Encodation(text, gs1, linkage, values, lookaheadTables[..(lookahead * 4)]).Run();
 
             // The stop character is always the last value, so every other value takes the six elements and eleven modules of an ordinary character.
             Span<int> runs = symbol.BeginLinear(((count - 1) * ElementsPerCharacter) + StopElements, xDimension, out Span<float> heights, out _);
@@ -307,7 +338,7 @@ internal static class Code128Encoder
         finally
         {
             rentedValues.Dispose();
-            rentedDistances.Dispose();
+            rentedLookahead.Dispose();
         }
     }
 
@@ -365,36 +396,46 @@ internal static class Code128Encoder
 
     /// <summary>
     /// Determines whether only code set A carries the character. Section 5.4.3.3.1 gives code set A the control characters, which code set B replaces with the
-    /// lower case letters.
+    /// lower case letters. Note 3 of Annex E of ISO/IEC 15417 classifies a character above 127 by its value less 128, the character that FNC4 shifts.
     /// </summary>
     /// <param name="character">The character to classify.</param>
     /// <returns><see langword="true"/> when only code set A carries it.</returns>
-    private static bool OnlyInSetA(char character) => character < 32;
+    private static bool OnlyInSetA(char character) => (character & 0x7F) < 32;
 
     /// <summary>
     /// Determines whether only code set B carries the character. Section 5.4.3.3.2 gives code set B the lower case letters and the characters above them, which
-    /// code set A replaces with control codes.
+    /// code set A replaces with control codes. Note 3 of Annex E of ISO/IEC 15417 classifies a character above 127 by its value less 128, the character that
+    /// FNC4 shifts.
     /// </summary>
     /// <param name="character">The character to classify.</param>
     /// <returns><see langword="true"/> when only code set B carries it.</returns>
-    private static bool OnlyInSetB(char character) => character >= 96;
+    private static bool OnlyInSetB(char character) => (character & 0x7F) >= 96;
 
     /// <summary>
     /// Returns the symbol character value of a character in the given code set. Code set A runs from the space at value zero through to the control characters,
-    /// and code set B from the space through to the delete character.
+    /// and code set B from the space through to the delete character. A character above 127 takes the value of the character 128 below it, which FNC4 shifts
+    /// back up, as Annex F of ISO/IEC 15417 gives: C = (D - 128).
     /// </summary>
     /// <param name="set">The code set to encode in.</param>
     /// <param name="character">The character to encode.</param>
     /// <returns>The symbol character value.</returns>
     private static int ValueIn(Code128CodeSet set, char character)
     {
-        if (set == Code128CodeSet.A && character < 32)
+        int value = character & 0x7F;
+        if (set == Code128CodeSet.A && value < 32)
         {
-            return character + 64;
+            return value + 64;
         }
 
-        return character - 32;
+        return value - 32;
     }
+
+    /// <summary>
+    /// Returns the symbol character value of FNC4 in the given code set, Table 1 of ISO/IEC 15417.
+    /// </summary>
+    /// <param name="set">The code set, A or B. Code set C has no FNC4.</param>
+    /// <returns>The symbol character value.</returns>
+    private static int FunctionFourIn(Code128CodeSet set) => set == Code128CodeSet.A ? FunctionFourInA : FunctionFourInB;
 
     /// <summary>
     /// The state of one encodation: the text, the look-ahead the code set choices read, and the symbol character values written so far.
@@ -437,9 +478,19 @@ internal static class Code128Encoder
         private readonly Span<byte> digitsFromEven;
 
         /// <summary>
+        /// The length of the run of characters above 127 from each position, one entry per position and one past the end.
+        /// </summary>
+        private readonly Span<byte> extendedRun;
+
+        /// <summary>
         /// The number of symbol character values written.
         /// </summary>
         private int written;
+
+        /// <summary>
+        /// Whether two FNC4 characters have started extended mode, which adds 128 to every data character until two more end it.
+        /// </summary>
+        private bool extendedMode;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Encodation"/> struct and measures the look-ahead.
@@ -447,8 +498,9 @@ internal static class Code128Encoder
         /// <param name="text">The text to encode.</param>
         /// <param name="gs1">Whether this is a GS1 symbol.</param>
         /// <param name="linkage">The linkage flag the symbol carries before its check character.</param>
-        /// <param name="values">The buffer the symbol character values are written to, of at least twice the text length plus five.</param>
-        /// <param name="lookahead">Scratch for the three look-ahead tables, each one entry longer than the text.</param>
+        /// <param name="values">The buffer the symbol character values are written to, of at least twice the text length plus five, or three times the text
+        /// length plus five when the text has a character above 127.</param>
+        /// <param name="lookahead">Scratch for the four look-ahead tables, each one entry longer than the text.</param>
         public Encodation(ReadOnlySpan<char> text, bool gs1, Code128Linkage linkage, Span<int> values, Span<byte> lookahead)
         {
             int stride = text.Length + 1;
@@ -459,7 +511,9 @@ internal static class Code128Encoder
             this.nextOnlyInA = lookahead[..stride];
             this.nextOnlyInB = lookahead.Slice(stride, stride);
             this.digitsFromEven = lookahead.Slice(stride * 2, stride);
+            this.extendedRun = lookahead.Slice(stride * 3, stride);
             this.written = 0;
+            this.extendedMode = false;
             this.MeasureLookahead();
         }
 
@@ -486,6 +540,16 @@ internal static class Code128Encoder
                     continue;
                 }
 
+                // Extended mode covers exactly one run of characters above 127, so two FNC4 characters end it before the next character of 127 or below. That
+                // happens before any change to code set C, which has no FNC4.
+                if (this.extendedMode && text[position] <= '\u007F')
+                {
+                    this.values[this.written++] = FunctionFourIn(set);
+                    this.values[this.written++] = FunctionFourIn(set);
+                    this.extendedMode = false;
+                    continue;
+                }
+
                 int digits = this.digitsFromEven[position];
                 if (set != Code128CodeSet.C && digits >= 4)
                 {
@@ -507,11 +571,35 @@ internal static class Code128Encoder
                 }
 
                 char character = text[position];
+                bool extended = character > '\u007F';
+
+                // Note 3 of Annex E of ISO/IEC 15417: a long run of characters above 127 takes extended mode. Code set C has no FNC4, so the run waits for the
+                // change out of code set C below. A saturated run length is long enough whether or not it ends the data.
+                if (extended && !this.extendedMode && set != Code128CodeSet.C)
+                {
+                    int run = this.extendedRun[position];
+                    if (run >= (position + run == text.Length ? ShortestFinalExtendedRun : ShortestExtendedRun))
+                    {
+                        this.values[this.written++] = FunctionFourIn(set);
+                        this.values[this.written++] = FunctionFourIn(set);
+                        this.extendedMode = true;
+                        continue;
+                    }
+                }
+
+                // Outside extended mode a single FNC4 adds 128 to the one data character after it. Clause 4.3.4.2 d) lets a Shift follow the FNC4, so the
+                // FNC4 takes its value from the code set in force before the Shift.
+                bool functionFour = extended && !this.extendedMode;
                 if (set == Code128CodeSet.B && OnlyInSetA(character))
                 {
                     // A shift serves one character when the next character only one of the two sets carries belongs to the current set.
                     if (position < text.Length - 1 && this.nextOnlyInB[position + 1] < this.nextOnlyInA[position + 1])
                     {
+                        if (functionFour)
+                        {
+                            this.values[this.written++] = FunctionFourInB;
+                        }
+
                         this.values[this.written++] = Shift;
                         this.values[this.written++] = ValueIn(Code128CodeSet.A, character);
                         position++;
@@ -527,6 +615,11 @@ internal static class Code128Encoder
                 {
                     if (position < text.Length - 1 && this.nextOnlyInA[position + 1] < this.nextOnlyInB[position + 1])
                     {
+                        if (functionFour)
+                        {
+                            this.values[this.written++] = FunctionFourInA;
+                        }
+
                         this.values[this.written++] = Shift;
                         this.values[this.written++] = ValueIn(Code128CodeSet.B, character);
                         position++;
@@ -551,6 +644,11 @@ internal static class Code128Encoder
                     this.values[this.written++] = ((text[position] - '0') * 10) + (text[position + 1] - '0');
                     position += 2;
                     continue;
+                }
+
+                if (functionFour)
+                {
+                    this.values[this.written++] = FunctionFourIn(set);
                 }
 
                 this.values[this.written++] = ValueIn(set, character);
@@ -586,9 +684,11 @@ internal static class Code128Encoder
             Span<byte> nextOnlyInA = this.nextOnlyInA;
             Span<byte> nextOnlyInB = this.nextOnlyInB;
             Span<byte> digitsFromEven = this.digitsFromEven;
+            Span<byte> extendedRun = this.extendedRun;
             nextOnlyInA[text.Length] = byte.MaxValue;
             nextOnlyInB[text.Length] = byte.MaxValue;
             digitsFromEven[text.Length] = 0;
+            extendedRun[text.Length] = 0;
 
             // The same digit count one character out of step is read only at the position after, so the walk carries it.
             byte digitsFromOdd = 0;
@@ -598,6 +698,7 @@ internal static class Code128Encoder
                 bool separator = this.gs1 && text[i] == Gs1Data.Separator;
                 nextOnlyInA[i] = !separator && OnlyInSetA(text[i]) ? (byte)0 : SaturatingIncrement(nextOnlyInA[i + 1]);
                 nextOnlyInB[i] = !separator && OnlyInSetB(text[i]) ? (byte)0 : SaturatingIncrement(nextOnlyInB[i + 1]);
+                extendedRun[i] = text[i] > '\u007F' ? SaturatingIncrement(extendedRun[i + 1]) : (byte)0;
 
                 // The digits a code set C run carries from here, counted on the two parities code set C packs against. A separator carries two, because
                 // code set C encodes the Function 1 in the one symbol character that a digit pair takes, so a run of digits continues across it.

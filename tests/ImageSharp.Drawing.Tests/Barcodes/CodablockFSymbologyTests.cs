@@ -61,14 +61,26 @@ public class CodablockFSymbologyTests
         });
 
     /// <summary>
-    /// The column count is 4 to 62, the characters are ASCII 0 to 127, and 44 rows are the most a symbol holds.
+    /// The rows are Code 128 characters. Clause 4.3.4.2 d) of ISO/IEC 15417 encodes a character above 127 as FNC4 and the character 128 below it, so each
+    /// such character takes two data columns. With four columns, four of them fill two rows, and the last row's check characters K1 and K2 take a third row.
+    /// Four ASCII characters fill one row, and K1 and K2 take the second. The symbol has an edge bar above and below and a separator between rows.
+    /// </summary>
+    [Fact]
+    public void CodablockF_EncodesCharactersAbove127WithFnc4()
+    {
+        Encode("éàéà", 4, static (ref symbol) => Assert.Equal((3 * 2) + 1, symbol.Rows.Length));
+        Encode("iaia", 4, static (ref symbol) => Assert.Equal((2 * 2) + 1, symbol.Rows.Length));
+    }
+
+    /// <summary>
+    /// The column count is 4 to 62, the characters are U+0000 to U+00FF, and 44 rows are the most a symbol holds.
     /// </summary>
     [Fact]
     public void CodablockF_RejectsInvalidInput()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new CodablockFSymbology(3));
         Assert.Throws<ArgumentOutOfRangeException>(() => new CodablockFSymbology(63));
-        Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new CodablockFSymbology(8), "café", new BarcodeOptions()));
+        Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new CodablockFSymbology(8), "Ā", new BarcodeOptions()));
         Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new CodablockFSymbology(4), new string('A', 44 * 4), new BarcodeOptions()));
         Encode(new string('A', (44 * 4) - 2), 4, (ref symbol) => Assert.Equal(BarcodeSymbolKind.Stacked, symbol.Kind));
     }

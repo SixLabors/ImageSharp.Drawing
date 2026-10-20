@@ -5,7 +5,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
 /// The Codablock F symbology: 2 to 44 rows of Code 128 characters, each row with its own start, code set selector, row indicator, check and stop characters,
-/// and two modulo 86 check characters of the whole message in the last row. The data prints as a text line below the symbol when a font is set.
+/// and two modulo 86 check characters of the whole message in the last row. It carries the characters U+0000 to U+00FF, ISO/IEC 8859-1, and a character above
+/// U+007F takes an extra FNC4 character. The data prints as a text line below the symbol when a font is set.
 /// </summary>
 public sealed class CodablockFSymbology : BarcodeSymbology
 {
