@@ -401,8 +401,9 @@ public class BarcodeDecodeTests
     }
 
     /// <summary>
-    /// The linear component of a GS1 Composite symbol decodes to its data with its linkage flag set and the separator pattern above it. zxing-cpp reads the
-    /// linear component only and has no decoder for the 2D component. The data is that of the figures of ISO/IEC 24723.
+    /// The linear component of a GS1 Composite symbol decodes to its data with the 2D component and the separator pattern above it, and a GS1 DataBar or
+    /// GS1-128 component also with its linkage flag set. zxing-cpp reads the linear component only and has no decoder for the 2D component. The GS1 DataBar
+    /// and GS1-128 data is that of the figures of ISO/IEC 24723. UPC-A and UPC-E transmit as GTIN-13.
     /// </summary>
     /// <param name="kind">The composite symbology.</param>
     /// <param name="linear">The element strings of the linear component.</param>
@@ -418,10 +419,18 @@ public class BarcodeDecodeTests
     [InlineData("ExpandedStacked", "(01)00012345678905(10)ABCDEF", "(21)12345678", "010001234567890510ABCDEF")]
     [InlineData("Gs1128", "(01)03212345678906", "(21)A1B2C3D4E5F6G7H8", "0103212345678906")]
     [InlineData("Gs1128CcC", "(01)93812345678901", "(10)ABCD123456(410)3898765432108", "0193812345678901")]
+    [InlineData("Ean13", "3312345678903", "(99)1234-abcd", "3312345678903")]
+    [InlineData("Ean8", "12345670", "(21)A12345678", "12345670")]
+    [InlineData("UpcA", "416000336108", "(99)1234-abcd", "0416000336108")]
+    [InlineData("UpcE", "01234558", "(15)021231", "0012345000058")]
     public void Gs1Composite_LinearComponentRoundTrips(string kind, string linear, string component, string expected)
     {
         (CompositeBarcodeSymbology symbology, BarcodeFormat format) = kind switch
         {
+            "Ean13" => (new Ean13CompositeSymbology(), BarcodeFormat.EAN13),
+            "Ean8" => (new Ean8CompositeSymbology(), BarcodeFormat.EAN8),
+            "UpcA" => (new UpcACompositeSymbology(), BarcodeFormat.UPCA),
+            "UpcE" => (new UpcECompositeSymbology(), BarcodeFormat.UPCE),
             "Omnidirectional" => ((CompositeBarcodeSymbology)new Gs1DataBarOmnidirectionalCompositeSymbology(), BarcodeFormat.DataBarOmni),
             "Truncated" => (new Gs1DataBarTruncatedCompositeSymbology(), BarcodeFormat.DataBarOmni),
             "Stacked" => (new Gs1DataBarStackedCompositeSymbology(), BarcodeFormat.DataBarStk),
@@ -557,12 +566,32 @@ public class BarcodeDecodeTests
             "0109521234543213" + "10ABC123\u001d" + "21XYZ789");
 
     /// <summary>
+    /// A GS1 Data Matrix symbol in a rectangular size decodes as the square size does, with the symbology identifier ]d2 and a &lt;GS&gt; after a variable
+    /// length element string.
+    /// </summary>
+    [Fact]
+    public void Gs1DataMatrixRectangular_RoundTrips()
+        => AssertDecodes(
+            new Gs1DataMatrixRectangularSymbology(),
+            "(01)09521234543213(10)ABC123(21)XYZ789",
+            BarcodeFormat.DataMatrix,
+            "]d2",
+            "0109521234543213" + "10ABC123\u001d" + "21XYZ789");
+
+    /// <summary>
     /// A HIBC Data Matrix symbol decodes to the flag character, the data and the check character. The delimiters are only in the human readable
     /// interpretation.
     /// </summary>
     [Fact]
     public void HibcDataMatrix_RoundTrips()
         => AssertDecodes(new HibcDataMatrixSymbology(), "A123BJC5D6E71", BarcodeFormat.DataMatrix, "+A123BJC5D6E71G");
+
+    /// <summary>
+    /// A HIBC Data Matrix symbol in a rectangular size decodes to the flag character, the data and the check character, as the square size does.
+    /// </summary>
+    [Fact]
+    public void HibcDataMatrixRectangular_RoundTrips()
+        => AssertDecodes(new HibcDataMatrixRectangularSymbology(), "A123BJC5D6E71", BarcodeFormat.DataMatrix, "+A123BJC5D6E71G");
 
     /// <summary>
     /// A 2D Mailmark barcode is a Data Matrix symbol of the Royal Mail fields and the customer content as written.
