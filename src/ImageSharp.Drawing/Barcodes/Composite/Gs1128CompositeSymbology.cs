@@ -80,7 +80,7 @@ public sealed class Gs1128CompositeSymbology : CompositeBarcodeSymbology
         ValueStringBuilder encoded = capacity <= Gs1Data.InlineBufferLength ? new(bufferStorage) : new(capacity);
         try
         {
-            Gs1Data.Prepare(first, ref encoded);
+            Gs1Data.Encode(first, ref encoded);
             Guard.MustBeLessThanOrEqualTo(encoded.Length, MaximumDataCharacters, nameof(first));
 
             // The interpretation is never longer than the text, which PreparedCapacity bounds to 80 characters, so the inline buffer always holds it.

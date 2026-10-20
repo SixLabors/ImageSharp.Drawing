@@ -35,8 +35,8 @@ internal static class Gs1CompositeLayout
     private static ReadOnlySpan<byte> FinderValueThree => [1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1];
 
     /// <summary>
-    /// Validates the element strings of the two components together. The pairs of section 4.13.1 of the GS1 General Specifications apply to the whole
-    /// symbol, so an element string of one component can exclude one of the other.
+    /// Validates the element strings of the two components together, as the element strings of one whole symbol. The pairs of section 4.13.1 of the GS1
+    /// General Specifications apply to the whole symbol, so an element string of one component can exclude one of the other.
     /// </summary>
     /// <param name="linear">The element strings of the linear component.</param>
     /// <param name="component">The element strings of the 2D component.</param>
@@ -54,7 +54,7 @@ internal static class Gs1CompositeLayout
             linear.CopyTo(text);
             component.CopyTo(text[linear.Length..]);
             Gs1Data.Parse(text, ref elements);
-            Gs1Data.Validate(text, elements.AsSpan());
+            Gs1Data.ValidateSymbol(text, elements.AsSpan());
         }
         finally
         {
@@ -226,14 +226,26 @@ internal static class Gs1CompositeLayout
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="first">The digits of the linear component.</param>
     /// <param name="second">The element strings of the 2D component.</param>
+    /// <param name="gtin">The GTIN that the linear component carries, with its check digit: 8, 12 or 13 digits.</param>
     public static void EncodeEanUpc(
         BarcodeSymbology linear,
         int columns,
         Span<BarcodeSymbol> parts,
         BarcodeOptions options,
         ReadOnlySpan<char> first,
-        ReadOnlySpan<char> second)
+        ReadOnlySpan<char> second,
+        ReadOnlySpan<char> gtin)
     {
+        // The note of section 4.13 of the GS1 General Specifications: "GTINs encoded in an EAN/UPC and ITF-14 symbols are to be regarded as element strings
+        // prefixed by an inferred AI (01)". So the symbol validates as the inferred (01) element string, the GTIN right-justified in 14 digits, with the
+        // element strings of the 2D component.
+        InlineArray32<char> inferredStorage = default;
+        Span<char> inferred = ((Span<char>)inferredStorage)[..18];
+        "(01)".CopyTo(inferred);
+        inferred[4..(18 - gtin.Length)].Fill('0');
+        gtin.CopyTo(inferred[(18 - gtin.Length)..]);
+        Validate(inferred, second);
+
         linear.Encode(first, options, ref parts[0]);
         BuildComponent(second, Gs1CompositeComponent.CcA, columns, 0, parts[0].XDimension, options, ref parts[1]);
 

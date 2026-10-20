@@ -421,9 +421,10 @@ internal static class Gs1Linters
                 break;
 
             case Gs1Linter.NoZeroPrefix:
-                if (data[0] == '0')
+                // Section 3.9.11: the serial number "SHALL NOT begin with a "0" digit, unless the entire serial number consists of the single digit "0"".
+                if (data[0] == '0' && data.Length > 1)
                 {
-                    ThrowInvalidData(identifier, "starts with a zero, which is not allowed", nameof(data));
+                    ThrowInvalidData(identifier, "starts with a zero, which is allowed only for the single digit 0", nameof(data));
                 }
 
                 break;

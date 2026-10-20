@@ -54,40 +54,8 @@ public sealed class UpcESymbology : BarcodeSymbology
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        if (text.Length is not (7 or 8))
-        {
-            throw new ArgumentException(
-                $"UPC-E requires a leading zero and 6 data digits with an optional check digit; got {text.Length} characters.",
-                nameof(text));
-        }
-
-        BarcodeSymbology.ValidateDigits(text);
-
-        // Section 5.2.2.4.1 of the GS1 General Specifications: "D1 SHALL always be zero."
-        if (text[0] != '0')
-        {
-            throw new ArgumentException("UPC-E encodes only a GTIN-12 that starts with a zero.", nameof(text));
-        }
-
-        // The four zero suppression rules of section 5.2.2.4.1 exclude each other, so a GTIN-12 suppresses one way only. The last digit selects the rule, and
-        // each rule requires one digit to be nonzero: X5 (D6) when X6 is 5 to 9, X4 (D5) when X6 is 4, and X3 (D4) from 3 to 9 when X6 is 3. Other digits
-        // come from a GTIN-12 that a different rule suppresses.
-        char x6 = text[6];
-        if ((x6 >= '5' && text[5] == '0') || (x6 == '4' && text[4] == '0') || (x6 == '3' && text[3] < '3'))
-        {
-            throw new ArgumentException("The UPC-E digits are not the zero suppression of a GTIN-12.", nameof(text));
-        }
-
-        // The check digit is computed over the GTIN-12, not the compressed digits. Section 5.2.2.4.1: "D12 SHALL be the check digit calculated according to
-        // the algorithm in section 7.9."
-        InlineArray12<char> expandedStorage = default;
-        Span<char> expanded = ((Span<char>)expandedStorage)[..11];
-        int check = Gs1Data.ComputeCheckDigit(Expand(text, expanded));
-        if (text.Length == 8 && text[7] - '0' != check)
-        {
-            throw new ArgumentException($"UPC-E check digit mismatch: expected {check}, got {text[7]}.", nameof(text));
-        }
-
+        InlineArray12<char> gtinStorage = default;
+        int check = ExpandToGtin12(text, gtinStorage)[11] - '0';
         int parity = EanUpcEncoder.UpcEParity[check];
 
         InlineArray64<byte> moduleStorage = default;
@@ -129,6 +97,51 @@ public sealed class UpcESymbology : BarcodeSymbology
         }
 
         symbol.EndLinear(LeadingQuietZone, TrailingQuietZone, 0F, EanUpcEncoder.RunUnit, false);
+    }
+
+    /// <summary>
+    /// Validates UPC-E digits and writes the GTIN-12 that they zero suppress, with its check digit.
+    /// </summary>
+    /// <param name="text">The leading zero and the six compressed digits, with an optional check digit.</param>
+    /// <param name="destination">The buffer the twelve digits are written into, at least twelve long.</param>
+    /// <returns>The twelve digits of the GTIN-12.</returns>
+    /// <exception cref="ArgumentException">The text is not the zero suppression of a GTIN-12, or carries a wrong check digit.</exception>
+    internal static ReadOnlySpan<char> ExpandToGtin12(ReadOnlySpan<char> text, Span<char> destination)
+    {
+        if (text.Length is not (7 or 8))
+        {
+            throw new ArgumentException(
+                $"UPC-E requires a leading zero and 6 data digits with an optional check digit; got {text.Length} characters.",
+                nameof(text));
+        }
+
+        BarcodeSymbology.ValidateDigits(text);
+
+        // Section 5.2.2.4.1 of the GS1 General Specifications: "D1 SHALL always be zero."
+        if (text[0] != '0')
+        {
+            throw new ArgumentException("UPC-E encodes only a GTIN-12 that starts with a zero.", nameof(text));
+        }
+
+        // The four zero suppression rules of section 5.2.2.4.1 exclude each other, so a GTIN-12 suppresses one way only. The last digit selects the rule, and
+        // each rule requires one digit to be nonzero: X5 (D6) when X6 is 5 to 9, X4 (D5) when X6 is 4, and X3 (D4) from 3 to 9 when X6 is 3. Other digits
+        // come from a GTIN-12 that a different rule suppresses.
+        char x6 = text[6];
+        if ((x6 >= '5' && text[5] == '0') || (x6 == '4' && text[4] == '0') || (x6 == '3' && text[3] < '3'))
+        {
+            throw new ArgumentException("The UPC-E digits are not the zero suppression of a GTIN-12.", nameof(text));
+        }
+
+        // The check digit is computed over the GTIN-12, not the compressed digits. Section 5.2.2.4.1: "D12 SHALL be the check digit calculated according to
+        // the algorithm in section 7.9."
+        int check = Gs1Data.ComputeCheckDigit(Expand(text, destination[..11]));
+        if (text.Length == 8 && text[7] - '0' != check)
+        {
+            throw new ArgumentException($"UPC-E check digit mismatch: expected {check}, got {text[7]}.", nameof(text));
+        }
+
+        destination[11] = (char)('0' + check);
+        return destination[..12];
     }
 
     /// <summary>

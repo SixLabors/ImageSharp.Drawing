@@ -29,7 +29,11 @@ public sealed class UpcACompositeSymbology : CompositeBarcodeSymbology
         ReadOnlySpan<char> first,
         ReadOnlySpan<char> second,
         ReadOnlySpan<char> third)
-        => Gs1CompositeLayout.EncodeEanUpc(this.Symbologies[0], Columns, parts, options, first, second);
+    {
+        InlineArray16<char> gtinStorage = default;
+        ReadOnlySpan<char> gtin = EanUpcEncoder.ValidateAndApplyCheckDigit(first, 11, gtinStorage);
+        Gs1CompositeLayout.EncodeEanUpc(this.Symbologies[0], Columns, parts, options, first, second, gtin);
+    }
 
     /// <inheritdoc/>
     internal override PointF Place(int index, ReadOnlySpan<BarcodeSymbol> parts, ReadOnlySpan<PointF> symbolOrigins, BarcodeOptions options)

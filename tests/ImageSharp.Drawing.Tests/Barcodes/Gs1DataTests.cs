@@ -44,6 +44,28 @@ public class Gs1DataTests
         => Assert.Throws<ArgumentException>(() => Encode("(01)09521234543213(17)" + date));
 
     /// <summary>
+    /// Section 3.9.27: the URL of (8200) is "in mandatory association with GTIN AI (01) encoded in one symbol".
+    /// </summary>
+    [Fact]
+    public void RequiresAGtinInTheSymbolOfTheExtendedPackagingUrl()
+    {
+        Assert.Null(Record.Exception(() => Encode("(01)09521234543213(8200)HTTP://EXAMPLE.COM")));
+        Assert.Throws<ArgumentException>(() => Encode("(8200)HTTP://EXAMPLE.COM"));
+    }
+
+    /// <summary>
+    /// Section 3.9.11: the component/part serial number of (8011) "SHALL NOT begin with a "0" digit, unless the entire serial number consists of the single
+    /// digit "0"".
+    /// </summary>
+    [Fact]
+    public void AllowsALeadingZeroInTheComponentSerialNumberOnlyAsTheSingleDigitZero()
+    {
+        Assert.Null(Record.Exception(() => Encode("(8011)0")));
+        Assert.Null(Record.Exception(() => Encode("(8011)10")));
+        Assert.Throws<ArgumentException>(() => Encode("(8011)01"));
+    }
+
+    /// <summary>
     /// Section 7.11, Table 7-20: the data of an alphanumeric Application Identifier uses GS1 AI encodable character set 82, which has no tilde or space.
     /// </summary>
     /// <param name="batch">The batch or lot number.</param>

@@ -159,7 +159,7 @@ internal enum Gs1Linter
     Iban,
 
     /// <summary>
-    /// Digits with no leading zero.
+    /// Digits with no leading zero, or the single digit 0.
     /// </summary>
     NoZeroPrefix,
 

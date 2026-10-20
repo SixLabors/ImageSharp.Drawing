@@ -153,7 +153,7 @@ internal static class Gs1DigitalLink
                 }
             }
 
-            Gs1Data.Validate(decoded, parsed);
+            Gs1Data.ValidateSymbol(decoded, parsed);
             int written = 0;
             if (writeReadable)
             {

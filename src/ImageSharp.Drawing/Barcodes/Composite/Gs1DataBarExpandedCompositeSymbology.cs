@@ -39,7 +39,7 @@ public sealed class Gs1DataBarExpandedCompositeSymbology : CompositeBarcodeSymbo
         ValueStringBuilder encoded = capacity <= Gs1Data.InlineBufferLength ? new(bufferStorage) : new(capacity);
         try
         {
-            Gs1Data.Prepare(first, ref encoded);
+            Gs1Data.Encode(first, ref encoded);
             DataBarExpandedEncoder.ValidateGtinFirst(first);
 
             // The interpretation is never longer than the text, which PreparedCapacity bounds to 122 characters, so the inline buffer always holds it.

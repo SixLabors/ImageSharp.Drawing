@@ -194,21 +194,33 @@ internal static class Gs1Data
         try
         {
             Parse(text, ref elements);
-            Validate(text, elements.AsSpan());
+            ValidateSymbol(text, elements.AsSpan());
+            AppendElements(text, elements.AsSpan(), ref encoded);
+        }
+        finally
+        {
+            elements.Dispose();
+        }
+    }
 
-            // Section 7.8.6.2: an element string without a predefined length is terminated by a separator, unless it is the last one in the symbol. The
-            // dictionary marks the predefined lengths of Table 7-6.
-            ReadOnlySpan<Gs1Element> parsed = elements.AsSpan();
-            for (int i = 0; i < parsed.Length; i++)
-            {
-                Gs1Element element = parsed[i];
-                encoded.Append(element.Identifier(text));
-                encoded.Append(element.Data(text));
-                if (i < parsed.Length - 1 && !element.Entry.PredefinedLength)
-                {
-                    encoded.Append(Separator);
-                }
-            }
+    /// <summary>
+    /// Parses element strings that the caller validated as part of a whole symbol and writes the data a symbol carries, as <see cref="Prepare"/> writes it.
+    /// The linear component of a GS1 Composite symbol takes this step: the caller validates the element strings of both components together, because the
+    /// rules of <see cref="ValidateSymbol"/> apply to the whole symbol and not to one component.
+    /// </summary>
+    /// <param name="text">The validated element strings.</param>
+    /// <param name="encoded"> The builder the encoded data is written to: each Application Identifier and its data in turn, with a <see cref="Separator"/>
+    /// after every variable length element string but the last. </param>
+    /// <exception cref="ArgumentException">The text is not valid element string syntax.</exception>
+    public static void Encode(ReadOnlySpan<char> text, ref ValueStringBuilder encoded)
+    {
+        InlineArray16<Gs1Element> elementStorage = default;
+        int elementCapacity = (text.Length / 5) + 1;
+        ValueListBuilder<Gs1Element> elements = elementCapacity <= InlineElementCount ? new(elementStorage) : new(elementCapacity);
+        try
+        {
+            Parse(text, ref elements);
+            AppendElements(text, elements.AsSpan(), ref encoded);
         }
         finally
         {
@@ -273,6 +285,23 @@ internal static class Gs1Data
                         nameof(elements));
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Validates the element strings of one whole symbol: the rules of <see cref="Validate"/>, and the rules that tie element strings to one symbol. Section
+    /// 3.9.27 of the GS1 General Specifications uses Application Identifier (8200) "in mandatory association with GTIN AI (01) encoded in one symbol". A
+    /// component of a GS1 Composite symbol is not a whole symbol, so its own element strings take <see cref="Validate"/> only.
+    /// </summary>
+    /// <param name="buffer">The buffer the element strings are in.</param>
+    /// <param name="elements">The element strings.</param>
+    /// <exception cref="ArgumentException">An element string or a pair of them breaks a rule.</exception>
+    public static void ValidateSymbol(ReadOnlySpan<char> buffer, ReadOnlySpan<Gs1Element> elements)
+    {
+        Validate(buffer, elements);
+        if (FindPattern(buffer, elements, "8200", []) >= 0 && FindPattern(buffer, elements, "01", []) < 0)
+        {
+            throw new ArgumentException("The Application Identifier (8200) needs a GTIN, (01), in the same symbol.", nameof(elements));
         }
     }
 
@@ -500,6 +529,28 @@ internal static class Gs1Data
 
         digits[..13].CopyTo(gtin);
         gtin[13] = (char)('0' + check);
+    }
+
+    /// <summary>
+    /// Writes the data a symbol carries for parsed element strings: each Application Identifier and its data in turn. Section 7.8.6.2: an element string
+    /// without a predefined length is terminated by a separator, unless it is the last one in the symbol. The dictionary marks the predefined lengths of
+    /// Table 7-6.
+    /// </summary>
+    /// <param name="text">The buffer the element strings are in.</param>
+    /// <param name="elements">The element strings.</param>
+    /// <param name="encoded">The builder the encoded data is written to.</param>
+    private static void AppendElements(scoped ReadOnlySpan<char> text, scoped ReadOnlySpan<Gs1Element> elements, ref ValueStringBuilder encoded)
+    {
+        for (int i = 0; i < elements.Length; i++)
+        {
+            Gs1Element element = elements[i];
+            encoded.Append(element.Identifier(text));
+            encoded.Append(element.Data(text));
+            if (i < elements.Length - 1 && !element.Entry.PredefinedLength)
+            {
+                encoded.Append(Separator);
+            }
+        }
     }
 
     /// <summary>
