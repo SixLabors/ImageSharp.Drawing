@@ -30,6 +30,12 @@ internal static class TelepenEncoder
     private const double NominalXDimension = 0.0125 * 25.4;
 
     /// <summary>
+    /// The smallest X dimension in millimetres, 0.0075 inch. The Telepen history of SB Electronic Systems: "For open systems the minimum value of x is 0.0075
+    /// inch or 0.19 mm." The document gives no largest X dimension.
+    /// </summary>
+    private const double MinimumXDimension = 0.0075 * 25.4;
+
+    /// <summary>
     /// The number of characters a caller holds inline to build symbol data in. Longer data rents its buffer once.
     /// </summary>
     public const int InlineBufferLength = 64;
@@ -127,7 +133,7 @@ internal static class TelepenEncoder
     {
         // Every run is at least one module and a character is sixteen modules, so a character is at most sixteen runs. The symbol reserves that many runs and
         // keeps those it writes. The stop code ends on a bar, so the space written after it is dropped.
-        double xDimension = options.ResolveXDimension(0, NominalXDimension, double.PositiveInfinity);
+        double xDimension = options.ResolveXDimension(MinimumXDimension, NominalXDimension, double.PositiveInfinity);
         Span<int> runs = symbol.BeginLinear((values.Length + FrameCharacters) * ModulesPerCharacter, xDimension, out Span<float> heights, out _);
         int written = 0;
         Append(runs, ref written, Start);

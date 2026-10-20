@@ -64,6 +64,18 @@ public class TelepenSymbologyTests
         => Assert.Equal((16 * (text.Length + 3)) - 1, SymbolEncoder.Read(new TelepenSymbology(), text, new BarcodeOptions(), SymbolEncoder.RunSum));
 
     /// <summary>
+    /// The Telepen history of SB Electronic Systems: "For open systems the minimum value of x is 0.0075 inch or 0.19 mm." At 1000 pixels a millimetre the
+    /// smallest whole number of pixels at or over 0.1905 mm is 191 pixels, so an X dimension of 0.1 mm draws at 0.191 mm.
+    /// </summary>
+    [Fact]
+    public void ClampsAnXDimensionUnderTheOpenSystemMinimum()
+        => SymbolEncoder.Encode(
+            new TelepenSymbology(),
+            "ABC123",
+            new BarcodeOptions { Dpi = SymbolEncoder.MicrometreDpi, XDimension = 0.1 },
+            static (ref symbol) => Assert.Equal(0.191, symbol.XDimension, 1e-9));
+
+    /// <summary>
     /// Telepen carries the ASCII characters 0 to 127 only. The symbology rejects empty input and characters above 127.
     /// </summary>
     /// <param name="text">The text to encode.</param>
