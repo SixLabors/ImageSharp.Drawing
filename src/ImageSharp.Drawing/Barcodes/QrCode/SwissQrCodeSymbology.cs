@@ -1,6 +1,9 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.Unicode;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
@@ -43,33 +46,19 @@ public sealed class SwissQrCodeSymbology : BarcodeSymbology
         SwissQrBill.Validate(text);
 
         // Section 4.1.1: the data is UTF-8. The validation leaves only characters of the Basic Multilingual Plane up to U+20AC, which take at most 3 bytes
-        // each. Each byte goes to the encoder as the character of that value, which Byte mode writes as the byte.
-        PooledBuffer<char> rented = new(3 * text.Length);
+        // each. Each byte goes to the encoder as the character of that value, which Byte mode writes as the byte. One rent holds the characters and, after
+        // them, the bytes.
+        int capacity = 3 * text.Length;
+        PooledBuffer<char> rented = new(capacity + ((capacity + 1) / 2));
         try
         {
-            Span<char> bytes = rented.Span;
-            int written = 0;
-            foreach (char c in text)
-            {
-                if (c < 0x80)
-                {
-                    bytes[written++] = c;
-                }
-                else if (c < 0x800)
-                {
-                    bytes[written++] = (char)(0xC0 | (c >> 6));
-                    bytes[written++] = (char)(0x80 | (c & 0x3F));
-                }
-                else
-                {
-                    bytes[written++] = (char)(0xE0 | (c >> 12));
-                    bytes[written++] = (char)(0x80 | ((c >> 6) & 0x3F));
-                    bytes[written++] = (char)(0x80 | (c & 0x3F));
-                }
-            }
+            Span<char> characters = rented.Span[..capacity];
+            Span<byte> bytes = MemoryMarshal.AsBytes(rented.Span[capacity..])[..capacity];
+            _ = Utf8.FromUtf16(text, bytes, out _, out int written);
+            int count = Encoding.Latin1.GetChars(bytes[..written], characters);
 
             // Sections 6.1 and 6.4: level M and the smallest version, drawn 46 mm wide with the 7 mm cross at the same scale.
-            QrEncoder.BuildSymbol(bytes[..written], false, QrFormat.Full, QrErrorCorrectionLevel.M, 0, null, SwissCross.SymbolWidth, ref symbol);
+            QrEncoder.BuildSymbol(characters[..count], false, QrFormat.Full, QrErrorCorrectionLevel.M, 0, null, SwissCross.SymbolWidth, ref symbol);
             symbol.AddOverlay((float)(SwissCross.Width / SwissCross.SymbolWidth * symbol.Columns), SwissCross.Side, SwissCross.DarkEdges);
         }
         finally
