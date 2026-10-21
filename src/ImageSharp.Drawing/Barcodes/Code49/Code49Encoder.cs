@@ -163,6 +163,37 @@ internal static class Code49Encoder
     private static ReadOnlySpan<byte> RowParity => [0b1001, 0b0101, 0b1100, 0b0011, 0b1010, 0b0110, 0b1111];
 
     /// <summary>
+    /// Gets the code character value of each ASCII character, 0 to 127, by Table 7. The value is from Table 6, after the shift that <see cref="AsciiShifts"/>
+    /// gives.
+    /// </summary>
+    private static ReadOnlySpan<byte> AsciiValues =>
+    [
+        38, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 1, 2, 3, 4, 5,
+        38, 6, 7, 8, 39, 42, 9, 0, 36, 37, 39, 41, 40, 36, 37, 40,
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 41, 1, 2, 3, 4, 5,
+        6, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 7, 8, 9, 0, 36,
+        37, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 39, 40, 41, 42, 38
+    ];
+
+    /// <summary>
+    /// Gets the shift before the code character of each ASCII character, 0 to 127, by Table 7: 0 for none, 1 for Shift 1 and 2 for Shift 2.
+    /// </summary>
+    private static ReadOnlySpan<byte> AsciiShifts =>
+    [
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        0, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 2, 2, 2, 2,
+        2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2,
+        2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2
+    ];
+
+    /// <summary>
     /// Encodes text and builds the symbol.
     /// </summary>
     /// <param name="text">The text to encode. Every character must be ASCII 0 to 127.</param>
@@ -548,82 +579,8 @@ internal static class Code49Encoder
     /// <returns>The code character value from Table 6.</returns>
     private static int CodeCharacter(char c, out int shift)
     {
-        shift = 0;
-        if (c < 32)
-        {
-            shift = ShiftOne;
-            if (c == 0)
-            {
-                return 38;
-            }
-
-            return c <= 26 ? 9 + c : c - 26;
-        }
-
-        if (char.IsAsciiDigit(c))
-        {
-            return c - '0';
-        }
-
-        if (char.IsAsciiLetterUpper(c))
-        {
-            return 10 + (c - 'A');
-        }
-
-        if (char.IsAsciiLetterLower(c))
-        {
-            shift = ShiftTwo;
-            return 10 + (c - 'a');
-        }
-
-        switch (c)
-        {
-            case ' ':
-                return 38;
-            case '$':
-                return 39;
-            case '%':
-                return 42;
-            case '+':
-                return 41;
-            case '-':
-                return 36;
-            case '.':
-                return 37;
-            case '/':
-                return 40;
-        }
-
-        shift = c < 59 ? ShiftOne : ShiftTwo;
-        return c switch
-        {
-            '!' => 6,
-            '"' => 7,
-            '#' => 8,
-            '&' => 9,
-            '\'' => 0,
-            '(' => 36,
-            ')' => 37,
-            '*' => 39,
-            ',' => 40,
-            ':' => 41,
-            ';' => 1,
-            '<' => 2,
-            '=' => 3,
-            '>' => 4,
-            '?' => 5,
-            '@' => 6,
-            '[' => 7,
-            '\\' => 8,
-            ']' => 9,
-            '^' => 0,
-            '_' => 36,
-            '`' => 37,
-            '{' => 39,
-            '|' => 40,
-            '}' => 41,
-            '~' => 42,
-            _ => 38,
-        };
+        int set = AsciiShifts[c];
+        shift = set == 0 ? 0 : set == 1 ? ShiftOne : ShiftTwo;
+        return AsciiValues[c];
     }
 }
