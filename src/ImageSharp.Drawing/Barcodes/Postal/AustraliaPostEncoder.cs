@@ -41,6 +41,21 @@ internal static class AustraliaPostEncoder
     private const int TrailingBars = 14;
 
     /// <summary>
+    /// The number of bars of one Reed Solomon symbol and of one character of the C Encoding Table: three bars of base 4 values.
+    /// </summary>
+    private const int BarsPerSymbol = 3;
+
+    /// <summary>
+    /// The number of bars of one digit of the N Encoding Table.
+    /// </summary>
+    private const int BarsPerDigit = 2;
+
+    /// <summary>
+    /// The value of the filler bars that fill the rest of the customer information field: "filler bars (value 3 bars)".
+    /// </summary>
+    private const byte FillerBar = 3;
+
+    /// <summary>
     /// The dimensions that the specification gives as ranges, at the middle of each range:
     /// <list type="bullet">
     /// <item><description>A bar width of 0.5 mm, from "0.4" to "0.6".</description></item>
@@ -80,22 +95,26 @@ internal static class AustraliaPostEncoder
     private static readonly GaloisField Field = new(64, 67);
 
     /// <summary>
-    /// Gets the N Encoding Table: the two bar values of every digit.
+    /// Gets the N Encoding Table: the two bar values of every digit, as one base 4 number, the first bar in the high digit.
     /// </summary>
-    private static ReadOnlySpan<byte> NumericTable => [0, 0, 0, 1, 0, 2, 1, 0, 1, 1, 1, 2, 2, 0, 2, 1, 2, 2, 3, 0];
+    private static ReadOnlySpan<byte> NumericTable => [0, 1, 2, 4, 5, 6, 8, 9, 10, 12];
 
     /// <summary>
-    /// Gets the C Encoding Table: the three bar values of every character, in the order of <see cref="CharacterIndex"/>.
+    /// Gets the C Encoding Table: the three bar values of every character, in the order of <see cref="CharacterIndex"/>, as one base 4 number, the first bar
+    /// in the high digit.
     /// </summary>
     private static ReadOnlySpan<byte> CharacterTable =>
     [
-        0, 0, 0, 0, 0, 1, 0, 0, 2, 0, 1, 0, 0, 1, 1, 0, 1, 2, 0, 2, 0, 0, 2, 1, 0, 2, 2, 1, 0, 0, 1, 0, 1, 1, 0, 2, 1, 1, 0,
-        1, 1, 1, 1, 1, 2, 1, 2, 0, 1, 2, 1, 1, 2, 2, 2, 0, 0, 2, 0, 1, 2, 0, 2, 2, 1, 0, 2, 1, 1, 2, 1, 2, 2, 2, 0, 2, 2, 1,
-        2, 2, 2, 3, 0, 0, 3, 0, 1, 3, 0, 2, 3, 1, 0, 3, 1, 1, 3, 1, 2, 3, 2, 0, 3, 2, 1, 3, 2, 2,
-        0, 2, 3, 0, 3, 0, 0, 3, 1, 0, 3, 2, 0, 3, 3, 1, 0, 3, 1, 1, 3, 1, 2, 3, 1, 3, 0, 1, 3, 1, 1, 3, 2, 1, 3, 3, 2, 0, 3,
-        2, 1, 3, 2, 2, 3, 2, 3, 0, 2, 3, 1, 2, 3, 2, 2, 3, 3, 3, 0, 3, 3, 1, 3, 3, 2, 3, 3, 3, 0, 3, 3, 1, 3, 3, 2, 3, 3, 3,
-        0, 0, 3, 0, 1, 3,
+        0, 1, 2, 4, 5, 6, 8, 9, 10, 16, 17, 18, 20, 21, 22, 24,
+        25, 26, 32, 33, 34, 36, 37, 38, 40, 41, 42, 48, 49, 50, 52, 53,
+        54, 56, 57, 58, 11, 12, 13, 14, 15, 19, 23, 27, 28, 29, 30, 31,
+        35, 39, 43, 44, 45, 46, 47, 51, 55, 59, 60, 61, 62, 63, 3, 7,
     ];
+
+    /// <summary>
+    /// Gets the two start bars, which are also the two stop bars. The specification: "These bars always have the bar values of `1' and `3', respectively".
+    /// </summary>
+    private static ReadOnlySpan<byte> StartStopBars => [1, 3];
 
     /// <summary>
     /// Encodes the text into a symbol.
@@ -128,7 +147,7 @@ internal static class AustraliaPostEncoder
         }
 
         ReadOnlySpan<char> customer = text.Slice(FixedDigits);
-        int barsPerCharacter = table == AustraliaPostEncodingTable.Numeric ? 2 : 3;
+        int barsPerCharacter = table == AustraliaPostEncodingTable.Numeric ? BarsPerDigit : BarsPerSymbol;
         int customerBars = barCount - CustomerFieldStart - TrailingBars;
         if (customer.Length * barsPerCharacter > customerBars)
         {
@@ -140,12 +159,11 @@ internal static class AustraliaPostEncoder
         // The longest barcode, format control code 62, has 67 bars.
         InlineArray128<byte> valueStorage = default;
         Span<byte> values = ((Span<byte>)valueStorage)[..barCount];
-        values[0] = 1;
-        values[1] = 3;
-        int bar = 2;
+        StartStopBars.CopyTo(values);
+        int bar = StartStopBars.Length;
         foreach (char digit in text.Slice(0, FixedDigits))
         {
-            bar = AppendNumeric(digit, values, bar);
+            bar = AppendBars(NumericTable[digit - '0'], BarsPerDigit, values, bar);
         }
 
         if (table == AustraliaPostEncodingTable.Numeric)
@@ -153,7 +171,7 @@ internal static class AustraliaPostEncoder
             BarcodeSymbology.ValidateDigits(customer);
             foreach (char digit in customer)
             {
-                bar = AppendNumeric(digit, values, bar);
+                bar = AppendBars(NumericTable[digit - '0'], BarsPerDigit, values, bar);
             }
         }
         else
@@ -169,35 +187,32 @@ internal static class AustraliaPostEncoder
                     throw new ArgumentException($"The C Encoding Table has no character {current.ToDisplayString()}.", nameof(text));
                 }
 
-                CharacterTable.Slice(index * 3, 3).CopyTo(values[bar..]);
-                bar += 3;
+                bar = AppendBars(CharacterTable[index], BarsPerSymbol, values, bar);
             }
         }
 
         int parityStart = barCount - TrailingBars;
-        values[bar..parityStart].Fill(3);
+        values[bar..parityStart].Fill(FillerBar);
 
-        int dataSymbols = (parityStart - 2) / 3;
+        // The information symbols are the triples of bars after the start bars, read as base 4 numbers, whatever field each bar belongs to.
+        int dataSymbols = (parityStart - StartStopBars.Length) / BarsPerSymbol;
         InlineArray24<int> symbolStorage = default;
         Span<int> symbols = ((Span<int>)symbolStorage)[..dataSymbols];
         for (int i = 0; i < dataSymbols; i++)
         {
-            symbols[i] = SymbolValue(values, 2 + (i * 3));
+            symbols[i] = SymbolValue(values, StartStopBars.Length + (i * BarsPerSymbol));
         }
 
         InlineArray4<int> parityStorage = default;
         Span<int> parity = parityStorage;
         Parity(symbols, parity);
-        for (int i = 0; i < ParitySymbols; i++)
+        bar = parityStart;
+        foreach (int value in parity)
         {
-            int at = parityStart + (i * 3);
-            values[at] = (byte)((parity[i] >> 4) & 3);
-            values[at + 1] = (byte)((parity[i] >> 2) & 3);
-            values[at + 2] = (byte)(parity[i] & 3);
+            bar = AppendBars(value, BarsPerSymbol, values, bar);
         }
 
-        values[barCount - 2] = 1;
-        values[barCount - 1] = 3;
+        StartStopBars.CopyTo(values[bar..]);
 
         InlineArray128<FourState> stateStorage = default;
         Span<FourState> states = ((Span<FourState>)stateStorage)[..barCount];
@@ -296,16 +311,21 @@ internal static class AustraliaPostEncoder
     }
 
     /// <summary>
-    /// Writes the two bar values of a digit by the N Encoding Table.
+    /// Writes the bar values of a base 4 number, the high digit first. Each base 4 digit is one bar.
     /// </summary>
-    /// <param name="digit">The digit.</param>
+    /// <param name="value">The number: a table entry or a Reed Solomon symbol.</param>
+    /// <param name="count">The number of bars.</param>
     /// <param name="values">The bar values.</param>
-    /// <param name="bar">The index of the first of the two bars.</param>
-    /// <returns>The index after the two bars.</returns>
-    private static int AppendNumeric(char digit, Span<byte> values, int bar)
+    /// <param name="bar">The index of the first bar.</param>
+    /// <returns>The index after the bars.</returns>
+    private static int AppendBars(int value, int count, Span<byte> values, int bar)
     {
-        NumericTable.Slice((digit - '0') * 2, 2).CopyTo(values[bar..]);
-        return bar + 2;
+        for (int shift = 2 * (count - 1); shift >= 0; shift -= 2)
+        {
+            values[bar++] = (byte)((value >> shift) & 3);
+        }
+
+        return bar;
     }
 
     /// <summary>
