@@ -83,43 +83,26 @@ internal static class UspsPostalEncoder
     private const int BarsPerDigit = 5;
 
     /// <summary>
+    /// The fewest bars per inch. Section 708.4.2.5 d: the "pitch (a bar and a space) must average at least 0.0416 inch but no more than 0.05 inch". A pitch
+    /// of 0.05 inch is 20 bars per inch.
+    /// </summary>
+    private const int MinimumBarsPerInch = 20;
+
+    /// <summary>
+    /// The most bars per inch, from the same range. A pitch of 0.0416 inch is 24 bars per inch.
+    /// </summary>
+    private const int MaximumBarsPerInch = 24;
+
+    /// <summary>
     /// Gets the bars of every digit, one bit per bar, most significant bar first: a set bit is a full bar in POSTNET and a half bar in PLANET. Section
     /// 708.4.2.1 of the Domestic Mail Manual: "A tall bar represents "1," and a short bar represents "0."" Each digit sets two of its five bars.
     /// </summary>
     private static ReadOnlySpan<byte> Digits => [0b11000, 0b00011, 0b00101, 0b00110, 0b01001, 0b01010, 0b01100, 0b10001, 0b10010, 0b10100];
 
     /// <summary>
-    /// Gets the dimensions of section 708.4.2.5. A half bar stands on the baseline, so it is the descender part of a bar, and a full bar adds the part above
-    /// it. There is no tracker. The pitch stays 1/22 inch at every bar width. Section 708.4.2.5 d: the "pitch (a bar and a space) must average at least
-    /// 0.0416 inch but no more than 0.05 inch", which is 20 to 24 bars per inch. The code clamps the bar width, the pitch and the full bar to their ranges.
-    /// </summary>
-    private static FourStateMetrics Metrics => new(
-        NominalXDimension,
-        RunUnit,
-        BarUnits,
-        FourStateMetrics.SpaceUnitsForPitch(Pitch, NominalXDimension, RunUnit, BarUnits),
-        FullBar - HalfBar,
-        0F,
-        HalfBar,
-        ClearZone,
-        VerticalClearZone,
-        BarcodeTextSide.BelowBars,
-        0F,
-        BarcodeTextAlignment.Left,
-        Pitch,
-        false)
-    {
-        MinimumXDimension = MinimumXDimension,
-        MaximumXDimension = MaximumXDimension,
-        MinimumBarsPerInch = 20,
-        MaximumBarsPerInch = 24,
-        MinimumFullBar = MinimumFullBar,
-        MaximumFullBar = MaximumFullBar,
-    };
-
-    /// <summary>
     /// Builds the symbol: a frame bar, five bars per digit, five for the correction digit and a frame bar, with full bars where a set bit stands in POSTNET and
-    /// half bars in PLANET. Section 708.4.2.1: "The first and last bars of the barcode are frame bars and must always be full bars."
+    /// half bars in PLANET. Section 708.4.2.1: "The first and last bars of the barcode are frame bars and must always be full bars." A half bar stands on the
+    /// baseline of the full bars.
     /// </summary>
     /// <param name="digits">The data digits, already validated. The symbol adds the correction digit after them.</param>
     /// <param name="options">The options that control layout choices.</param>
@@ -127,24 +110,56 @@ internal static class UspsPostalEncoder
     /// <param name="symbol">The symbol to write.</param>
     public static void BuildSymbol(ReadOnlySpan<char> digits, BarcodeOptions options, bool setBitIsFull, ref BarcodeSymbol symbol)
     {
-        // Every digit and the correction digit is five bars, and a full frame bar stands at each end. PLANET carries at most 13 digits, so 72 bars.
+        double xDimension = options.ResolveXDimension(MinimumXDimension, NominalXDimension, MaximumXDimension);
+
+        // The emitter draws every run of these uniform bars at a whole number of pixels, so the runs count pixels. A bar is one module of whole pixels. The
+        // pitch stays 1/22 inch at every bar width, so the space is the rest of the pitch at the nearest whole pixel, at least one.
+        int barPixels = options.ModulePixels(xDimension);
+        int spaceUnits = (int)Math.Round(Pitch / (xDimension * RunUnit), MidpointRounding.AwayFromZero) - BarUnits;
+        double spacePixels = Math.Max(1, Math.Round(spaceUnits * (double)RunUnit * barPixels, MidpointRounding.AwayFromZero));
+
+        // Whole pixels can move the pitch out of 20 to 24 bars per inch at the end of the bar width range or at a low resolution. A pitch of Dpi / n pixels
+        // is n bars per inch. So the code clamps the pitch in whole pixels, as ResolveXDimension clamps the module. The upper limit is the largest whole
+        // number of pixels at or under the largest pitch. The lower limit is the smallest whole number of pixels at or over the smallest pitch, with a space
+        // of at least one pixel. The lower limit applies last.
+        double highest = Math.Floor((options.Dpi / MinimumBarsPerInch) + BarcodeOptions.LimitTolerance);
+        double lowest = Math.Max(barPixels + 1, Math.Ceiling((options.Dpi / MaximumBarsPerInch) - BarcodeOptions.LimitTolerance));
+        int space = (int)Math.Max(Math.Min(barPixels + spacePixels, highest), lowest) - barPixels;
+
+        // Every digit and the correction digit is five bars, and a full frame bar stands at each end.
+        int barCount = ((digits.Length + 1) * BarsPerDigit) + 2;
+        Span<int> runs = symbol.BeginLinear((barCount * 2) - 1, xDimension, out Span<float> heights, out Span<float> tops);
+        for (int i = 0; i < runs.Length; i++)
+        {
+            runs[i] = (i & 1) == 0 ? barPixels : space;
+        }
+
+        // The bar heights and the clear zones are inches in the Domestic Mail Manual, given here in modules of the nominal 0.020 inch bar. The module that the
+        // symbol draws at can round away from 0.020 inch, so the same inches are this many of its modules. The half bar keeps its ratio to the full bar.
+        float nominal = (float)(NominalXDimension / xDimension);
+        float scale = options.ResolveBarHeight(xDimension, MinimumFullBar * nominal, FullBar * nominal, MaximumFullBar * nominal) / FullBar;
+        float halfBar = HalfBar * scale;
+        float aboveHalfBar = (FullBar - HalfBar) * scale;
+        float fullBar = aboveHalfBar + halfBar;
+
         int correction = CorrectionDigit(digits);
-        InlineArray128<FourState> stateStorage = default;
-        Span<FourState> states = ((Span<FourState>)stateStorage)[..(((digits.Length + 1) * BarsPerDigit) + 2)];
-        states[0] = FourState.Full;
-        states[^1] = FourState.Full;
+        heights[0] = fullBar;
+        heights[^1] = fullBar;
         int bar = 1;
         for (int i = 0; i <= digits.Length; i++)
         {
             int pattern = Digits[i < digits.Length ? digits[i] - '0' : correction];
             for (int bit = BarsPerDigit - 1; bit >= 0; bit--)
             {
-                bool set = ((pattern >> bit) & 1) == 1;
-                states[bar++] = set == setBitIsFull ? FourState.Full : FourState.Descender;
+                bool full = (((pattern >> bit) & 1) == 1) == setBitIsFull;
+                heights[bar] = full ? fullBar : halfBar;
+                tops[bar] = full ? 0F : aboveHalfBar;
+                bar++;
             }
         }
 
-        FourStateEncoder.BuildSymbol(states, Metrics, [], options, ref symbol);
+        float runUnit = 1F / barPixels;
+        symbol.EndLinear(ClearZone * nominal, ClearZone * nominal, VerticalClearZone * nominal, VerticalClearZone * nominal, 0F, runUnit, true);
     }
 
     /// <summary>
