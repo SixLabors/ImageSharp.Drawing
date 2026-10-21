@@ -73,7 +73,7 @@ internal static class BarEmitter
         }
 
         // The text spans stretch with a bar block of whole pixel runs, so they still cover it.
-        float moduleWidth = (float)(symbol.XDimension / BarcodeOptions.MillimetresPerInch * options.Dpi);
+        float moduleWidth = options.ModuleWidth(symbol.XDimension);
         float stretch = symbol.UniformBars ? BlockWidth(ref symbol, moduleWidth) / (symbol.WidthInModules * moduleWidth) : 1F;
 
         // A bar symbol has at most 14 text placements, so the scales fit inline.
@@ -510,7 +510,7 @@ internal static class BarEmitter
         public BarLayout(ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin, Span<MeasuredLine> lines)
         {
             this.lines = lines;
-            float moduleWidth = (float)(symbol.XDimension / BarcodeOptions.MillimetresPerInch * options.Dpi);
+            float moduleWidth = options.ModuleWidth(symbol.XDimension);
             this.moduleWidth = moduleWidth;
 
             ReadOnlySpan<int> allRuns = symbol.Runs;

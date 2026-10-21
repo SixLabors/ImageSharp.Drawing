@@ -179,6 +179,14 @@ public sealed class BarcodeOptions
         => (int)PixelsOf(xDimension, this.Dpi / MillimetresPerInch);
 
     /// <summary>
+    /// Returns the width in pixels of a module of a built symbol at <see cref="Dpi"/>.
+    /// </summary>
+    /// <param name="xDimension">The X dimension of the built symbol in millimetres.</param>
+    /// <returns>The width of one module in pixels.</returns>
+    internal float ModuleWidth(double xDimension)
+        => (float)(xDimension / MillimetresPerInch * this.Dpi);
+
+    /// <summary>
     /// Returns the nearest whole number of pixels to an X dimension, at least one pixel. Half a pixel rounds up, to the larger module.
     /// </summary>
     /// <param name="xDimension">The X dimension in millimetres.</param>

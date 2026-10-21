@@ -518,7 +518,7 @@ internal static class MatrixEmitter
         public MatrixLayout(ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin, Span<MeasuredLine> lines)
         {
             this.lines = lines;
-            float moduleWidth = (float)(symbol.XDimension / BarcodeOptions.MillimetresPerInch * options.Dpi);
+            float moduleWidth = options.ModuleWidth(symbol.XDimension);
 
             // Most matrix symbols have the same quiet zone on all four sides. Code One versions S and T have none above.
             bool quiet = options.IncludeQuietZones;
