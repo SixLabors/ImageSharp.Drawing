@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Buffers;
+
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
@@ -24,6 +26,11 @@ internal static class CodabarEncoder
     /// The characters the symbology encodes, in pattern order: the sixteen data characters, then the four start and stop characters.
     /// </summary>
     private const string Characters = "0123456789-$:/.+ABCD";
+
+    /// <summary>
+    /// The sixteen data characters of <see cref="Characters"/>, for one vectorized search over the data.
+    /// </summary>
+    public static readonly SearchValues<char> DataCharacterSet = SearchValues.Create(Characters.AsSpan(0, FirstStartStop));
 
     /// <summary>
     /// The quiet zone in modules on each side when 10X is wider than <see cref="MinimumQuietZoneMillimetres"/>. Section 4.4.1 (d) of BS EN 798: "minimum width

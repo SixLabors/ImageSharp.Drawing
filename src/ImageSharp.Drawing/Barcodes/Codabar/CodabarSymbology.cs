@@ -70,23 +70,24 @@ public sealed class CodabarSymbology : BarcodeSymbology
                 $"Codabar carries a start character, at least one data character and a stop character; got {text.Length} characters.", nameof(text));
         }
 
-        SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
-        int index = 0;
-        while (codePoints.MoveNext())
+        // The first character, the data and the last character are checked in turn, so the message reports the first character outside its set. A surrogate
+        // pair at the end fails the data check at its first half, so the message reports the whole pair.
+        if (CodabarEncoder.Value(text[0]) < CodabarEncoder.FirstStartStop)
         {
-            CodePoint current = codePoints.Current;
-            int value = CodabarEncoder.Value(current.Value);
-            bool startStop = index == 0 || index == text.Length - 1;
-            if (value < 0 || (value >= CodabarEncoder.FirstStartStop) != startStop)
-            {
-                throw new ArgumentException(
-                    startStop
-                        ? $"Codabar starts and ends with one of A, B, C and D, or T, N, * and E; got {current.ToDisplayString()}."
-                        : $"Codabar carries only digits and the symbols -$:/.+ between its start and stop characters; got {current.ToDisplayString()}.",
-                    nameof(text));
-            }
+            ThrowStartStop(text, 0);
+        }
 
-            index += current.Utf16SequenceLength;
+        int index = text[1..^1].IndexOfAnyExcept(CodabarEncoder.DataCharacterSet);
+        if (index >= 0)
+        {
+            throw new ArgumentException(
+                $"Codabar carries only digits and the symbols -$:/.+ between its start and stop characters; got {text.CodePointAt(index + 1).ToDisplayString()}.",
+                nameof(text));
+        }
+
+        if (CodabarEncoder.Value(text[^1]) < CodabarEncoder.FirstStartStop)
+        {
+            ThrowStartStop(text, text.Length - 1);
         }
 
         // The symbol carries the start character and the data, then the check character, then the stop character. A supplied check character stands before the
@@ -110,4 +111,15 @@ public sealed class CodabarSymbology : BarcodeSymbology
 
         CodabarEncoder.BuildSymbol(head, stop, check, this.PrintCheckCharacter, options, ref symbol);
     }
+
+    /// <summary>
+    /// Throws for a first or last character that is not a start or stop character.
+    /// </summary>
+    /// <param name="text">The text.</param>
+    /// <param name="index">The position of the character.</param>
+    /// <exception cref="ArgumentException">Always.</exception>
+    private static void ThrowStartStop(ReadOnlySpan<char> text, int index)
+        => throw new ArgumentException(
+            $"Codabar starts and ends with one of A, B, C and D, or T, N, * and E; got {text.CodePointAt(index).ToDisplayString()}.",
+            nameof(text));
 }

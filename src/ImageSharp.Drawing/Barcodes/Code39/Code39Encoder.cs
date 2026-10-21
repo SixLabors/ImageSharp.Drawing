@@ -97,8 +97,8 @@ internal static class Code39Encoder
     }
 
     /// <summary>
-    /// Validates the given text against the Code 39 character set. The method walks code points, not UTF-16 units, so the message reports a surrogate pair as
-    /// one character.
+    /// Validates the given text against the Code 39 character set. The message reports the first character outside the set, and a surrogate pair as one
+    /// character.
     /// </summary>
     /// <param name="text">The text to validate.</param>
     /// <exception cref="ArgumentException">The text carries a character outside the set.</exception>
@@ -107,16 +107,12 @@ internal static class Code39Encoder
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, MaximumLength, nameof(text));
 
-        SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
-        while (codePoints.MoveNext())
+        int index = AlphanumericCharacterSet.IndexOfAnyExcept(text);
+        if (index >= 0)
         {
-            CodePoint current = codePoints.Current;
-            if (AlphanumericCharacterSet.Value(current.Value) < 0)
-            {
-                throw new ArgumentException(
-                    $"Code 39 carries only digits, capital letters, spaces and the symbols -.$/+%; {current.ToDisplayString()} is outside that set.",
-                    nameof(text));
-            }
+            throw new ArgumentException(
+                $"Code 39 carries only digits, capital letters, spaces and the symbols -.$/+%; {text.CodePointAt(index).ToDisplayString()} is outside that set.",
+                nameof(text));
         }
     }
 

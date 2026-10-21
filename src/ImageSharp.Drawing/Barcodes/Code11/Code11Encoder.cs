@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Buffers;
+
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
@@ -54,6 +56,11 @@ internal static class Code11Encoder
     /// The bar height as a fraction of the symbol width, quiet zones excluded, when the caller sets no height. There is no public specification of Code 11.
     /// </summary>
     private const float NominalBarHeightFraction = 0.15F;
+
+    /// <summary>
+    /// The characters of <see cref="Characters"/>, for one vectorized search over a whole text.
+    /// </summary>
+    public static readonly SearchValues<char> CharacterSet = SearchValues.Create(Characters);
 
     /// <summary>
     /// Gets the element widths of every character, one bit per element, most significant element first, in bar and space order: a set bit is a wide element and

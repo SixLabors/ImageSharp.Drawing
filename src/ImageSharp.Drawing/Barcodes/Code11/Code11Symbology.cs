@@ -64,14 +64,10 @@ public sealed class Code11Symbology : BarcodeSymbology
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, Code11Encoder.MaximumLength, nameof(text));
 
-        SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
-        while (codePoints.MoveNext())
+        int index = text.IndexOfAnyExcept(Code11Encoder.CharacterSet);
+        if (index >= 0)
         {
-            CodePoint current = codePoints.Current;
-            if (Code11Encoder.Value(current.Value) < 0)
-            {
-                throw new ArgumentException($"Code 11 carries only digits and the dash; got {current.ToDisplayString()}.", nameof(text));
-            }
+            throw new ArgumentException($"Code 11 carries only digits and the dash; got {text.CodePointAt(index).ToDisplayString()}.", nameof(text));
         }
 
         ReadOnlySpan<char> data = text;

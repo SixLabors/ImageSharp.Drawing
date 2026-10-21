@@ -105,8 +105,8 @@ internal static class Code93Encoder
     private static ReadOnlySpan<byte> StartStopPattern => [1, 1, 1, 1, 4, 1, 1];
 
     /// <summary>
-    /// Validates the given text against the data character set of ANSI/AIM BC5-1995. The method walks code points, not UTF-16 units, so the message reports a
-    /// surrogate pair as one character.
+    /// Validates the given text against the data character set of ANSI/AIM BC5-1995, the 43 characters of <see cref="AlphanumericCharacterSet"/>. The shift
+    /// characters carry no data, so they are not input. The message reports the first character outside the set, and a surrogate pair as one character.
     /// </summary>
     /// <param name="text">The text to validate.</param>
     /// <exception cref="ArgumentException">The text carries a character outside the set.</exception>
@@ -115,18 +115,12 @@ internal static class Code93Encoder
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, MaximumLength, nameof(text));
 
-        SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
-        while (codePoints.MoveNext())
+        int index = AlphanumericCharacterSet.IndexOfAnyExcept(text);
+        if (index >= 0)
         {
-            // A value at or beyond the data set length is one of the shift characters, which carries no data and is therefore not input.
-            CodePoint current = codePoints.Current;
-            int value = Value(current.Value);
-            if (value < 0 || value >= DataCharacters)
-            {
-                throw new ArgumentException(
-                    $"Code 93 carries only digits, capital letters, spaces and the symbols -.$/+%; {current.ToDisplayString()} is outside that set.",
-                    nameof(text));
-            }
+            throw new ArgumentException(
+                $"Code 93 carries only digits, capital letters, spaces and the symbols -.$/+%; {text.CodePointAt(index).ToDisplayString()} is outside that set.",
+                nameof(text));
         }
     }
 

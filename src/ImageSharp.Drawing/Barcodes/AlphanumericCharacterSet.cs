@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Buffers;
+
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
@@ -15,6 +17,18 @@ internal static class AlphanumericCharacterSet
     /// The characters in value order, so the value of a character is its index.
     /// </summary>
     private const string Characters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%";
+
+    /// <summary>
+    /// The characters of the set, for one vectorized search over a whole text.
+    /// </summary>
+    private static readonly SearchValues<char> Set = SearchValues.Create(Characters);
+
+    /// <summary>
+    /// Returns the index of the first character of a text that is outside the set.
+    /// </summary>
+    /// <param name="text">The text.</param>
+    /// <returns>The index, or -1 when the set holds every character.</returns>
+    public static int IndexOfAnyExcept(ReadOnlySpan<char> text) => text.IndexOfAnyExcept(Set);
 
     /// <summary>
     /// Gets the value the set assigns the given code point, or a negative number when the code point is outside the set. Taking a code point rather than a
