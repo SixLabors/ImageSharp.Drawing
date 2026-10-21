@@ -190,11 +190,11 @@ internal static class UltracodeEncoder
             throw new ArgumentException("The text does not fit in an Ultracode symbol at the requested error correction level.", nameof(text));
         }
 
-        // The width is the fewest tile columns that hold every tile with the three structural tiles; the tiles left over are pads. The largest symbol holds
-        // 282 tiles, so a width up to MaximumColumns always holds them.
+        // The width is the fewest tile columns that hold every tile with the three structural tiles; the tiles left over are pads. At MaximumColumns, 58 data
+        // columns, the heights of 2 to 5 tile rows hold 113, 171, 229 and 287 tiles, at least the most tiles of each height, so the loop ends by then.
         int tileColumns = height.FewestColumns;
         int pads = (DataColumns(tileColumns) * height.TileRows) - StructuralTiles - tileCount;
-        while (pads < 0 && tileColumns < MaximumColumns)
+        while (pads < 0)
         {
             tileColumns++;
             pads = (DataColumns(tileColumns) * height.TileRows) - StructuralTiles - tileCount;

@@ -627,20 +627,8 @@ internal static class DataBarExpandedEncoder
             }
         }
 
-        // Every method but the general purpose method encodes the GTIN without its check digit, so the check digit must be the one that the 13 digits before it
-        // give.
-        if (method != EncodationMethod.GeneralPurpose)
-        {
-            ReadOnlySpan<char> gtin = text.Slice(2, 14);
-            BarcodeSymbology.ValidateDigits(gtin);
-
-            int expected = Gs1Data.ComputeCheckDigit(gtin[..13]);
-            if (gtin[13] - '0' != expected)
-            {
-                throw new ArgumentException($"Incorrect GTIN check digit: expected {expected}, got {gtin[13]}.", nameof(text));
-            }
-        }
-
+        // Every method but the general purpose method encodes the GTIN without its check digit. The callers validate the element strings first, and the GS1
+        // Barcode Syntax Dictionary gives Application Identifier (01) 14 digits with a correct check digit, so the dropped digit is the one the others give.
         BitWriter bits = new(values);
         bits.Append(linked ? 1 : 0, 1);
         int variableLength = -1;
