@@ -79,11 +79,12 @@ internal static class HexagonalEmitter
         ReadOnlySpan<double> radii = FinderRadii;
         IPath[] paths = new IPath[1 + (radii.Length / 2)];
         paths[0] = new BarcodePath(layout.Centres(ref symbol), layout.HalfSize, layout.HexagonInk);
-        for (int ring = 1; ring < paths.Length; ring++)
+        int ring = 1;
+        for (int i = 0; i < radii.Length; i += 2)
         {
-            float inner = (float)(radii[(ring * 2) - 2] * layout.RadiusScale);
-            float outer = (float)(radii[(ring * 2) - 1] * layout.RadiusScale);
-            paths[ring] = new ComplexPolygon(new EllipsePolygon(layout.FinderCentre, outer), new EllipsePolygon(layout.FinderCentre, inner).Reverse());
+            float inner = (float)(radii[i] * layout.RadiusScale);
+            float outer = (float)(radii[i + 1] * layout.RadiusScale);
+            paths[ring++] = new ComplexPolygon(new EllipsePolygon(layout.FinderCentre, outer), new EllipsePolygon(layout.FinderCentre, inner).Reverse());
         }
 
         canvas.Fill(options.BarBrush, new ComplexPolygon(paths));
