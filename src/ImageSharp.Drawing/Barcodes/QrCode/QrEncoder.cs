@@ -304,7 +304,10 @@ internal static class QrEncoder
     ];
 
     // The run lengths at which the data analysis changes mode, for each version group. A mode change costs a mode indicator and a character count indicator, so
-    // a run that is short enough stays in the current mode. The counts are the break-even run lengths for the indicator lengths of each group.
+    // a run that is short enough stays in the current mode. The counts are the break-even run lengths for the indicator lengths of each group. Annex J.2 of
+    // ISO/IEC 18004 gives the first three groups, QR Code versions 1 to 9, 10 to 26 and 27 to 40, of FirstNumericBeforeByte as [4,4,5],
+    // ByteToAlphanumericBeforeByte as [11,15,16], ByteToNumericBeforeByte as [6,8,9], ByteToNumericBeforeAlphanumeric as [6,7,8] and
+    // AlphanumericToNumericBeforeAlphanumeric as [13,15,17].
 
     /// <summary>
     /// Gets the digits that start the data in Numeric mode when a Byte mode character follows them.
