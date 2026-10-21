@@ -146,7 +146,7 @@ internal static class MicroPdf417Encoder
     /// <returns>The number of data codewords.</returns>
     public static int DataCodewords(int columns, int rows)
     {
-        SymbolSize size = FindSize(columns, rows);
+        SymbolSize size = FindSize(Sizes, columns, rows);
         return (size.Columns * size.Rows) - size.ErrorCorrection;
     }
 
@@ -169,17 +169,18 @@ internal static class MicroPdf417Encoder
         float rowHeight,
         float verticalQuietZone,
         ref BarcodeSymbol symbol)
-        => BuildMatrix(data, FindSize(columns, rows), xDimension, rowHeight, verticalQuietZone, ref symbol);
+        => BuildMatrix(data, FindSize(Sizes, columns, rows), xDimension, rowHeight, verticalQuietZone, ref symbol);
 
     /// <summary>
-    /// Returns the symbol size of a number of columns and rows. The caller gives a size of <see cref="Sizes"/>.
+    /// Returns the symbol size of a number of columns and rows in a table of sizes, <see cref="SymbolSize.Length"/> bytes each. The caller gives a size of the
+    /// table.
     /// </summary>
+    /// <param name="sizes">The table of sizes: <see cref="Sizes"/>, or the CC-A sizes of a GS1 Composite symbol.</param>
     /// <param name="columns">The number of data columns.</param>
     /// <param name="rows">The number of rows.</param>
     /// <returns>The size.</returns>
-    private static SymbolSize FindSize(int columns, int rows)
+    public static SymbolSize FindSize(ReadOnlySpan<byte> sizes, int columns, int rows)
     {
-        ReadOnlySpan<byte> sizes = Sizes;
         int offset = 0;
         while (sizes[offset] != columns || sizes[offset + 1] != rows)
         {
@@ -361,9 +362,9 @@ internal static class MicroPdf417Encoder
     }
 
     /// <summary>
-    /// One MicroPDF417 symbol size: a view of the six bytes of an entry of <see cref="Sizes"/>.
+    /// One MicroPDF417 symbol size: a view of the six bytes of an entry of <see cref="Sizes"/>, or of the CC-A sizes of a GS1 Composite symbol.
     /// </summary>
-    private readonly ref struct SymbolSize
+    public readonly ref struct SymbolSize
     {
         /// <summary>
         /// The number of bytes of an entry of <see cref="Sizes"/>.

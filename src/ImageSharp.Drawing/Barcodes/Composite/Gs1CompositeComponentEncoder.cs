@@ -671,19 +671,20 @@ internal static class Gs1CompositeComponentEncoder
     private static int CcACapacity(int used, int columns, out int rows)
     {
         ReadOnlySpan<byte> sizes = CcASizes;
-        for (int offset = 0; offset < sizes.Length; offset += 6)
+        for (int offset = 0; offset < sizes.Length; offset += MicroPdf417Encoder.SymbolSize.Length)
         {
-            if (sizes[offset] != columns)
+            MicroPdf417Encoder.SymbolSize size = new(sizes.Slice(offset, MicroPdf417Encoder.SymbolSize.Length));
+            if (size.Columns != columns)
             {
                 continue;
             }
 
-            int data = (sizes[offset] * sizes[offset + 1]) - sizes[offset + 2];
+            int data = (size.Columns * size.Rows) - size.ErrorCorrection;
             int remainder = data % Base928GroupCodewords;
             int capacity = (Base928GroupBits * (data / Base928GroupCodewords)) + (remainder == 0 ? 0 : (10 * remainder) - 1);
             if (capacity >= used)
             {
-                rows = sizes[offset + 1];
+                rows = size.Rows;
                 return capacity;
             }
         }
@@ -789,16 +790,11 @@ internal static class Gs1CompositeComponentEncoder
     {
         if (component == Gs1CompositeComponent.CcA)
         {
-            ReadOnlySpan<byte> sizes = CcASizes;
-            int offset = 0;
-            while (sizes[offset] != columns || sizes[offset + 1] != rows)
-            {
-                offset += 6;
-            }
+            MicroPdf417Encoder.SymbolSize size = MicroPdf417Encoder.FindSize(CcASizes, columns, rows);
 
             // Section 8.5: each group of up to 69 bits, read as one number with its first bit the most significant, converts to base 928, the most significant
             // codeword first. A group of b bits takes b / 10 + 1 codewords. A CC-A holds at most 28 codewords, so they fit inline.
-            int k = sizes[offset + 2];
+            int k = size.ErrorCorrection;
             InlineArray32<int> codewordStorage = default;
             Span<int> codewords = ((Span<int>)codewordStorage)[..(columns * rows)];
             int written = 0;
@@ -824,7 +820,7 @@ internal static class Gs1CompositeComponentEncoder
             InlineArray16<int> alphaStorage = default;
             Pdf417Codewords.AppendErrorCorrection(codewords, k, alphaStorage);
 
-            MicroPdf417Encoder.AddressPatterns patterns = new(sizes[offset + 3], sizes[offset + 4], sizes[offset + 5], columns != 3);
+            MicroPdf417Encoder.AddressPatterns patterns = new(size.LeftPattern, size.CentrePattern, size.RightPattern, columns != 3);
             MicroPdf417Encoder.BuildRows(codewords, columns, rows, patterns, xDimension, RowHeight, 0F, ref symbol);
             return;
         }
