@@ -55,8 +55,7 @@ internal static class CodabarEncoder
     private const int ElementsPerCharacter = 7;
 
     /// <summary>
-    /// The width of a wide element in modules. Section 6.1.2 of the TEC-IT Barcode Reference gives a print ratio "in the following range: 1:2 -1:3 (Pr &gt;=
-    /// 2.25:1)", and 3 is the only whole number in that range.
+    /// The width of a wide element in modules, three times the narrow element.
     /// </summary>
     private const int WideElement = 3;
 
