@@ -15,6 +15,11 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal static class HanXinEncoder
 {
     /// <summary>
+    /// The number of versions.
+    /// </summary>
+    public const int VersionCount = 84;
+
+    /// <summary>
     /// The longest input: version 84 at level L1 holds 3264 data codewords, 26112 bits, and Numeric mode, the densest, takes 10 bits for three digits, so no
     /// more than 7827 characters fit.
     /// </summary>
@@ -26,9 +31,14 @@ internal static class HanXinEncoder
     private const int QuietZone = 3;
 
     /// <summary>
-    /// The number of versions.
+    /// The side in modules of a version is this value plus two modules for each version: 23 for version 1 and 189 for version 84.
     /// </summary>
-    private const int VersionCount = 84;
+    private const int BaseSide = 21;
+
+    /// <summary>
+    /// The step of the placement order of the codewords: codewords 0, 13, 26 and so on, then 1, 14, 27 and so on.
+    /// </summary>
+    private const int InterleaveStep = 13;
 
     /// <summary>
     /// The data codewords of version 84 at level L1, the most any symbol holds.
@@ -44,7 +54,7 @@ internal static class HanXinEncoder
     /// <summary>
     /// The side of version 84 in modules, the largest symbol.
     /// </summary>
-    private const int MaximumSide = 21 + (2 * VersionCount);
+    private const int MaximumSide = BaseSide + (2 * VersionCount);
 
     /// <summary>
     /// The shortest digit run that starts a Numeric segment between two Byte segments.
@@ -308,7 +318,7 @@ internal static class HanXinEncoder
         // One rented block holds the data codewords, the codewords in block order, the codewords in placement order and the cells of the largest symbol. The
         // codeword spans hold one more than the most codewords for the zero codeword that can follow them. The cells are bytes, so their part of the block is
         // the side squared in bytes, rounded up to whole ints and read as bytes.
-        int size = 21 + (2 * chosen);
+        int size = BaseSide + (2 * chosen);
         const int codewordLength = MaximumCodewords + 1;
         const int cellLength = ((MaximumSide * MaximumSide) + sizeof(int) - 1) / sizeof(int);
         using PooledBuffer<int> buffer = new((MaximumDataCodewords + (2 * codewordLength)) + cellLength);
@@ -496,9 +506,9 @@ internal static class HanXinEncoder
     private static void Interleave(ReadOnlySpan<int> codewords, Span<int> placed)
     {
         int index = 0;
-        for (int start = 0; start < 13; start++)
+        for (int start = 0; start < InterleaveStep; start++)
         {
-            for (int c = start; c < codewords.Length; c += 13)
+            for (int c = start; c < codewords.Length; c += InterleaveStep)
             {
                 placed[index++] = codewords[c];
             }
@@ -517,7 +527,7 @@ internal static class HanXinEncoder
     {
         // A cell is unset until a pattern or a data bit claims it. Section 5.8.2 places the fixed patterns first, so the data takes only the cells they leave.
         const byte unset = 0xFF;
-        int size = 21 + (2 * version);
+        int size = BaseSide + (2 * version);
         cells.Fill(unset);
 
         int spacing = Alignment[(version - 1) * 2];

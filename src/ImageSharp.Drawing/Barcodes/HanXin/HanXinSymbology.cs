@@ -42,7 +42,7 @@ public sealed class HanXinSymbology : BarcodeSymbology
     public HanXinSymbology(HanXinErrorCorrectionLevel errorCorrectionLevel, int version)
         : this(errorCorrectionLevel)
     {
-        Guard.MustBeBetweenOrEqualTo(version, 1, 84, nameof(version));
+        Guard.MustBeBetweenOrEqualTo(version, 1, HanXinEncoder.VersionCount, nameof(version));
         this.Version = version;
     }
 

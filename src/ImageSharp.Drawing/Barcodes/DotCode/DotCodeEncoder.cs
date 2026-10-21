@@ -44,6 +44,26 @@ internal static class DotCodeEncoder
     private const int Modulus = 113;
 
     /// <summary>
+    /// The most codewords of one Reed-Solomon block, one less than <see cref="Modulus"/>.
+    /// </summary>
+    private const int MaximumBlockLength = Modulus - 1;
+
+    /// <summary>
+    /// The number of dots of a codeword pattern.
+    /// </summary>
+    private const int DotsPerCodeword = 9;
+
+    /// <summary>
+    /// The number of dots that carry the mask value, before the codewords.
+    /// </summary>
+    private const int MaskDots = 2;
+
+    /// <summary>
+    /// The number of check codewords of a symbol with no data codewords. Each two data codewords add one more.
+    /// </summary>
+    private const int MinimumCheckCodewords = 3;
+
+    /// <summary>
     /// The width to height ratio of a symbol whose size is not given.
     /// </summary>
     private const double DefaultRatio = 3D / 2D;
@@ -337,8 +357,9 @@ internal static class DotCodeEncoder
         writer.Analyze();
         int dataCount = writer.Encode();
 
-        // The symbol size: the smallest area that holds the codewords at the ratio, or the rows for the given columns, or the given size.
-        int minimumArea = (((dataCount + 3 + (dataCount / 2)) * 9) + 2) * 2;
+        // The symbol size: the smallest area that holds the codewords at the ratio, or the rows for the given columns, or the given size. Half the cells can
+        // hold a dot.
+        int minimumArea = DotCount(dataCount) * 2;
         if (columns == 0)
         {
             (columns, rows) = SizeForRatio(minimumArea, DefaultRatio);
@@ -358,17 +379,16 @@ internal static class DotCodeEncoder
             }
         }
 
-        // Half the cells can hold a dot. Two dots carry the mask, and each codeword takes nine. The data codewords grow while one more, with its share of check
-        // codewords, still fits; the check codewords are three plus half the data codewords.
+        // The data codewords grow while one more, with its share of check codewords, still fits.
         int dotCount = rows * columns / 2;
         int nd = dataCount;
-        while (((nd + 1 + ((nd + 1) / 2) + 3) * 9) + 2 <= dotCount)
+        while (DotCount(nd + 1) <= dotCount)
         {
             nd++;
         }
 
-        int nw = nd + (nd / 2) + 3;
-        if ((nw * 9) > dotCount - 2)
+        int nw = CodewordCount(nd);
+        if (DotCount(nd) > dotCount)
         {
             throw new ArgumentException("The text does not fit in a DotCode symbol of the requested size.", nameof(text));
         }
@@ -470,6 +490,20 @@ internal static class DotCodeEncoder
     }
 
     /// <summary>
+    /// Returns the number of codewords of a symbol with the given data codewords: the data and the check codewords, which are three plus half the data.
+    /// </summary>
+    /// <param name="dataCount">The number of data codewords.</param>
+    /// <returns>The number of codewords, the mask value excluded.</returns>
+    private static int CodewordCount(int dataCount) => dataCount + (dataCount / 2) + MinimumCheckCodewords;
+
+    /// <summary>
+    /// Returns the number of dots that a symbol with the given data codewords needs: the mask dots and the dots of every codeword.
+    /// </summary>
+    /// <param name="dataCount">The number of data codewords.</param>
+    /// <returns>The number of dots.</returns>
+    private static int DotCount(int dataCount) => (CodewordCount(dataCount) * DotsPerCodeword) + MaskDots;
+
+    /// <summary>
     /// Adds the Reed-Solomon check codewords over the prime field of 113. The codewords split into blocks of at most 112: block s of the step takes every
     /// step-th codeword from s, its data first and then its check codewords, so the blocks interleave in the codeword order.
     /// </summary>
@@ -478,7 +512,7 @@ internal static class DotCodeEncoder
     private static void AddErrorCorrection(Span<int> codewords, int dataCount)
     {
         int total = codewords.Length;
-        int step = ((total - 1) / 112) + 1;
+        int step = ((total - 1) / MaximumBlockLength) + 1;
 
         // A block holds at most 112 codewords, and its check codewords are three plus half its data, so a block has at most 39 check codewords.
         InlineArray64<int> generatorStorage = default;
@@ -816,14 +850,14 @@ internal static class DotCodeEncoder
         /// <returns>The bit, 1 for a dark dot.</returns>
         private readonly int Bit(int index)
         {
-            if (index < 2)
+            if (index < MaskDots)
             {
-                return (this.masked[0] >> (1 - index)) & 1;
+                return (this.masked[0] >> (MaskDots - 1 - index)) & 1;
             }
 
-            int offset = index - 2;
-            int codeword = 1 + (offset / 9);
-            return codeword < this.masked.Length ? (Patterns[this.masked[codeword]] >> (8 - (offset % 9))) & 1 : 1;
+            int offset = index - MaskDots;
+            int codeword = 1 + (offset / DotsPerCodeword);
+            return codeword < this.masked.Length ? (Patterns[this.masked[codeword]] >> (DotsPerCodeword - 1 - (offset % DotsPerCodeword))) & 1 : 1;
         }
 
         /// <summary>
