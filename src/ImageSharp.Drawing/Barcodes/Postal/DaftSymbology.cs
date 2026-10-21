@@ -22,9 +22,7 @@ public sealed class DaftSymbology : BarcodeSymbology
     /// </summary>
     private static readonly FourStateMetrics Metrics = new(
         FourStateEncoder.RoyalMail.XDimension,
-        FourStateEncoder.RoyalMail.RunUnit,
-        FourStateEncoder.RoyalMail.BarUnits,
-        FourStateEncoder.RoyalMail.SpaceUnits,
+        FourStateEncoder.RoyalMail.Space,
         FourStateEncoder.RoyalMail.Ascender,
         FourStateEncoder.RoyalMail.Tracker,
         FourStateEncoder.RoyalMail.Descender,

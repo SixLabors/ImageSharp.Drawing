@@ -4,7 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The dimensions of a height modulated postal symbology, in modules of its bar width and in run units for the pitch.
+/// The dimensions of a height modulated postal symbology, in modules of its bar width.
 /// </summary>
 internal readonly struct FourStateMetrics
 {
@@ -12,15 +12,13 @@ internal readonly struct FourStateMetrics
     /// Initializes a new instance of the <see cref="FourStateMetrics"/> struct.
     /// </summary>
     /// <param name="xDimension">The bar width in millimetres, which is one module.</param>
-    /// <param name="runUnit">The width of one run unit in modules.</param>
-    /// <param name="barUnits">The width of a bar in run units.</param>
-    /// <param name="spaceUnits">The width of the space between bars in run units.</param>
+    /// <param name="space">The width of the space between bars, in modules.</param>
     /// <param name="ascender">The height of the ascender part above the tracker, in modules.</param>
     /// <param name="tracker">The height of the tracker, in modules.</param>
     /// <param name="descender">The height of the descender part below the tracker, in modules.</param>
     /// <param name="quietZone">The clear zone at each end of the symbol, in modules.</param>
-    public FourStateMetrics(double xDimension, float runUnit, int barUnits, int spaceUnits, float ascender, float tracker, float descender, float quietZone)
-        : this(xDimension, runUnit, barUnits, spaceUnits, ascender, tracker, descender, quietZone, BarcodeTextSide.BelowBars, 0F)
+    public FourStateMetrics(double xDimension, double space, float ascender, float tracker, float descender, float quietZone)
+        : this(xDimension, space, ascender, tracker, descender, quietZone, BarcodeTextSide.BelowBars, 0F)
     {
     }
 
@@ -28,9 +26,7 @@ internal readonly struct FourStateMetrics
     /// Initializes a new instance of the <see cref="FourStateMetrics"/> struct.
     /// </summary>
     /// <param name="xDimension">The bar width in millimetres, which is one module.</param>
-    /// <param name="runUnit">The width of one run unit in modules.</param>
-    /// <param name="barUnits">The width of a bar in run units.</param>
-    /// <param name="spaceUnits">The width of the space between bars in run units.</param>
+    /// <param name="space">The width of the space between bars, in modules.</param>
     /// <param name="ascender">The height of the ascender part above the tracker, in modules.</param>
     /// <param name="tracker">The height of the tracker, in modules.</param>
     /// <param name="descender">The height of the descender part below the tracker, in modules.</param>
@@ -39,16 +35,14 @@ internal readonly struct FourStateMetrics
     /// <param name="textClearance">The clear space between the bars and the human readable interpretation, in modules.</param>
     public FourStateMetrics(
         double xDimension,
-        float runUnit,
-        int barUnits,
-        int spaceUnits,
+        double space,
         float ascender,
         float tracker,
         float descender,
         float quietZone,
         BarcodeTextSide textSide,
         float textClearance)
-        : this(xDimension, runUnit, barUnits, spaceUnits, ascender, tracker, descender, quietZone, textSide, textClearance, BarcodeTextAlignment.Centered)
+        : this(xDimension, space, ascender, tracker, descender, quietZone, textSide, textClearance, BarcodeTextAlignment.Centered)
     {
     }
 
@@ -56,9 +50,7 @@ internal readonly struct FourStateMetrics
     /// Initializes a new instance of the <see cref="FourStateMetrics"/> struct.
     /// </summary>
     /// <param name="xDimension">The bar width in millimetres, which is one module.</param>
-    /// <param name="runUnit">The width of one run unit in modules.</param>
-    /// <param name="barUnits">The width of a bar in run units.</param>
-    /// <param name="spaceUnits">The width of the space between bars in run units.</param>
+    /// <param name="space">The width of the space between bars, in modules.</param>
     /// <param name="ascender">The height of the ascender part above the tracker, in modules.</param>
     /// <param name="tracker">The height of the tracker, in modules.</param>
     /// <param name="descender">The height of the descender part below the tracker, in modules.</param>
@@ -68,9 +60,7 @@ internal readonly struct FourStateMetrics
     /// <param name="textAlignment">Where the human readable interpretation stands within the symbol width.</param>
     public FourStateMetrics(
         double xDimension,
-        float runUnit,
-        int barUnits,
-        int spaceUnits,
+        double space,
         float ascender,
         float tracker,
         float descender,
@@ -78,7 +68,7 @@ internal readonly struct FourStateMetrics
         BarcodeTextSide textSide,
         float textClearance,
         BarcodeTextAlignment textAlignment)
-        : this(xDimension, runUnit, barUnits, spaceUnits, ascender, tracker, descender, quietZone, 0F, textSide, textClearance, textAlignment)
+        : this(xDimension, space, ascender, tracker, descender, quietZone, 0F, textSide, textClearance, textAlignment)
     {
     }
 
@@ -86,9 +76,7 @@ internal readonly struct FourStateMetrics
     /// Initializes a new instance of the <see cref="FourStateMetrics"/> struct.
     /// </summary>
     /// <param name="xDimension">The bar width in millimetres, which is one module.</param>
-    /// <param name="runUnit">The width of one run unit in modules.</param>
-    /// <param name="barUnits">The width of a bar in run units.</param>
-    /// <param name="spaceUnits">The width of the space between bars in run units.</param>
+    /// <param name="space">The width of the space between bars, in modules.</param>
     /// <param name="ascender">The height of the ascender part above the tracker, in modules.</param>
     /// <param name="tracker">The height of the tracker, in modules.</param>
     /// <param name="descender">The height of the descender part below the tracker, in modules.</param>
@@ -99,9 +87,7 @@ internal readonly struct FourStateMetrics
     /// <param name="textAlignment">Where the human readable interpretation stands within the symbol width.</param>
     public FourStateMetrics(
         double xDimension,
-        float runUnit,
-        int barUnits,
-        int spaceUnits,
+        double space,
         float ascender,
         float tracker,
         float descender,
@@ -110,21 +96,7 @@ internal readonly struct FourStateMetrics
         BarcodeTextSide textSide,
         float textClearance,
         BarcodeTextAlignment textAlignment)
-        : this(
-            xDimension,
-            runUnit,
-            barUnits,
-            spaceUnits,
-            ascender,
-            tracker,
-            descender,
-            quietZone,
-            verticalQuietZone,
-            textSide,
-            textClearance,
-            textAlignment,
-            null,
-            false)
+        : this(xDimension, space, ascender, tracker, descender, quietZone, verticalQuietZone, textSide, textClearance, textAlignment, null, false)
     {
     }
 
@@ -132,9 +104,7 @@ internal readonly struct FourStateMetrics
     /// Initializes a new instance of the <see cref="FourStateMetrics"/> struct.
     /// </summary>
     /// <param name="xDimension">The bar width in millimetres, which is one module.</param>
-    /// <param name="runUnit">The width of one run unit in modules.</param>
-    /// <param name="barUnits">The width of a bar in run units.</param>
-    /// <param name="spaceUnits">The width of the space between bars in run units at <paramref name="xDimension"/>.</param>
+    /// <param name="space">The width of the space between bars, in modules at <paramref name="xDimension"/>.</param>
     /// <param name="ascender">The height of the ascender part above the tracker, in modules.</param>
     /// <param name="tracker">The height of the tracker, in modules.</param>
     /// <param name="descender">The height of the descender part below the tracker, in modules.</param>
@@ -151,9 +121,7 @@ internal readonly struct FourStateMetrics
     /// </param>
     public FourStateMetrics(
         double xDimension,
-        float runUnit,
-        int barUnits,
-        int spaceUnits,
+        double space,
         float ascender,
         float tracker,
         float descender,
@@ -168,9 +136,7 @@ internal readonly struct FourStateMetrics
         this.ProportionalBars = proportionalBars;
         this.VerticalQuietZone = verticalQuietZone;
         this.XDimension = xDimension;
-        this.RunUnit = runUnit;
-        this.BarUnits = barUnits;
-        this.SpaceUnits = spaceUnits;
+        this.Space = space;
         this.Pitch = pitch;
         this.Ascender = ascender;
         this.Tracker = tracker;
@@ -223,19 +189,9 @@ internal readonly struct FourStateMetrics
     public float MaximumFullBar { get; init; } = float.PositiveInfinity;
 
     /// <summary>
-    /// Gets the width of one run unit in modules.
+    /// Gets the width of the space between bars, in modules at <see cref="XDimension"/>.
     /// </summary>
-    public float RunUnit { get; }
-
-    /// <summary>
-    /// Gets the width of a bar in run units.
-    /// </summary>
-    public int BarUnits { get; }
-
-    /// <summary>
-    /// Gets the width of the space between bars in run units.
-    /// </summary>
-    public int SpaceUnits { get; }
+    public double Space { get; }
 
     /// <summary>
     /// Gets the pitch, a bar and a space, in millimetres that the specification fixes at every bar width, or <see langword="null"/> where the space scales
@@ -295,22 +251,10 @@ internal readonly struct FourStateMetrics
     public float FullBar => this.Ascender + this.Tracker + this.Descender;
 
     /// <summary>
-    /// Calculates the space between bars in run units that keeps a pitch at a bar width: the run units of the pitch, to the nearest unit, less the bar.
-    /// </summary>
-    /// <param name="pitch">The pitch, a bar and a space, in millimetres.</param>
-    /// <param name="xDimension">The bar width in millimetres, which is one module.</param>
-    /// <param name="runUnit">The width of one run unit in modules.</param>
-    /// <param name="barUnits">The width of a bar in run units.</param>
-    /// <returns>The space in run units.</returns>
-    public static int SpaceUnitsForPitch(double pitch, double xDimension, float runUnit, int barUnits)
-        => (int)Math.Round(pitch / (xDimension * runUnit), MidpointRounding.AwayFromZero) - barUnits;
-
-    /// <summary>
-    /// Gets the width of the space between bars in run units at the bar width the symbol draws at. Where <see cref="Pitch"/> is set, the bar width can differ
-    /// from <see cref="XDimension"/> after rounding to whole pixels, and a space that scaled with it would move the pitch by the same amount.
+    /// Returns the width of the space between bars, in modules of the bar width the symbol draws at. Where <see cref="Pitch"/> is set, the bar width can
+    /// differ from <see cref="XDimension"/> after rounding to whole pixels. The space is then the rest of the pitch, so the pitch does not move with the bar.
     /// </summary>
     /// <param name="xDimension">The bar width in millimetres the symbol draws at.</param>
-    /// <returns>The space in run units.</returns>
-    public int SpaceUnitsAt(double xDimension)
-        => this.Pitch is double pitch ? SpaceUnitsForPitch(pitch, xDimension, this.RunUnit, this.BarUnits) : this.SpaceUnits;
+    /// <returns>The space in modules.</returns>
+    public double SpaceAt(double xDimension) => this.Pitch is double pitch ? (pitch / xDimension) - 1 : this.Space;
 }

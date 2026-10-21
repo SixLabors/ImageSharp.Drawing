@@ -6,9 +6,9 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// <summary>
 /// Shared encodation for the United States Postal Service height modulated symbologies, POSTNET and PLANET. Section 708.4.2.5 of the Domestic Mail Manual gives
 /// the bar dimensions: "All bars must be 0.020 ±0.005 inch wide", "horizontal spacing of the bars must be 22 ±2 bars per inch", "A full bar must be 0.125
-/// ±0.010 inch high" and "A half bar must be 0.050 ±0.010 inch high". The module is the 0.020 inch bar width and a run unit is 1/11 module, so a bar is 11
-/// units. The pitch stays 1/22 inch at every bar width, and the space is the rest of it: 14 units at 0.020 inch. Section 708.4.2.5 d: "pitch (a bar and a
-/// space) must average at least 0.0416 inch but no more than 0.05 inch". The code clamps the pitch to that range in whole pixels.
+/// ±0.010 inch high" and "A half bar must be 0.050 ±0.010 inch high". The module is the 0.020 inch bar width. The pitch stays 1/22 inch at every bar width,
+/// and the space is the rest of it. Section 708.4.2.5 d: "pitch (a bar and a space) must average at least 0.0416 inch but no more than 0.05 inch". The code
+/// clamps the pitch to that range in whole pixels.
 /// </summary>
 internal static class UspsPostalEncoder
 {
@@ -27,16 +27,6 @@ internal static class UspsPostalEncoder
     /// The largest X dimension in millimetres, 0.025 inch, from the same tolerance.
     /// </summary>
     public const double MaximumXDimension = 0.025 * 25.4;
-
-    /// <summary>
-    /// The width of a run unit in modules.
-    /// </summary>
-    public const float RunUnit = 1F / 11F;
-
-    /// <summary>
-    /// The width of a bar in run units: one module of 0.020 inch.
-    /// </summary>
-    public const int BarUnits = 11;
 
     /// <summary>
     /// The pitch, a bar and a space, in millimetres: 1/22 inch, from "22 ±2 bars per inch".
@@ -115,8 +105,7 @@ internal static class UspsPostalEncoder
         // The emitter draws every run of these uniform bars at a whole number of pixels, so the runs count pixels. A bar is one module of whole pixels. The
         // pitch stays 1/22 inch at every bar width, so the space is the rest of the pitch at the nearest whole pixel, at least one.
         int barPixels = options.ModulePixels(xDimension);
-        int spaceUnits = (int)Math.Round(Pitch / (xDimension * RunUnit), MidpointRounding.AwayFromZero) - BarUnits;
-        double spacePixels = Math.Max(1, Math.Round(spaceUnits * (double)RunUnit * barPixels, MidpointRounding.AwayFromZero));
+        double spacePixels = Math.Max(1, Math.Round(((Pitch / xDimension) - 1) * barPixels, MidpointRounding.AwayFromZero));
 
         // Whole pixels can move the pitch out of 20 to 24 bars per inch at the end of the bar width range or at a low resolution. A pitch of Dpi / n pixels
         // is n bars per inch. So the code clamps the pitch in whole pixels, as ResolveXDimension clamps the module. The upper limit is the largest whole

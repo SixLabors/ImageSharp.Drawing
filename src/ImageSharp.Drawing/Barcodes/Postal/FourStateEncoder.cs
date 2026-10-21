@@ -13,14 +13,11 @@ internal static class FourStateEncoder
     /// The dimensions the Royal Mail 4-state symbologies share, from Table 11 of the Royal Mail Mailmark barcode definition document: a bar width of 0.54 mm,
     /// ascender and descender bars of 1.90 mm, a tracker bar of 1.30 mm, a full bar of 5.10 mm and a pitch of 21.2 bars per inch, with the clear zone of
     /// section 3.5.2, "at least 2mm around all edges". A symbology that prints a text line keeps the same 2 mm between the bars and the text, which the
-    /// document does not state. At the 0.54 mm module a run unit of 0.01 mm is 1/54 module, a bar is 54 units and a pitch of 1.20 mm, which is 21.17 bars per
-    /// inch, leaves a space of 66 units.
+    /// document does not state. A pitch of 1.20 mm, which is 21.17 bars per inch, leaves a space of 0.66 mm between the 0.54 mm bars.
     /// </summary>
     public static readonly FourStateMetrics RoyalMail = new(
         0.54,
-        1F / 54F,
-        54,
-        66,
+        (1.20 - 0.54) / 0.54,
         (float)(1.90 / 0.54),
         (float)(1.30 / 0.54),
         (float)(1.90 / 0.54),
@@ -51,7 +48,7 @@ internal static class FourStateEncoder
         // The emitter draws every run of these uniform bars at a whole number of pixels, so the runs count pixels: a bar is one module of whole pixels, and
         // the space is the space of the metrics at the nearest whole pixel, at least one, as the emitter rounds a run.
         int barPixels = options.ModulePixels(xDimension);
-        double spacePixels = Math.Max(1, Math.Round(metrics.SpaceUnitsAt(xDimension) * (double)metrics.RunUnit * barPixels, MidpointRounding.AwayFromZero));
+        double spacePixels = Math.Max(1, Math.Round(metrics.SpaceAt(xDimension) * barPixels, MidpointRounding.AwayFromZero));
 
         // A specification that limits the bars per inch also limits the pitch, which is one bar and one space. A pitch of Dpi / n pixels is n bars per inch.
         // Whole pixels can leave that range at a bar width at the end of its range or at a low resolution. Thus the code clamps the pitch in whole pixels, as

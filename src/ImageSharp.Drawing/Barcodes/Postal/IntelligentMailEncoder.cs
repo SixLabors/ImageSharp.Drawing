@@ -92,13 +92,7 @@ internal static class IntelligentMailEncoder
     /// </summary>
     public static readonly FourStateMetrics Metrics = new(
         UspsPostalEncoder.NominalXDimension,
-        UspsPostalEncoder.RunUnit,
-        UspsPostalEncoder.BarUnits,
-        FourStateMetrics.SpaceUnitsForPitch(
-            UspsPostalEncoder.Pitch,
-            UspsPostalEncoder.NominalXDimension,
-            UspsPostalEncoder.RunUnit,
-            UspsPostalEncoder.BarUnits),
+        (UspsPostalEncoder.Pitch / UspsPostalEncoder.NominalXDimension) - 1,
         (float)((0.145 - 0.048) / 2 / 0.020),
         (float)(0.048 / 0.020),
         (float)((0.145 - 0.048) / 2 / 0.020),

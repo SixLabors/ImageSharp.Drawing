@@ -58,8 +58,6 @@ internal static class JapanPostEncoder
     /// </summary>
     public static readonly FourStateMetrics Metrics = new(
         0.6,
-        1F,
-        1,
         1,
         (float)(1.2 / 0.6),
         (float)(1.2 / 0.6),
