@@ -131,9 +131,11 @@ internal static class FourStateMailmarkEncoder
     /// <param name="states">The buffer that receives the bar states.</param>
     public static void Encode(ReadOnlySpan<char> text, Span<FourState> states)
     {
-        bool isL = text.Length == LengthL;
+        // Barcode C carries a Supply Chain ID of 2 digits, 16 data numbers of which the first 9 have 30 values, and 6 check numbers. Barcode L carries a
+        // Supply Chain ID of 6 digits, 19 data numbers of which the first 11 have 30 values, and 7 check numbers.
+        BarcodeLayout layout = text.Length == LengthL ? new(6, 1_000_000U, 19, 11, 7, ExtenderGroupsL) : new(2, 100U, 16, 9, 6, ExtenderGroupsC);
         const int itemIdLength = 8;
-        int supplyChainLength = isL ? 6 : 2;
+        const uint itemIdRadix = 100_000_000U;
 
         int format = FieldValue(text, 0, 1, FormatCharacters, "Format");
         int version = FieldValue(text, 1, 1, VersionCharacters, "Version ID");
@@ -143,33 +145,29 @@ internal static class FourStateMailmarkEncoder
         }
 
         int mailClass = FieldValue(text, 2, 1, ClassCharacters, "Class");
-        int supplyChain = FieldValue(text, 3, supplyChainLength, "0123456789", "Supply Chain ID");
-        int itemId = FieldValue(text, 3 + supplyChainLength, itemIdLength, "0123456789", "Item ID");
-        ulong destination = DestinationValue(text, 3 + supplyChainLength + itemIdLength);
+        int supplyChain = FieldValue(text, 3, layout.SupplyChainLength, "0123456789", "Supply Chain ID");
+        int itemId = FieldValue(text, 3 + layout.SupplyChainLength, itemIdLength, "0123456789", "Item ID");
+        ulong destination = DestinationValue(text, 3 + layout.SupplyChainLength + itemIdLength);
 
+        // Each field is a digit of a mixed radix number, its radix the number of values the field has.
         UInt128 consolidated = destination;
-        consolidated = (consolidated * 100_000_000U) + (uint)itemId;
-        consolidated = (consolidated * (isL ? 1_000_000U : 100U)) + (uint)supplyChain;
-        consolidated = (consolidated * 15U) + (uint)mailClass;
-        consolidated = (consolidated * 5U) + (uint)format;
-        consolidated = (consolidated * 4U) + (uint)version;
+        consolidated = (consolidated * itemIdRadix) + (uint)itemId;
+        consolidated = (consolidated * layout.SupplyChainRadix) + (uint)supplyChain;
+        consolidated = (consolidated * (uint)ClassCharacters.Length) + (uint)mailClass;
+        consolidated = (consolidated * (uint)FormatCharacters.Length) + (uint)format;
+        consolidated = (consolidated * (uint)VersionCharacters.Length) + (uint)version;
 
-        int dataCount = isL ? 19 : 16;
-        int checkCount = isL ? 7 : 6;
-        int thirtyValued = isL ? 11 : 9;
-
-        // Barcode L carries 19 data numbers and 7 check numbers.
+        // Barcode L has the most numbers, 26.
         InlineArray26<int> numberStorage = default;
-        Span<int> numbers = ((Span<int>)numberStorage)[..(dataCount + checkCount)];
-        DataNumbers(consolidated, numbers[..dataCount], thirtyValued);
-        CheckNumbers(numbers[..dataCount], numbers[dataCount..]);
+        Span<int> numbers = ((Span<int>)numberStorage)[..(layout.DataCount + layout.CheckCount)];
+        DataNumbers(consolidated, numbers[..layout.DataCount], layout.ThirtyValued);
+        CheckNumbers(numbers[..layout.DataCount], numbers[layout.DataCount..]);
 
-        ReadOnlySpan<byte> groups = isL ? ExtenderGroupsL : ExtenderGroupsC;
         InlineArray26<byte> groupStorage = default;
         Span<byte> extenderGroups = ((Span<byte>)groupStorage)[..numbers.Length];
         for (int i = 0; i < numbers.Length; i++)
         {
-            extenderGroups[groups[i]] = i < thirtyValued ? EvenSymbols[numbers[i]] : OddSymbols[numbers[i]];
+            extenderGroups[layout.ExtenderGroups[i]] = i < layout.ThirtyValued ? EvenSymbols[numbers[i]] : OddSymbols[numbers[i]];
         }
 
         Bars(extenderGroups, states);
@@ -317,5 +315,60 @@ internal static class FourStateMailmarkEncoder
         }
 
         return value;
+    }
+
+    /// <summary>
+    /// The parts of the encoding that differ between barcode C and barcode L.
+    /// </summary>
+    private readonly ref struct BarcodeLayout
+    {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="BarcodeLayout"/> struct.
+        /// </summary>
+        /// <param name="supplyChainLength">The number of digits of the Supply Chain ID.</param>
+        /// <param name="supplyChainRadix">The number of values of the Supply Chain ID, 10 to the power of its digits.</param>
+        /// <param name="dataCount">The number of data numbers.</param>
+        /// <param name="thirtyValued">The number of data numbers, from the first, that have 30 values. The others have 32.</param>
+        /// <param name="checkCount">The number of check numbers.</param>
+        /// <param name="extenderGroups">The extender group of each data number and check number, Table 6.</param>
+        public BarcodeLayout(int supplyChainLength, uint supplyChainRadix, int dataCount, int thirtyValued, int checkCount, ReadOnlySpan<byte> extenderGroups)
+        {
+            this.SupplyChainLength = supplyChainLength;
+            this.SupplyChainRadix = supplyChainRadix;
+            this.DataCount = dataCount;
+            this.ThirtyValued = thirtyValued;
+            this.CheckCount = checkCount;
+            this.ExtenderGroups = extenderGroups;
+        }
+
+        /// <summary>
+        /// Gets the number of digits of the Supply Chain ID.
+        /// </summary>
+        public int SupplyChainLength { get; }
+
+        /// <summary>
+        /// Gets the number of values of the Supply Chain ID, 10 to the power of its digits.
+        /// </summary>
+        public uint SupplyChainRadix { get; }
+
+        /// <summary>
+        /// Gets the number of data numbers.
+        /// </summary>
+        public int DataCount { get; }
+
+        /// <summary>
+        /// Gets the number of data numbers, from the first, that have 30 values. The others have 32.
+        /// </summary>
+        public int ThirtyValued { get; }
+
+        /// <summary>
+        /// Gets the number of check numbers.
+        /// </summary>
+        public int CheckCount { get; }
+
+        /// <summary>
+        /// Gets the extender group of each data number and check number, Table 6.
+        /// </summary>
+        public ReadOnlySpan<byte> ExtenderGroups { get; }
     }
 }
