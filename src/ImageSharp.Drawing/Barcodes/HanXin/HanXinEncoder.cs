@@ -41,6 +41,21 @@ internal static class HanXinEncoder
     private const int InterleaveStep = 13;
 
     /// <summary>
+    /// The number of error correction levels, L1 to L4.
+    /// </summary>
+    private const int LevelCount = 4;
+
+    /// <summary>
+    /// The number of entries of one block group in <see cref="Blocks"/>: the number of blocks, the data codewords of a block and the check codewords of a block.
+    /// </summary>
+    private const int GroupEntries = 3;
+
+    /// <summary>
+    /// The number of entries of one version and level in <see cref="Blocks"/>: three block groups.
+    /// </summary>
+    private const int LevelEntries = 3 * GroupEntries;
+
+    /// <summary>
     /// The data codewords of version 84 at level L1, the most any symbol holds.
     /// </summary>
     private const int MaximumDataCodewords = 3264;
@@ -362,7 +377,13 @@ internal static class HanXinEncoder
     private static int DataCodewords(int version, int level)
     {
         ReadOnlySpan<byte> groups = BlockGroups(version, level);
-        return (groups[0] * groups[1]) + (groups[3] * groups[4]) + (groups[6] * groups[7]);
+        int count = 0;
+        for (int g = 0; g < groups.Length; g += GroupEntries)
+        {
+            count += groups[g] * groups[g + 1];
+        }
+
+        return count;
     }
 
     /// <summary>
@@ -372,7 +393,7 @@ internal static class HanXinEncoder
     /// <param name="level">The level, 0 for L1 to 3 for L4.</param>
     /// <returns>Nine bytes: for each group, the number of blocks, the data codewords and the check codewords of a block.</returns>
     private static ReadOnlySpan<byte> BlockGroups(int version, int level)
-        => Blocks.Slice((((version - 1) * 4) + level) * 9, 9);
+        => Blocks.Slice((((version - 1) * LevelCount) + level) * LevelEntries, LevelEntries);
 
     /// <summary>
     /// Writes the data as segments: a run of digits as a Numeric segment when it is long enough to pay for its mode indicator and terminator, and the other
@@ -470,7 +491,7 @@ internal static class HanXinEncoder
         // its check codewords after its data.
         int input = 0;
         int output = 0;
-        for (int g = 0; g < 9; g += 3)
+        for (int g = 0; g < groups.Length; g += GroupEntries)
         {
             int count = groups[g];
             int dataLength = groups[g + 1];
