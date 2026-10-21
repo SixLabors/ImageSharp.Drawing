@@ -18,29 +18,16 @@ internal static class PharmacodeEncoder
     /// <param name="text">The digits of the number.</param>
     /// <param name="minimum">The smallest value the symbology carries.</param>
     /// <param name="maximum">The largest value the symbology carries.</param>
+    /// <param name="maximumDigits">The number of digits of <paramref name="maximum"/>.</param>
     /// <returns>The value.</returns>
-    public static int ParseValue(ReadOnlySpan<char> text, int minimum, int maximum)
+    public static int ParseValue(ReadOnlySpan<char> text, int minimum, int maximum, int maximumDigits)
     {
-        Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
-
-        int digits = 1;
-        for (int remaining = maximum; remaining >= 10; remaining /= 10)
-        {
-            digits++;
-        }
-
-        if (text.Length > digits)
-        {
-            throw new ArgumentException($"Pharmacode carries a number of up to {digits} digits; got {text.Length} characters.", nameof(text));
-        }
+        Guard.MustBeBetweenOrEqualTo(text.Length, 1, maximumDigits, nameof(text));
 
         BarcodeSymbology.ValidateDigits(text);
         int value = int.Parse(text, NumberStyles.None, CultureInfo.InvariantCulture);
 
-        if (value < minimum || value > maximum)
-        {
-            throw new ArgumentException($"Pharmacode carries a number from {minimum} to {maximum}; got {value}.", nameof(text));
-        }
+        Guard.MustBeBetweenOrEqualTo(value, minimum, maximum, nameof(text));
 
         return value;
     }

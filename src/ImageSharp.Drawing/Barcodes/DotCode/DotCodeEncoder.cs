@@ -271,6 +271,22 @@ internal static class DotCodeEncoder
     ];
 
     /// <summary>
+    /// Validates the rows of a fixed symbol size. The rows are 5 to 200, and the columns and the rows sum to an odd number.
+    /// </summary>
+    /// <param name="columns">The number of columns, already validated.</param>
+    /// <param name="rows">The number of rows.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="rows"/> is not 5 to 200.</exception>
+    /// <exception cref="ArgumentException">The columns and the rows sum to an even number.</exception>
+    public static void ValidateRows(int columns, int rows)
+    {
+        Guard.MustBeBetweenOrEqualTo(rows, MinimumSide, MaximumSide, nameof(rows));
+        if (((columns + rows) & 1) == 0)
+        {
+            throw new ArgumentException("The columns and the rows of a DotCode symbol must sum to an odd number.", nameof(rows));
+        }
+    }
+
+    /// <summary>
     /// Builds a DotCode symbol.
     /// </summary>
     /// <param name="text">The text, characters U+0000 to U+00FF. With <paramref name="gs1"/>, the prepared GS1 data.</param>
@@ -313,7 +329,11 @@ internal static class DotCodeEncoder
             message[m++] = gs1 && c == Gs1Data.Separator ? Fnc1 : c;
         }
 
-        CodewordWriter writer = new(message, buffer.Slice(length, 5 * stride), stride, traits, codewords);
+        // A message that starts with a macro header and ends with its trailer carries the macro codeword in place of the header. The macro implies the trailer,
+        // so the writer reads the message without it: RS EOT after the 05, 06 and 12 headers, and EOT alone after the header with any two digits.
+        int macro = CodewordWriter.MacroAtStart(message);
+        int trailerLength = macro == 0 ? 0 : macro == MacroAny ? 1 : 2;
+        CodewordWriter writer = new(message[..(length - trailerLength)], buffer.Slice(length, 5 * stride), stride, traits, codewords, macro);
         writer.Analyze();
         int dataCount = writer.Encode();
 
@@ -541,8 +561,9 @@ internal static class DotCodeEncoder
             Math.Min(EdgeScore(cells, 0, 1, columns), EdgeScore(cells, (rows - 1) * columns, 1, columns)) * (double)rows,
             Math.Min(EdgeScore(cells, 0, columns, rows), EdgeScore(cells, columns - 1, columns, rows)) * (double)columns);
 
-        // Runs of blank inner columns are penalised unless the codewords run down the columns of a symbol tall enough to break up runs of light dots, so only
-        // with odd rows or 12 rows or fewer. Blank inner rows are penalised the same way with even rows or 12 columns or fewer.
+        // With odd rows or 12 rows or fewer, the score takes a penalty for runs of blank inner columns. Otherwise, the codewords run down the columns of a
+        // symbol tall enough to break up runs of light dots. With even rows or 12 columns or fewer, the score takes the same penalty for runs of blank inner
+        // rows.
         double penalty = 0;
         if ((rows & 1) == 1 || rows <= 12)
         {
@@ -908,9 +929,9 @@ internal static class DotCodeEncoder
         private CodeSet codeSet;
 
         /// <summary>
-        /// The macro codeword the message starts with, 0 for none. Its trailer is not encoded.
+        /// The macro codeword the message starts with, 0 for none. The message ends before the trailer, which the macro implies.
         /// </summary>
-        private int macro;
+        private readonly int macro;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="CodewordWriter"/> struct.
@@ -920,7 +941,8 @@ internal static class DotCodeEncoder
         /// <param name="stride">The length of each count array, the message length plus two.</param>
         /// <param name="traits">The traits, the message length plus eight.</param>
         /// <param name="codewords">The codewords to write, twice the message length plus one.</param>
-        public CodewordWriter(ReadOnlySpan<int> message, Span<int> counts, int stride, Span<Traits> traits, Span<int> codewords)
+        /// <param name="macro">The macro codeword the message starts with, 0 for none. The message ends before the trailer of the macro.</param>
+        public CodewordWriter(ReadOnlySpan<int> message, Span<int> counts, int stride, Span<Traits> traits, Span<int> codewords, int macro)
         {
             this.message = message;
             this.digits = counts[..stride];
@@ -935,7 +957,7 @@ internal static class DotCodeEncoder
             this.count = 0;
             this.position = 0;
             this.codeSet = CodeSet.C;
-            this.macro = 0;
+            this.macro = macro;
         }
 
         /// <summary>
@@ -1014,13 +1036,6 @@ internal static class DotCodeEncoder
             int length = this.message.Length;
             while (this.position < length)
             {
-                // A macro's trailer is implied by its header, so it is skipped: RS EOT after the 05, 06 and 12 headers, and EOT alone after the header with any
-                // two digits.
-                if (this.macro != 0 && this.position == length - (this.macro == MacroAny ? 1 : 2))
-                {
-                    break;
-                }
-
                 switch (this.codeSet)
                 {
                     case CodeSet.A:
@@ -1052,14 +1067,12 @@ internal static class DotCodeEncoder
             {
                 // A message that starts with a macro header and ends with its trailer latches to code set B and carries the macro codeword in place of the
                 // header.
-                int macro = this.MacroAtStart();
-                if (macro != 0)
+                if (this.macro != 0)
                 {
-                    this.macro = macro;
                     this.Add(CLatchB);
                     this.codeSet = CodeSet.B;
-                    this.Add(macro);
-                    if (macro == MacroAny)
+                    this.Add(this.macro);
+                    if (this.macro == MacroAny)
                     {
                         this.Add(BValue(msg[4]));
                         this.Add(BValue(msg[5]));
@@ -1314,10 +1327,10 @@ internal static class DotCodeEncoder
         /// Returns the macro codeword of a message that starts with a macro header and ends with its trailer, or 0. The header is [)&gt;RS and two digits; 05,
         /// 06 and 12 also need GS after the digits and RS before the final EOT, and any other digits need only the final EOT.
         /// </summary>
+        /// <param name="msg">The whole message, the trailer included.</param>
         /// <returns>The macro codeword, or 0.</returns>
-        private readonly int MacroAtStart()
+        public static int MacroAtStart(ReadOnlySpan<int> msg)
         {
-            ReadOnlySpan<int> msg = this.message;
             int end = msg.Length;
             if (end < 7
                 || msg[0] != '['

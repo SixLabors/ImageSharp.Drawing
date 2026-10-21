@@ -4,9 +4,9 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The MaxiCode symbology, ISO/IEC 16023: 33 offset rows of hexagonal modules, alternately 30 and 29 wide, around a finder of three dark rings, with a quiet
-/// zone of one module on every side. It carries the characters U+0000 to U+00FF with Reed-Solomon error correction. The X dimension is 0.88 mm, and section
-/// 4.11.1 permits 24.00/29 to 27.00/29 mm, so an X dimension outside that range is clamped to it.
+/// The MaxiCode symbology, ISO/IEC 16023. A symbol is 33 offset rows of hexagonal modules, alternately 30 and 29 wide, around a finder of three dark rings.
+/// The symbol has a quiet zone of one module on every side. It carries the characters U+0000 to U+00FF with Reed-Solomon error correction. The X dimension is
+/// 0.88 mm. Section 4.11.1 permits 24.00/29 to 27.00/29 mm. When an X dimension is outside that range, it draws at the nearest limit.
 /// <para>
 /// In modes 2 and 3 the text starts with the structured carrier message: the postal code, the 3-digit country code and the 3-digit class of service, each
 /// followed by a group separator (U+001D). A message that starts with "[)&gt;", RS, "01", GS and two digits keeps that header in the secondary message. Without
@@ -57,7 +57,7 @@ public sealed class MaxiCodeSymbology : BarcodeSymbology
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        // The hexagonal modules do not stand on whole pixels, so the X dimension is clamped in millimetres and draws exactly.
+        // The hexagonal modules do not stand on whole pixels, so the code clamps the X dimension in millimetres, and the symbol draws at it exactly.
         double xDimension = Math.Clamp(options.XDimension ?? NominalXDimension, MinimumXDimension, MaximumXDimension);
         MaxiCodeEncoder.BuildSymbol(text, this.Mode, xDimension, ref symbol);
     }

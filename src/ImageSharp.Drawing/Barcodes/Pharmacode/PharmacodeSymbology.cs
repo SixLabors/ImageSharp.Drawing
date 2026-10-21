@@ -5,9 +5,9 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
 /// The one-track Pharmacode symbology, which the Laetus Pharmacode Guide defines. It carries one number from 3 to 131070 in two to sixteen bars, read from the
-/// right: a thin bar in position n has the value 2 to the power n - 1 and a thick bar twice that, as the table of section 4.3 gives. Section 4.4 builds the
-/// code from the value Z: while Z is not zero, an even Z takes a thick bar in the lowest position left and becomes (Z - 2) / 2, and an odd Z takes a thin bar
-/// and becomes (Z - 1) / 2.
+/// right. The table of section 4.3 gives the bar values. A thin bar in position n has the value 2 to the power n - 1. A thick bar has twice that value. Section
+/// 4.4 builds the code from the value Z. While Z is not zero, the next bar takes the lowest position left. When Z is even, this bar is thick and Z becomes
+/// (Z - 2) / 2. When Z is odd, this bar is thin and Z becomes (Z - 1) / 2.
 /// <para>
 /// Section 1.2 gives the standard dimensions: a thin bar of 0.5 mm, a thick bar of 1.5 mm, a gap of 1.0 mm and a height of 8.0 mm, so a thin bar is 1
 /// module, a thick bar 3 and a gap 2. The X dimension is the width of the thin bar, from 0.3 mm to 0.7 mm. From 0.45 mm to 0.7 mm the bars and gaps keep
@@ -27,6 +27,11 @@ public sealed class PharmacodeSymbology : BarcodeSymbology
     /// The largest value, sixteen thick bars, the last count of the table of section 4.1.
     /// </summary>
     public const int MaximumValue = 131070;
+
+    /// <summary>
+    /// The number of digits of <see cref="MaximumValue"/>.
+    /// </summary>
+    private const int MaximumDigits = 6;
 
     /// <summary>
     /// The nominal X dimension in millimetres: the 0.5 mm thin bar of section 1.2.
@@ -74,7 +79,7 @@ public sealed class PharmacodeSymbology : BarcodeSymbology
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        int value = PharmacodeEncoder.ParseValue(text, MinimumValue, MaximumValue);
+        int value = PharmacodeEncoder.ParseValue(text, MinimumValue, MaximumValue, MaximumDigits);
 
         // Section 4.4 sets the bars from the lowest position, which is the right end of the symbol.
         InlineArray16<int> barStorage = default;

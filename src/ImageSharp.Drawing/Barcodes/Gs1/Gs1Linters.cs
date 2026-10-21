@@ -40,6 +40,17 @@ internal static class Gs1Linters
     private const string CheckPairCharacters = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 
     /// <summary>
+    /// The modulus of the weighted sum of the check character pair, section 7.9.5.
+    /// </summary>
+    private const int CheckPairModulus = 1021;
+
+    /// <summary>
+    /// The number of bits of each of the two values of the check character pair. Each value selects one of the 32 characters of
+    /// <see cref="CheckPairCharacters"/>.
+    /// </summary>
+    private const int CheckPairValueBits = 5;
+
+    /// <summary>
     /// GS1 AI encodable character set 82, Table 7-20. A <see cref="SearchValues{T}"/> instance checks a whole component with one vectorized search.
     /// </summary>
     private static readonly SearchValues<char> CharacterSet82 =
@@ -266,7 +277,7 @@ internal static class Gs1Linters
                 break;
 
             case Gs1Linter.Iso4217:
-                if (!IsSet(Iso4217Numeric, Number(data)))
+                if (!Iso3166.IsSet(Iso4217Numeric, Number(data)))
                 {
                     ThrowInvalidData(identifier, $"carries '{data}', which is not an ISO 4217 numeric currency code", nameof(data));
                 }
@@ -478,16 +489,6 @@ internal static class Gs1Linters
         => throw new ArgumentException($"The data of Application Identifier ({identifier}) {problem}.", paramName);
 
     /// <summary>
-    /// Returns whether a bit is set in a bit field whose bytes hold their bits from the most significant. A bit past the end of the field is clear, so trailing
-    /// zero bytes are left out of the fields.
-    /// </summary>
-    /// <param name="field">The bit field.</param>
-    /// <param name="bit">The bit index.</param>
-    /// <returns><see langword="true"/> when the bit is set.</returns>
-    private static bool IsSet(ReadOnlySpan<byte> field, int bit)
-        => (uint)(bit >> 3) < (uint)field.Length && (field[bit >> 3] & (0x80 >> (bit & 7))) != 0;
-
-    /// <summary>
     /// Checks a two digit field against a maximum value.
     /// </summary>
     /// <param name="identifier">The Application Identifier.</param>
@@ -576,8 +577,8 @@ internal static class Gs1Linters
             sum += values[data[i]] * primes[weight];
         }
 
-        sum %= 1021;
-        if (data[^2] != CheckPairCharacters[sum >> 5] || data[^1] != CheckPairCharacters[sum & 31])
+        sum %= CheckPairModulus;
+        if (data[^2] != CheckPairCharacters[sum >> CheckPairValueBits] || data[^1] != CheckPairCharacters[sum & ((1 << CheckPairValueBits) - 1)])
         {
             ThrowInvalidData(identifier, "has an incorrect check character pair", nameof(data));
         }

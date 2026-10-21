@@ -29,6 +29,11 @@ public sealed class TwoTrackPharmacodeSymbology : BarcodeSymbology
     public const int MaximumValue = 64570080;
 
     /// <summary>
+    /// The number of digits of <see cref="MaximumValue"/>.
+    /// </summary>
+    private const int MaximumDigits = 8;
+
+    /// <summary>
     /// The nominal X dimension in millimetres: the 1 mm bar of section 1.4.
     /// </summary>
     private const double XDimension = 1;
@@ -83,7 +88,7 @@ public sealed class TwoTrackPharmacodeSymbology : BarcodeSymbology
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        int value = PharmacodeEncoder.ParseValue(text, MinimumValue, MaximumValue);
+        int value = PharmacodeEncoder.ParseValue(text, MinimumValue, MaximumValue, MaximumDigits);
 
         // The bars from the lowest position. A remainder of 0 picks the full bar, whose weight is the radix itself.
         InlineArray16<TrackBar> barStorage = default;

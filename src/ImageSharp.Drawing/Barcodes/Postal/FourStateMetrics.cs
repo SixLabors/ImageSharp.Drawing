@@ -4,8 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The dimensions of a height modulated postal symbology, in modules of its bar width and in run units for the pitch, which is not a whole number of bar widths
-/// in any of them.
+/// The dimensions of a height modulated postal symbology, in modules of its bar width and in run units for the pitch.
 /// </summary>
 internal readonly struct FourStateMetrics
 {
@@ -188,14 +187,14 @@ internal readonly struct FourStateMetrics
     public double XDimension { get; }
 
     /// <summary>
-    /// Gets the smallest bar width in millimetres that the specification permits, or zero where it gives none. The bar width the symbol draws at is clamped
-    /// to this limit.
+    /// Gets the smallest bar width in millimetres that the specification permits, or zero where it gives none. The code clamps the drawn bar width to
+    /// this limit.
     /// </summary>
     public double MinimumXDimension { get; init; }
 
     /// <summary>
-    /// Gets the largest bar width in millimetres that the specification permits, or <see cref="double.PositiveInfinity"/> where it gives none. The bar width
-    /// the symbol draws at is clamped to this limit.
+    /// Gets the largest bar width in millimetres that the specification permits, or <see cref="double.PositiveInfinity"/> where it gives none. The code clamps
+    /// the drawn bar width to this limit.
     /// </summary>
     public double MaximumXDimension { get; init; } = double.PositiveInfinity;
 

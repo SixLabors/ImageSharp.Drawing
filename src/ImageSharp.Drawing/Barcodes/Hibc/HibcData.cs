@@ -93,11 +93,22 @@ internal static class HibcData
     private const int MaximumQuantityLength = 5;
 
     /// <summary>
-    /// Returns the number of characters <see cref="Prepare"/> writes at most for the text: the flag character, the data and the check character.
+    /// Returns the number of characters <see cref="Prepare"/> writes at most for the text: the flag character, the data and the check character. The prepared
+    /// data is never shorter than the text, so text longer than the carrier holds fails here, before the caller sizes a buffer from it.
     /// </summary>
-    /// <param name="textLength">The length of the text.</param>
+    /// <param name="text">The text.</param>
+    /// <param name="maximumPrepared">The largest number of characters the carrier symbology encodes.</param>
     /// <returns>The capacity the prepared data needs.</returns>
-    public static int PreparedCapacity(int textLength) => textLength + 2;
+    /// <exception cref="ArgumentException">The text is longer than <paramref name="maximumPrepared"/>.</exception>
+    public static int PreparedCapacity(ReadOnlySpan<char> text, int maximumPrepared)
+    {
+        if (text.Length > maximumPrepared)
+        {
+            throw new ArgumentException($"The text is {text.Length} characters; the symbology carries at most {maximumPrepared}.", nameof(text));
+        }
+
+        return text.Length + 2;
+    }
 
     /// <summary>
     /// Validates the given text against the HIBC character set and the data structures of ANSI/HIBC 2.6, calculates the check character over the data and
@@ -105,8 +116,8 @@ internal static class HibcData
     /// </summary>
     /// <param name="text"> The data to carry, without the flag character. When <paramref name="validateCheckCharacter"/> is <see langword="true"/> the last
     /// character is the check character rather than data. </param>
-    /// <param name="validateCheckCharacter"> Whether the check character at the end of <paramref name="text"/> is validated. </param>
-    /// <param name="encoded"> The builder the encoded data is written to: the flag character, the data and the check character. </param>
+    /// <param name="validateCheckCharacter"> Whether the method validates the check character at the end of <paramref name="text"/>. </param>
+    /// <param name="encoded"> The builder that receives the encoded data: the flag character, the data and the check character. </param>
     /// <exception cref="ArgumentException">The text is not valid HIBC data.</exception>
     public static void Prepare(ReadOnlySpan<char> text, bool validateCheckCharacter, ref ValueStringBuilder encoded)
     {
@@ -175,35 +186,6 @@ internal static class HibcData
     }
 
     /// <summary>
-    /// Writes the human readable interpretation of encoded data that a two-dimensional symbol carries. Section 3.0 gives every symbology the same
-    /// interpretation as <see cref="WriteReadable"/>. The figure of section 4.3.3 prints primary and secondary data that one symbol concatenates on two lines,
-    /// broken after the character that joins them.
-    /// </summary>
-    /// <param name="encoded">The encoded data, as <see cref="Prepare"/> wrote it.</param>
-    /// <param name="readable">The buffer the interpretation is written to, <see cref="ReadableCapacity"/> long.</param>
-    /// <returns>The number of characters written.</returns>
-    public static int WriteMatrixReadable(ReadOnlySpan<char> encoded, Span<char> readable)
-    {
-        readable[0] = ReadableDelimiter;
-        int written = 1;
-
-        // Note 1 of section 2.2.1: primary data starts with a letter after the flag character. Primary data holds no "/", so the first "/" after it is the
-        // join of section 2.2.1.1. Secondary data alone has no join, and its "/" characters open supplemental data fields. The check character at the end can
-        // be "/" too, so the search stops before it.
-        int join = IsLetter(encoded[1]) ? encoded[..^1].IndexOf(Delimiter) : -1;
-        if (join >= 0)
-        {
-            written += WritePrinted(encoded[..(join + 1)], readable[written..]);
-            readable[written++] = BarcodeTextPlacement.LineBreak;
-            encoded = encoded[(join + 1)..];
-        }
-
-        written += WritePrinted(encoded, readable[written..]);
-        readable[written++] = ReadableDelimiter;
-        return written;
-    }
-
-    /// <summary>
     /// Adds the human readable interpretation of encoded data below a built matrix symbol, as <see cref="WriteMatrixReadable"/> writes it, centered on the
     /// symbol as the figures of sections 4.3.1 and 4.3.3 print it.
     /// </summary>
@@ -254,6 +236,35 @@ internal static class HibcData
     }
 
     /// <summary>
+    /// Writes the human readable interpretation of encoded data that a two-dimensional symbol carries. Section 3.0 gives every symbology the same
+    /// interpretation as <see cref="WriteReadable"/>. The figure of section 4.3.3 prints primary and secondary data that one symbol concatenates on two lines,
+    /// broken after the character that joins them.
+    /// </summary>
+    /// <param name="encoded">The encoded data, as <see cref="Prepare"/> wrote it.</param>
+    /// <param name="readable">The buffer the interpretation is written to, <see cref="ReadableCapacity"/> long.</param>
+    /// <returns>The number of characters written.</returns>
+    private static int WriteMatrixReadable(ReadOnlySpan<char> encoded, Span<char> readable)
+    {
+        readable[0] = ReadableDelimiter;
+        int written = 1;
+
+        // Note 1 of section 2.2.1: primary data starts with a letter after the flag character. Primary data holds no "/", so the first "/" after it is the
+        // join of section 2.2.1.1. Secondary data alone has no join, and its "/" characters open supplemental data fields. The check character at the end can
+        // be "/" too, so the search stops before it.
+        int join = char.IsAsciiLetterUpper(encoded[1]) ? encoded[..^1].IndexOf(Delimiter) : -1;
+        if (join >= 0)
+        {
+            written += WritePrinted(encoded[..(join + 1)], readable[written..]);
+            readable[written++] = BarcodeTextPlacement.LineBreak;
+            encoded = encoded[(join + 1)..];
+        }
+
+        written += WritePrinted(encoded, readable[written..]);
+        readable[written++] = ReadableDelimiter;
+        return written;
+    }
+
+    /// <summary>
     /// Writes characters of the encoded data as the interpretation prints them: a space as <see cref="PrintedSpace"/> and a zero as <see cref="PrintedZero"/>.
     /// </summary>
     /// <param name="encoded">The characters of the encoded data.</param>
@@ -286,7 +297,7 @@ internal static class HibcData
     private static void ValidateStructure(ReadOnlySpan<char> data)
     {
         char first = data[0];
-        if (IsLetter(first))
+        if (char.IsAsciiLetterUpper(first))
         {
             int join = data.IndexOf(Delimiter);
             ValidatePrimary(join < 0 ? data : data[..join]);
@@ -298,7 +309,7 @@ internal static class HibcData
             return;
         }
 
-        if (IsDigit(first) || first == '$')
+        if (char.IsAsciiDigit(first) || first == '$')
         {
             ValidateSecondary(data, true);
             return;
@@ -318,7 +329,7 @@ internal static class HibcData
         // Section 3.0: "No special characters (-, ., $, /, +, %, and space) are used in the Primary data structure".
         for (int i = 0; i < primary.Length; i++)
         {
-            if (!IsLetter(primary[i]) && !IsDigit(primary[i]))
+            if (!char.IsAsciiLetterUpper(primary[i]) && !char.IsAsciiDigit(primary[i]))
             {
                 throw new ArgumentException("HIBC primary data carries only capital letters and digits.", nameof(primary));
             }
@@ -332,7 +343,7 @@ internal static class HibcData
                 nameof(primary));
         }
 
-        if (!IsDigit(primary[^1]))
+        if (!char.IsAsciiDigit(primary[^1]))
         {
             throw new ArgumentException("The unit of measure of HIBC primary data is a digit, 0 through 9.", nameof(primary));
         }
@@ -349,7 +360,7 @@ internal static class HibcData
     {
         int position;
         bool requireField;
-        if (secondary.Length > 0 && IsDigit(secondary[0]))
+        if (secondary.Length > 0 && char.IsAsciiDigit(secondary[0]))
         {
             // Table 2: "If the first character is numeric, then R is a fixed 5-digit Julian date. No Lot/Batch or Serial Number is present".
             ValidateDate(secondary, 0, "YYJJJ");
@@ -424,7 +435,7 @@ internal static class HibcData
             throw new ArgumentException("An HIBC lot or serial number is at most 18 characters.", nameof(secondary));
         }
 
-        if (requireField && (fieldLength < 1 || !(IsLetter(secondary[fieldStart]) || IsDigit(secondary[fieldStart]))))
+        if (requireField && (fieldLength < 1 || !(char.IsAsciiLetterUpper(secondary[fieldStart]) || char.IsAsciiDigit(secondary[fieldStart]))))
         {
             throw new ArgumentException("An HIBC lot or serial number after \"$\" or \"$+\" starts with a letter or a digit.", nameof(secondary));
         }
@@ -582,24 +593,10 @@ internal static class HibcData
     }
 
     /// <summary>
-    /// Returns whether a character is a capital letter.
-    /// </summary>
-    /// <param name="character">The character.</param>
-    /// <returns><see langword="true"/> for A to Z.</returns>
-    private static bool IsLetter(char character) => character is >= 'A' and <= 'Z';
-
-    /// <summary>
-    /// Returns whether a character is a digit.
-    /// </summary>
-    /// <param name="character">The character.</param>
-    /// <returns><see langword="true"/> for 0 to 9.</returns>
-    private static bool IsDigit(char character) => character is >= '0' and <= '9';
-
-    /// <summary>
     /// Returns whether a character can stand in a lot or serial number. Section 3.0: "The use of the special characters "." and "-" are permitted in the Lot
     /// and Serial fields of the Secondary data structure."
     /// </summary>
     /// <param name="character">The character.</param>
     /// <returns><see langword="true"/> for a capital letter, a digit, "." or "-".</returns>
-    private static bool IsLotCharacter(char character) => IsLetter(character) || IsDigit(character) || character is '.' or '-';
+    private static bool IsLotCharacter(char character) => char.IsAsciiLetterUpper(character) || char.IsAsciiDigit(character) || character is '.' or '-';
 }

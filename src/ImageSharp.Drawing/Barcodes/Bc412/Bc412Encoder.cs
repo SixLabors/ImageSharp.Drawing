@@ -10,12 +10,6 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal static class Bc412Encoder
 {
     /// <summary>
-    /// The characters the symbology encodes, in pattern order and in the order the check calculation values them. The letter O is not in the set, and the digit
-    /// 0 stands in for it.
-    /// </summary>
-    public const string Characters = "0R9GLVHA8EZ4NTS1J2Q6C7DYKBUIX3FWP5M";
-
-    /// <summary>
     /// The smallest number of data characters a symbol carries.
     /// </summary>
     public const int MinimumLength = 7;
@@ -26,30 +20,36 @@ internal static class Bc412Encoder
     public const int MaximumLength = 18;
 
     /// <summary>
+    /// The position of the check character in the symbol: after the first data character.
+    /// </summary>
+    public const int CheckPosition = 1;
+
+    /// <summary>
+    /// The characters the symbology encodes, in pattern order and in the order the check calculation values them. The letter O is not in the set, and the digit
+    /// 0 stands in for it.
+    /// </summary>
+    private const string Characters = "0R9GLVHA8EZ4NTS1J2Q6C7DYKBUIX3FWP5M";
+
+    /// <summary>
     /// The quiet zone in modules on each side. The symbol widths, 13.2 mm at 7 data characters and 29.04 mm at 18, exceed the bars by 0.96 mm at the 0.12 mm
     /// module, 4 modules on each side.
     /// </summary>
-    public const int QuietZone = 4;
+    private const int QuietZone = 4;
 
     /// <summary>
     /// The nominal X dimension in millimetres: a module spacing of 0.12 mm.
     /// </summary>
-    public const double NominalXDimension = 0.12;
+    private const double NominalXDimension = 0.12;
 
     /// <summary>
     /// The smallest X dimension in millimetres. Table 1 of SEMI T1-95 gives the module spacing as "0.120 mm ± 0.025 mm".
     /// </summary>
-    public const double MinimumXDimension = 0.120 - 0.025;
+    private const double MinimumXDimension = 0.120 - 0.025;
 
     /// <summary>
     /// The largest X dimension in millimetres, from the same tolerance.
     /// </summary>
-    public const double MaximumXDimension = 0.120 + 0.025;
-
-    /// <summary>
-    /// The position of the check character in the symbol: after the first data character.
-    /// </summary>
-    public const int CheckPosition = 1;
+    private const double MaximumXDimension = 0.120 + 0.025;
 
     /// <summary>
     /// The number of runs in one character: four bars and four spaces, the last of which separates it from the next character.

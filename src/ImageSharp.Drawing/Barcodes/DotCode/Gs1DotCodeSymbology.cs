@@ -11,8 +11,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// <see cref="BarcodeOptions.Font"/> is set.
 /// <para>
 /// Section 5.8.2.4: "GS1 DotCode SHALL only be used to meet the requirements of the EU tobacco traceability regulation EU 2018/574". Table 5-58, symbol
-/// specification table 12 for that regulation, gives the unit pack an X dimension of 0.380 to 0.990 millimetres with a target of 0.380, and an X dimension
-/// outside that range is clamped to it.
+/// specification table 12 for that regulation, gives the unit pack an X dimension of 0.380 to 0.990 millimetres with a target of 0.380. An X dimension
+/// outside that range draws at the nearest limit.
 /// </para>
 /// </summary>
 public sealed class Gs1DotCodeSymbology : BarcodeSymbology
@@ -59,12 +59,7 @@ public sealed class Gs1DotCodeSymbology : BarcodeSymbology
     public Gs1DotCodeSymbology(int columns, int rows)
         : this(columns)
     {
-        Guard.MustBeBetweenOrEqualTo(rows, DotCodeEncoder.MinimumSide, DotCodeEncoder.MaximumSide, nameof(rows));
-        if (((columns + rows) & 1) == 0)
-        {
-            throw new ArgumentException("The columns and the rows of a DotCode symbol must sum to an odd number.", nameof(rows));
-        }
-
+        DotCodeEncoder.ValidateRows(columns, rows);
         this.Rows = rows;
     }
 

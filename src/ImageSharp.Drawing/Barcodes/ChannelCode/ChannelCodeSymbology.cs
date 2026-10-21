@@ -37,12 +37,7 @@ public sealed class ChannelCodeSymbology : BarcodeSymbology
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        if (text.Length < ChannelCodeEncoder.MinimumLength || text.Length > ChannelCodeEncoder.MaximumLength)
-        {
-            throw new ArgumentException(
-                $"Channel Code carries {ChannelCodeEncoder.MinimumLength} to {ChannelCodeEncoder.MaximumLength} digits; got {text.Length} characters.",
-                nameof(text));
-        }
+        Guard.MustBeBetweenOrEqualTo(text.Length, ChannelCodeEncoder.MinimumLength, ChannelCodeEncoder.MaximumLength, nameof(text));
 
         ValidateDigits(text);
         int value = int.Parse(text, NumberStyles.None, CultureInfo.InvariantCulture);

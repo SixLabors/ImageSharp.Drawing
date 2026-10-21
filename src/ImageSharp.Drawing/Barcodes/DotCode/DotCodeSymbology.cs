@@ -36,12 +36,7 @@ public sealed class DotCodeSymbology : BarcodeSymbology
     public DotCodeSymbology(int columns, int rows)
         : this(columns)
     {
-        Guard.MustBeBetweenOrEqualTo(rows, DotCodeEncoder.MinimumSide, DotCodeEncoder.MaximumSide, nameof(rows));
-        if (((columns + rows) & 1) == 0)
-        {
-            throw new ArgumentException("The columns and the rows of a DotCode symbol must sum to an odd number.", nameof(rows));
-        }
-
+        DotCodeEncoder.ValidateRows(columns, rows);
         this.Rows = rows;
     }
 

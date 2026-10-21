@@ -38,7 +38,7 @@ internal static class Gs1DigitalLink
     /// and its qualifiers in the path, then the data attributes in the query string.
     /// </summary>
     /// <param name="uri">The URI.</param>
-    /// <param name="readable">The buffer the interpretation is written to, <see cref="ReadableCapacity"/> long.</param>
+    /// <param name="readable">The buffer that receives the interpretation, <see cref="ReadableCapacity"/> long.</param>
     /// <returns>The number of characters written.</returns>
     /// <exception cref="ArgumentException">The URI is not a valid GS1 Digital Link URI.</exception>
     public static int Validate(ReadOnlySpan<char> uri, Span<char> readable)
@@ -58,7 +58,7 @@ internal static class Gs1DigitalLink
     /// </summary>
     /// <param name="uri">The URI.</param>
     /// <param name="writeReadable">Whether the interpretation is written.</param>
-    /// <param name="readable">The buffer the interpretation is written to when <paramref name="writeReadable"/> is <see langword="true"/>.</param>
+    /// <param name="readable">The buffer that receives the interpretation when <paramref name="writeReadable"/> is <see langword="true"/>.</param>
     /// <returns>The number of characters written.</returns>
     /// <exception cref="ArgumentException">The URI is not a valid GS1 Digital Link URI.</exception>
     private static int Validate(ReadOnlySpan<char> uri, bool writeReadable, Span<char> readable)
@@ -177,7 +177,7 @@ internal static class Gs1DigitalLink
     /// is the rightmost pair whose Application Identifier is a primary key, with every pair after it an Application Identifier too.
     /// </summary>
     /// <param name="path">The path, from its first "/".</param>
-    /// <param name="buffer">The buffer the decoded Application Identifiers and values are written to.</param>
+    /// <param name="buffer">The buffer that receives the decoded Application Identifiers and values.</param>
     /// <param name="elements">The builder the element positions are written to.</param>
     /// <returns>The number of element strings in the path.</returns>
     private static int ParsePath(ReadOnlySpan<char> path, ref ValueStringBuilder buffer, ref ValueListBuilder<Gs1Element> elements)

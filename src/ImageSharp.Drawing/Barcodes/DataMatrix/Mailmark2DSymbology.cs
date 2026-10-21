@@ -42,8 +42,12 @@ public sealed class Mailmark2DSymbology : BarcodeSymbology
     /// Initializes a new instance of the <see cref="Mailmark2DSymbology"/> class.
     /// </summary>
     /// <param name="type">The barcode type, which sets the symbol size.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="type"/> is not a defined value.</exception>
     public Mailmark2DSymbology(Mailmark2DType type)
-        => this.Type = type;
+    {
+        Guard.MustBeBetweenOrEqualTo((int)type, (int)Mailmark2DType.Type7, (int)Mailmark2DType.Type29, nameof(type));
+        this.Type = type;
+    }
 
     /// <summary>
     /// Gets the barcode type.

@@ -9,6 +9,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// HIBC Code 39, a Health Industry Bar Code. A Code 39 symbol carries it. The symbol carries the flag character, the data and the modulo 43 check character.
 /// Code 39 adds no check character of its own. The human readable interpretation shows that same string between delimiters, with a space printed as an
 /// underscore and a zero as "Ø". When the options set no X dimension, the X dimension is 0.010 inch, from section 5.1 of ANSI/HIBC 2.6.
+/// An X dimension under 0.0067 inch draws at 0.0067 inch, the minimum of the same section.
 /// The text follows a data structure of ANSI/HIBC 2.6: primary data, secondary data that ends with its link character, or primary and secondary data joined
 /// with "/", each with any supplemental data fields.
 /// </summary>
@@ -38,7 +39,7 @@ public sealed class HibcCode39Symbology : BarcodeSymbology
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         InlineArray64<char> bufferStorage = default;
-        int capacity = HibcData.PreparedCapacity(text.Length);
+        int capacity = HibcData.PreparedCapacity(text, Code39Encoder.MaximumLength);
         ValueStringBuilder encoded = capacity <= HibcData.InlineBufferLength ? new(bufferStorage) : new(capacity);
         try
         {

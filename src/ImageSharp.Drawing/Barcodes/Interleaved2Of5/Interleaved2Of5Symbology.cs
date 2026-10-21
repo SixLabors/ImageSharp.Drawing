@@ -73,7 +73,10 @@ public sealed class Interleaved2Of5Symbology : BarcodeSymbology
         BarcodeSymbology.ValidateDigits(text);
 
         ReadOnlySpan<char> data = this.CheckDigit == CheckCharacterMode.Validate ? text.Slice(0, text.Length - 1) : text;
-        int? check = this.CheckDigit == CheckCharacterMode.None ? null : Interleaved2Of5Encoder.CheckDigit(data);
+
+        // The optional check digit of section 2.5 of AIM USS-I 2/5 is the modulo 10 calculation of Appendix C, which weights the digits 3 and 1 from the
+        // right, the same as the GS1 calculation.
+        int? check = this.CheckDigit == CheckCharacterMode.None ? null : Gs1Data.ComputeCheckDigit(data);
         if (this.CheckDigit == CheckCharacterMode.Validate && text[^1] - '0' != check)
         {
             throw new ArgumentException($"Incorrect check digit: expected {check}, got {text[^1]}.", nameof(text));
@@ -90,6 +93,7 @@ public sealed class Interleaved2Of5Symbology : BarcodeSymbology
         Span<char> encoded = length <= Interleaved2Of5Encoder.InlineBufferLength
             ? ((Span<char>)digitStorage)[..length]
             : (rented = new PooledBuffer<char>(length)).Span;
+
         try
         {
             encoded[0] = '0';

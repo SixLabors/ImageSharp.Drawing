@@ -76,8 +76,9 @@ internal static class BarEmitter
         float moduleWidth = (float)(symbol.XDimension / BarcodeOptions.MillimetresPerInch * options.Dpi);
         float stretch = symbol.UniformBars ? BlockWidth(ref symbol, moduleWidth) / (symbol.WidthInModules * moduleWidth) : 1F;
 
-        // A bar symbol has at most 14 text placements, so the scales fit on the stack.
-        Span<float> lineScales = stackalloc float[lines.Length];
+        // A bar symbol has at most 14 text placements, so the scales fit inline.
+        InlineArray16<float> lineScaleStorage = default;
+        Span<float> lineScales = ((Span<float>)lineScaleStorage)[..lines.Length];
         lineScales.Fill(1F);
         Font digitFont = HasSizeLimits(ref symbol) ? DigitFont(ref symbol, font, options, moduleWidth, moduleWidth * stretch, lineScales) : font;
         LineFonts fonts = new(digitFont, options.CaptionFont ?? font, symbol.CaptionMinimumSize, symbol.TextWeight, options, moduleWidth * stretch);

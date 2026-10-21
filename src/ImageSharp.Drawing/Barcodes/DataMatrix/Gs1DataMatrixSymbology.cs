@@ -18,7 +18,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// </para>
 /// <para>
 /// The X dimension is the target of 0.495 millimetre of Table 5-45, symbol specification table 1 addendum 1. The symbol specification tables of section
-/// 5.12.3 give GS1 DataMatrix X dimensions from 0.100 to 3.50 millimetres, and an X dimension outside that range is clamped to it.
+/// 5.12.3 give GS1 DataMatrix X dimensions from 0.100 to 3.50 millimetres. An X dimension outside that range draws at the nearest limit.
 /// </para>
 /// </summary>
 public sealed class Gs1DataMatrixSymbology : BarcodeSymbology

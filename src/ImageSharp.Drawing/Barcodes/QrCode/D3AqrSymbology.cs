@@ -71,7 +71,8 @@ public sealed class D3AqrSymbology : BarcodeSymbology
             _ => (3, 2),
         };
 
-        // The X dimension is one cell. The default cell makes a host module DefaultMatrixXDimension wide.
+        // The X dimension is one cell. The nominal cell is DefaultMatrixXDimension / hostCellSize, so a host module is DefaultMatrixXDimension wide before the
+        // cell rounds to whole pixels.
         double xDimension = options.ResolveXDimension(0, DefaultMatrixXDimension / hostCellSize, double.PositiveInfinity);
         BarcodeSymbol host = default;
         try

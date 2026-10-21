@@ -89,7 +89,8 @@ public sealed class MsiSymbology : BarcodeSymbology
                     int maximumWeight = this.CheckDigit is MsiCheckDigit.Modulo11 or MsiCheckDigit.Modulo1110
                         ? MsiEncoder.IbmMaximumWeight
                         : MsiEncoder.NcrMaximumWeight;
-                    int check = MsiEncoder.Modulo11(text, maximumWeight);
+
+                    int check = BarcodeSymbology.Modulo11(text, maximumWeight);
                     if (check == 10)
                     {
                         throw new ArgumentException("The modulo 11 check value of this data is 10, which one digit cannot carry.", nameof(text));

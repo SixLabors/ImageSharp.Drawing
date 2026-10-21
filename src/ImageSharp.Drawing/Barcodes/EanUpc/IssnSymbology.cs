@@ -68,14 +68,9 @@ public sealed class IssnSymbology : BarcodeSymbology
         issn[..4].CopyTo(digits[3..]);
         issn.Slice(5, 3).CopyTo(digits[7..]);
         variant.CopyTo(digits[10..]);
-        ReadOnlySpan<char> digits7 = digits.Slice(3, 7);
-        int sum = 0;
-        for (int i = 0; i < 7; i++)
-        {
-            sum += (8 - i) * (digits7[i] - '0');
-        }
 
-        int check = (11 - (sum % 11)) % 11;
+        // From the right, the weights of the check are 2 to 8.
+        int check = Modulo11(digits.Slice(3, 7), 8);
         if (issn.Length == 9)
         {
             int provided = issn[8] == 'X' ? 10 : issn[8] - '0';

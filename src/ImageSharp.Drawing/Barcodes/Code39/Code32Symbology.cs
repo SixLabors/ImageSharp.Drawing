@@ -66,12 +66,6 @@ public sealed class Code32Symbology : BarcodeSymbology
     private const int WideElement = 5;
 
     /// <summary>
-    /// The width of the symbol in modules, quiet zones excluded. The start character, the six base 32 characters and the stop character each have three wide
-    /// and six narrow elements, every character but the stop character has a narrow gap, and a run unit is half a module.
-    /// </summary>
-    private const float WidthInModules = (((Base32Length + 2) * ((3 * WideElement) + (7 * NarrowElement))) - NarrowElement) / (float)NarrowElement;
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="Code32Symbology"/> class.
     /// </summary>
     public Code32Symbology()
@@ -137,14 +131,19 @@ public sealed class Code32Symbology : BarcodeSymbology
         // to a whole pixel: at an odd number of pixels a module the ratio of 2.5 becomes 3.0 at one pixel and 2.67 at three, and every wide element takes the
         // same width.
         int pixels = options.ModulePixels(xDimension);
+        int widePixels = ((WideElement * pixels) + (NarrowElement / 2)) / NarrowElement;
+
+        // The bar height is 15 % of the width the symbol draws at. The start character, the six base 32 characters and the stop character each have three
+        // wide and six narrow elements, and every character but the stop character has a narrow gap.
+        float widthInModules = (((Base32Length + 2) * ((3 * widePixels) + (7 * pixels))) - pixels) / (float)pixels;
         Code39Layout layout = new()
         {
             XDimension = xDimension,
-            NominalBarHeight = Code39Encoder.ProportionalBarHeight(WidthInModules, xDimension),
+            NominalBarHeight = Code39Encoder.ProportionalBarHeight(widthInModules, xDimension),
             MinimumBarHeight = 0F,
             MaximumBarHeight = float.PositiveInfinity,
             NarrowElement = pixels,
-            WideElement = ((WideElement * pixels) + (NarrowElement / 2)) / NarrowElement,
+            WideElement = widePixels,
         };
 
         // The interpretation is the field identifier, then the nine digits of the code.

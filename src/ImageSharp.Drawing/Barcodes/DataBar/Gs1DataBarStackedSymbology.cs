@@ -8,8 +8,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// Specifications gives "50X wide by 13X high" with "a 1X high separator pattern between the two rows". The rows share the other 12X as an upper row of 5X
 /// and a lower row of 7X. The bar height of the options sets the lower row, and the upper row keeps its ratio of five to seven. No quiet zone is required.
 /// <para>
-/// The input is <c>(01)</c> and 13 digits, to which the check digit is added, or 14 digits whose last digit is validated as the check digit. The human readable
-/// interpretation prints the element string with the check digit.
+/// The input is <c>(01)</c> and 13 or 14 digits. When the input has 13 digits, the symbology adds the check digit. When the input has 14 digits, the symbology
+/// validates the last digit as the check digit. The human readable interpretation prints the element string with the check digit.
 /// </para>
 /// </summary>
 public sealed class Gs1DataBarStackedSymbology : BarcodeSymbology

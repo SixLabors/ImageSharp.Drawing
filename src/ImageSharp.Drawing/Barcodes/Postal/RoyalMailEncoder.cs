@@ -13,11 +13,6 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal static class RoyalMailEncoder
 {
     /// <summary>
-    /// The characters the symbology encodes, in pattern order.
-    /// </summary>
-    public const string Characters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
-    /// <summary>
     /// The largest number of characters a symbol carries. The symbology sets no maximum.
     /// </summary>
     public const int MaximumLength = 500;
@@ -26,6 +21,11 @@ internal static class RoyalMailEncoder
     /// The number of bars in one character.
     /// </summary>
     public const int BarsPerCharacter = 4;
+
+    /// <summary>
+    /// The characters the symbology encodes, in pattern order.
+    /// </summary>
+    private const string Characters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
     /// <summary>
     /// The check characters in the order of the checksum calculation table, which the upper half value selects the row of and the lower half value the column

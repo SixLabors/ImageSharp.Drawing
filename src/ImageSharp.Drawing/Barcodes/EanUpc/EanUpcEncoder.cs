@@ -13,20 +13,14 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal static class EanUpcEncoder
 {
     /// <summary>
-    /// The number of modules a guard pattern extends below the digit bars. Section 5.2.3.2 of the GS1 General Specifications: "the bars (dark bars) forming
-    /// the left, centre and right guard bar patterns SHALL be extended downward by 5x".
-    /// </summary>
-    public const float GuardExtension = 5F;
-
-    /// <summary>
     /// The nominal X dimension in millimetres. Section 5.2.6.6 of the GS1 General Specifications: "X-dimension = 0.330 mm".
     /// </summary>
     public const double NominalXDimension = 0.33;
 
     /// <summary>
-    /// The smallest X dimension in millimetres of an EAN-13, EAN-8, UPC-A or UPC-E symbol and its add-on, the smallest minimum of the symbol specification
-    /// tables of section 5.12.3 that list them: 0.170 in Table 5-52. Section 5.2.3.3: "The X-dimension of an add-on symbol SHALL be the same as the
-    /// X-dimension of its associated main symbol", so the add-on takes the same range.
+    /// The smallest X dimension in millimetres of an EAN-13, EAN-8, UPC-A or UPC-E symbol and its add-on. This value is the smallest minimum in the symbol
+    /// specification tables of section 5.12.3 that list these symbols: 0.170 in Table 5-52. Section 5.2.3.3: "The X-dimension of an add-on symbol SHALL be the
+    /// same as the X-dimension of its associated main symbol", so the add-on takes the same range.
     /// </summary>
     public const double MinimumXDimension = 0.170;
 
@@ -55,11 +49,6 @@ internal static class EanUpcEncoder
     public const double MinimumBarHeight = 18.28;
 
     /// <summary>
-    /// The smallest EAN-8 bar height in millimetres: 14.58mm, the smallest "Minimum symbol height" of the same tables, with the same notes.
-    /// </summary>
-    public const double MinimumEan8BarHeight = 14.58;
-
-    /// <summary>
     /// The nominal add-on bar height in modules: Figures 5-27 and 5-28 of the GS1 General Specifications give 21.90mm at the nominal 0.33mm X-dimension.
     /// </summary>
     public const float NominalAddOnBarHeight = 66.36F;
@@ -75,17 +64,6 @@ internal static class EanUpcEncoder
     public const int Ean13Width = 95;
 
     /// <summary>
-    /// The width of a symbol character in modules.
-    /// </summary>
-    public const int CharacterWidth = 7;
-
-    /// <summary>
-    /// The number of run units in a module. Section 5.2.3.1 of the GS1 General Specifications: for the characters 1, 2, 7 and 8 "the bars (dark bars) and
-    /// spaces (light bars) are reduced or enlarged by one-thirteenth of a module", so a run counts thirteenths of a module.
-    /// </summary>
-    public const int RunUnitsPerModule = 13;
-
-    /// <summary>
     /// The width of a run unit in modules.
     /// </summary>
     public const float RunUnit = 1F / RunUnitsPerModule;
@@ -99,6 +77,28 @@ internal static class EanUpcEncoder
     /// The width of <see cref="NormalGuard"/> in modules.
     /// </summary>
     public const int NormalGuardWidth = 3;
+
+    /// <summary>
+    /// The number of modules a guard pattern extends below the digit bars. Section 5.2.3.2 of the GS1 General Specifications: "the bars (dark bars) forming
+    /// the left, centre and right guard bar patterns SHALL be extended downward by 5x".
+    /// </summary>
+    private const float GuardExtension = 5F;
+
+    /// <summary>
+    /// The smallest EAN-8 bar height in millimetres: 14.58mm, the smallest "Minimum symbol height" of the same tables, with the same notes.
+    /// </summary>
+    private const double MinimumEan8BarHeight = 14.58;
+
+    /// <summary>
+    /// The width of a symbol character in modules.
+    /// </summary>
+    private const int CharacterWidth = 7;
+
+    /// <summary>
+    /// The number of run units in a module. Section 5.2.3.1 of the GS1 General Specifications: for the characters 1, 2, 7 and 8 "the bars (dark bars) and
+    /// spaces (light bars) are reduced or enlarged by one-thirteenth of a module", so a run counts thirteenths of a module.
+    /// </summary>
+    private const int RunUnitsPerModule = 13;
 
     /// <summary>
     /// The centre guard pattern between the two halves of a symbol: space, bar, space, bar, space.
@@ -119,49 +119,6 @@ internal static class EanUpcEncoder
     /// The quiet zone after an EAN-13 symbol, and on both sides of an EAN-8 symbol, in modules.
     /// </summary>
     private const int QuietZone = 7;
-
-    /// <summary>
-    /// Gets the indexes of the extended bars of an EAN-13 symbol: the two bars of each of the left, centre and right guard patterns.
-    /// </summary>
-    private static ReadOnlySpan<int> Ean13GuardBars => [0, 1, 14, 15, 28, 29];
-
-    /// <summary>
-    /// Gets the indexes of the extended bars of an EAN-8 symbol.
-    /// </summary>
-    private static ReadOnlySpan<int> Ean8GuardBars => [0, 1, 10, 11, 20, 21];
-
-    /// <summary>
-    /// Gets the number set A symbol characters indexed by digit, seven modules per character with the most significant bit first and 1 meaning a dark module.
-    /// Section 5.2.1.2.1 of the GS1 General Specifications: "Symbol characters in number set A are odd parity characters." Every character starts with a
-    /// space module and ends with a bar module.
-    /// </summary>
-    public static ReadOnlySpan<byte> NumberSetA =>
-    [
-        0b0001101, 0b0011001, 0b0010011, 0b0111101, 0b0100011,
-        0b0110001, 0b0101111, 0b0111011, 0b0110111, 0b0001011,
-    ];
-
-    /// <summary>
-    /// Gets the number set B symbol characters indexed by digit. Section 5.2.1.2.1 of the GS1 General Specifications gives number set B even parity, and
-    /// "Number set C characters are mirror images of number set B characters", so each character is number set C for the same digit, read in reverse module
-    /// order.
-    /// </summary>
-    public static ReadOnlySpan<byte> NumberSetB =>
-    [
-        0b0100111, 0b0110011, 0b0011011, 0b0100001, 0b0011101,
-        0b0111001, 0b0000101, 0b0010001, 0b0001001, 0b0010111,
-    ];
-
-    /// <summary>
-    /// Gets the number set C symbol characters indexed by digit. Table 5-3 of the GS1 General Specifications gives number set C the element widths of number
-    /// set A with bars and spaces exchanged, so each character is the module-wise inverse of number set A. Every character starts with a bar module and ends
-    /// with a space module.
-    /// </summary>
-    public static ReadOnlySpan<byte> NumberSetC =>
-    [
-        0b1110010, 0b1100110, 0b1101100, 0b1000010, 0b1011100,
-        0b1001110, 0b1010000, 0b1000100, 0b1001000, 0b1110100,
-    ];
 
     /// <summary>
     /// Gets the number set sequence for the six left-half characters of an EAN-13 symbol, indexed by the leading digit. A set bit selects number set B, a clear
@@ -193,6 +150,49 @@ internal static class EanUpcEncoder
         0b11000, 0b10100, 0b10010, 0b10001, 0b01100,
         0b00110, 0b00011, 0b01010, 0b01001, 0b00101,
     ];
+
+    /// <summary>
+    /// Gets the number set A symbol characters indexed by digit, seven modules per character with the most significant bit first and 1 meaning a dark module.
+    /// Section 5.2.1.2.1 of the GS1 General Specifications: "Symbol characters in number set A are odd parity characters." Every character starts with a
+    /// space module and ends with a bar module.
+    /// </summary>
+    private static ReadOnlySpan<byte> NumberSetA =>
+    [
+        0b0001101, 0b0011001, 0b0010011, 0b0111101, 0b0100011,
+        0b0110001, 0b0101111, 0b0111011, 0b0110111, 0b0001011,
+    ];
+
+    /// <summary>
+    /// Gets the number set B symbol characters indexed by digit. Section 5.2.1.2.1 of the GS1 General Specifications gives number set B even parity, and
+    /// "Number set C characters are mirror images of number set B characters", so each character is number set C for the same digit, read in reverse module
+    /// order.
+    /// </summary>
+    private static ReadOnlySpan<byte> NumberSetB =>
+    [
+        0b0100111, 0b0110011, 0b0011011, 0b0100001, 0b0011101,
+        0b0111001, 0b0000101, 0b0010001, 0b0001001, 0b0010111,
+    ];
+
+    /// <summary>
+    /// Gets the number set C symbol characters indexed by digit. Table 5-3 of the GS1 General Specifications gives number set C the element widths of number
+    /// set A with bars and spaces exchanged, so each character is the module-wise inverse of number set A. Every character starts with a bar module and ends
+    /// with a space module.
+    /// </summary>
+    private static ReadOnlySpan<byte> NumberSetC =>
+    [
+        0b1110010, 0b1100110, 0b1101100, 0b1000010, 0b1011100,
+        0b1001110, 0b1010000, 0b1000100, 0b1001000, 0b1110100,
+    ];
+
+    /// <summary>
+    /// Gets the indexes of the extended bars of an EAN-13 symbol: the two bars of each of the left, centre and right guard patterns.
+    /// </summary>
+    private static ReadOnlySpan<int> Ean13GuardBars => [0, 1, 14, 15, 28, 29];
+
+    /// <summary>
+    /// Gets the indexes of the extended bars of an EAN-8 symbol.
+    /// </summary>
+    private static ReadOnlySpan<int> Ean8GuardBars => [0, 1, 10, 11, 20, 21];
 
     /// <summary>
     /// Gets the correction of the bars of a number set A character in run units, indexed by digit, from Table 5-10 of the GS1 General Specifications: 0.025 mm
@@ -283,7 +283,7 @@ internal static class EanUpcEncoder
     /// <summary>
     /// Begins a linear symbol from a module stream and writes its alternating bar and space run widths in run units of <see cref="RunUnit"/>. The stream must
     /// start and end with a dark module so that even run indexes are bars. A symbol character starts and ends on a module of the other colour from the
-    /// patterns beside it, so each of its bars and spaces is one run, and the correction at the first module of a run applies to that run.
+    /// patterns beside it. As a result, each of its bars and spaces is one run. The correction at the first module of a run applies to that run.
     /// </summary>
     /// <param name="modules">The module stream, where 1 is a dark module.</param>
     /// <param name="corrections">The width corrections in run units from <see cref="AppendCharacter"/>.</param>
@@ -340,8 +340,8 @@ internal static class EanUpcEncoder
 
     /// <summary>
     /// Adds one text placement per digit, each centered in its own character cell. The nominal symbol drawings of section 5.2.6.6 of the GS1 General
-    /// Specifications print every digit of the interpretation below (or above, for add-ons) its own symbol character rather than centering digit groups, so
-    /// placement is per digit.
+    /// Specifications print every digit of the interpretation below its own symbol character. For add-ons, each digit prints above its own symbol character.
+    /// The drawings do not center digit groups, so placement is per digit.
     /// </summary>
     /// <param name="digits">The digits to place.</param>
     /// <param name="firstCellLeft">The left edge of the first character cell, in modules.</param>
@@ -365,30 +365,6 @@ internal static class EanUpcEncoder
     }
 
     /// <summary>
-    /// Returns the prefix of a hyphenated number that contains the given count of digits, preserving the caller's hyphenation and trimming a trailing hyphen.
-    /// The ISBN caption reproduces the number as the caller wrote it, without its check character.
-    /// </summary>
-    /// <param name="text">The hyphenated input.</param>
-    /// <param name="digitCount">The number of digits the prefix must contain.</param>
-    /// <returns>The hyphenated prefix.</returns>
-    public static ReadOnlySpan<char> TakeHyphenatedPrefix(ReadOnlySpan<char> text, int digitCount)
-    {
-        int digits = 0;
-        int end = 0;
-        while (digits < digitCount)
-        {
-            if (text[end] != '-')
-            {
-                digits++;
-            }
-
-            end++;
-        }
-
-        return text[..end];
-    }
-
-    /// <summary>
     /// Encodes thirteen validated digits into an EAN-13 symbol.
     /// </summary>
     /// <param name="digits">The thirteen digits, with the check digit already validated.</param>
@@ -399,7 +375,7 @@ internal static class EanUpcEncoder
 
     /// <summary>
     /// Encodes thirteen validated digits into an EAN-13 symbol with a caption above the bars. The ISBN, ISMN and ISSN symbologies print their own number above
-    /// their EAN-13 symbol. The caption stands one module above the bar tops, and the room it needs belongs to the renderer, which is what knows the font.
+    /// their EAN-13 symbol. The caption stands one module above the bar tops. The renderer reserves the room for the caption, because it knows the font.
     /// </summary>
     /// <param name="digits">The thirteen digits, with the check digit already validated.</param>
     /// <param name="options">The options that control layout choices.</param>

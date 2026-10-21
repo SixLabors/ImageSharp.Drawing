@@ -43,7 +43,7 @@ public class PlesseySymbologyTests
         Assert.Equal(Encode("01234ABCD"), validated);
 
         Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new PlesseySymbology(true), "01234ABCDCD", new BarcodeOptions()));
-        Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new PlesseySymbology(true), "DC", new BarcodeOptions()));
+        Assert.ThrowsAny<ArgumentException>(() => SymbolEncoder.Encode(new PlesseySymbology(true), "DC", new BarcodeOptions()));
     }
 
     /// <summary>

@@ -59,7 +59,7 @@ public sealed class FacingIdentificationMarkSymbology : BarcodeSymbology
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        if (text.Length != 1 || text[0] < 'A' || text[0] > 'E')
+        if (text.Length != 1 || !char.IsBetween(text[0], 'A', 'E'))
         {
             throw new ArgumentException($"A Facing Identification Mark is one of the patterns A to E; got \"{text}\".", nameof(text));
         }

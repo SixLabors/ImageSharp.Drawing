@@ -236,8 +236,8 @@ public abstract partial class DrawingCanvas
     /// <param name="origin">The top left corner of the barcode, in pixels.</param>
     /// <param name="text">The text to encode.</param>
     /// <exception cref="ArgumentException">
-    /// The text is not valid for the symbology, or the options break a requirement of the standard of the symbology, such as its minimum bar
-    /// height or its maximum size.
+    /// The text is not valid for the symbology, or the options break a requirement of the standard of the symbology. Examples are an X
+    /// dimension for a symbol whose size the standard fixes, and a text line that does not fit its span at the smallest printed height.
     /// </exception>
     public void DrawBarcode(BarcodeSymbology symbology, BarcodeOptions options, PointF origin, ReadOnlySpan<char> text)
     {
@@ -269,7 +269,7 @@ public abstract partial class DrawingCanvas
     /// <param name="second">The text of the second symbology of the composite.</param>
     /// <exception cref="ArgumentException">
     /// The composite does not have two parts, a text is not valid, the parts do not join, or the options break a requirement of the standard of the
-    /// symbology, such as its minimum bar height or its maximum size.
+    /// symbology. Examples are an X dimension for a symbol whose size the standard fixes, and a text line that does not fit its span.
     /// </exception>
     public void DrawBarcode(CompositeBarcodeSymbology symbology, BarcodeOptions options, PointF origin, ReadOnlySpan<char> first, ReadOnlySpan<char> second)
     {
@@ -291,7 +291,7 @@ public abstract partial class DrawingCanvas
     /// <param name="third">The text of the third symbology of the composite.</param>
     /// <exception cref="ArgumentException">
     /// The composite does not have three parts, a text is not valid, the parts do not join, or the options break a requirement of the standard of the
-    /// symbology, such as its minimum bar height or its maximum size.
+    /// symbology. Examples are an X dimension for a symbol whose size the standard fixes, and a text line that does not fit its span.
     /// </exception>
     public void DrawBarcode(
         CompositeBarcodeSymbology symbology,
@@ -316,8 +316,8 @@ public abstract partial class DrawingCanvas
     /// <param name="text">The text to encode.</param>
     /// <returns>The advance, the bounds and the renderable bounds of the barcode.</returns>
     /// <exception cref="ArgumentException">
-    /// The text is not valid for the symbology, or the options break a requirement of the standard of the symbology, such as its minimum bar
-    /// height or its maximum size.
+    /// The text is not valid for the symbology, or the options break a requirement of the standard of the symbology. Examples are an X
+    /// dimension for a symbol whose size the standard fixes, and a text line that does not fit its span at the smallest printed height.
     /// </exception>
     public abstract BarcodeMetrics MeasureBarcode(BarcodeSymbology symbology, BarcodeOptions options, PointF origin, ReadOnlySpan<char> text);
 
@@ -332,7 +332,7 @@ public abstract partial class DrawingCanvas
     /// <returns>The advance, the bounds and the renderable bounds of the barcode.</returns>
     /// <exception cref="ArgumentException">
     /// The composite does not have two parts, a text is not valid, the parts do not join, or the options break a requirement of the standard of the
-    /// symbology, such as its minimum bar height or its maximum size.
+    /// symbology. Examples are an X dimension for a symbol whose size the standard fixes, and a text line that does not fit its span.
     /// </exception>
     public abstract BarcodeMetrics MeasureBarcode(
         CompositeBarcodeSymbology symbology,
@@ -353,7 +353,7 @@ public abstract partial class DrawingCanvas
     /// <returns>The advance, the bounds and the renderable bounds of the barcode.</returns>
     /// <exception cref="ArgumentException">
     /// The composite does not have three parts, a text is not valid, the parts do not join, or the options break a requirement of the standard of the
-    /// symbology, such as its minimum bar height or its maximum size.
+    /// symbology. Examples are an X dimension for a symbol whose size the standard fixes, and a text line that does not fit its span.
     /// </exception>
     public abstract BarcodeMetrics MeasureBarcode(
         CompositeBarcodeSymbology symbology,

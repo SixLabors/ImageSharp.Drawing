@@ -72,6 +72,6 @@ internal static class Iso3166
     /// <param name="field">The bit field.</param>
     /// <param name="bit">The bit index.</param>
     /// <returns><see langword="true"/> when the bit is set.</returns>
-    private static bool IsSet(ReadOnlySpan<byte> field, int bit)
+    public static bool IsSet(ReadOnlySpan<byte> field, int bit)
         => (uint)(bit >> 3) < (uint)field.Length && (field[bit >> 3] & (0x80 >> (bit & 7))) != 0;
 }

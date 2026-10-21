@@ -16,29 +16,29 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal static class PlesseyEncoder
 {
     /// <summary>
-    /// The characters the symbology encodes, in value order.
-    /// </summary>
-    public const string Characters = "0123456789ABCDEF";
-
-    /// <summary>
     /// The largest number of characters a symbol carries. The symbology sets no maximum.
     /// </summary>
     public const int MaximumLength = 500;
 
     /// <summary>
+    /// The number of check characters a symbol carries, which hold the eight check bits.
+    /// </summary>
+    public const int CheckCharacterCount = 2;
+
+    /// <summary>
+    /// The characters the symbology encodes, in value order.
+    /// </summary>
+    private const string Characters = "0123456789ABCDEF";
+
+    /// <summary>
     /// The quiet zone in modules on each side: the margin of "4 bits" the symbology gives, at five modules per bit.
     /// </summary>
-    public const int QuietZone = 20;
+    private const int QuietZone = 20;
 
     /// <summary>
     /// The nominal X dimension in millimetres: one fifth of the 1.020 mm pitch.
     /// </summary>
-    public const double NominalXDimension = 1.020 / 5;
-
-    /// <summary>
-    /// The number of check characters a symbol carries, which hold the eight check bits.
-    /// </summary>
-    public const int CheckCharacterCount = 2;
+    private const double NominalXDimension = 1.020 / 5;
 
     /// <summary>
     /// The number of bits in a character.
@@ -56,8 +56,8 @@ internal static class PlesseyEncoder
     private const float NominalBarHeightFraction = 0.15F;
 
     /// <summary>
-    /// The generator polynomial of the check, x^8 + x^7 + x^6 + x^5 + x^3 + 1, as its nine coefficients from the lowest power to the highest, the order the
-    /// bits are sent in, in bits 0 to 8: the coefficients 1, 1, 1, 1, 0, 1, 0, 0, 1.
+    /// The generator polynomial of the check, x^8 + x^7 + x^6 + x^5 + x^3 + 1, as its nine coefficients from the highest power to the lowest in bits 0 to 8:
+    /// the coefficients 1, 1, 1, 1, 0, 1, 0, 0, 1. Bit 0 holds the leading term, which <see cref="DivisionStep"/> tests.
     /// </summary>
     private const int GeneratorMask = 0b1_0010_1111;
 
@@ -105,9 +105,9 @@ internal static class PlesseyEncoder
     };
 
     /// <summary>
-    /// Calculates the two check characters over the data. The data bits, least significant bit of each character first, are divided by the generator
-    /// polynomial, and the eight bit remainder is sent after the data in the same order, so its low four bits form the first check character and its high four
-    /// bits the second.
+    /// Calculates the two check characters over the data. The encoder divides the data bits by the generator polynomial, least significant bit of each
+    /// character first. The eight bit remainder follows the data in the same order. As a result, the low four bits of the remainder form the first check
+    /// character, and the high four bits form the second.
     /// </summary>
     /// <param name="text">The data the check covers, already validated.</param>
     /// <param name="checks">The buffer that receives the two check characters.</param>

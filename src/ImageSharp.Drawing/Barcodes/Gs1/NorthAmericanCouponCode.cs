@@ -15,14 +15,14 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal static class NorthAmericanCouponCode
 {
     /// <summary>
-    /// The length the company prefix length indicator adds to. Table C: "an offset of 6 is added to the VLI to get the actual length".
-    /// </summary>
-    public const int CompanyPrefixOffset = 6;
-
-    /// <summary>
     /// The length of the offer code. Table C: "The Offer Code is a 6-digit number".
     /// </summary>
     public const int OfferCodeLength = 6;
+
+    /// <summary>
+    /// The length the company prefix length indicator adds to. Table C: "an offset of 6 is added to the VLI to get the actual length".
+    /// </summary>
+    private const int CompanyPrefixOffset = 6;
 
     /// <summary>
     /// The length the serial number length indicator and the retailer GS1 Company Prefix or GLN length indicator add to. Table C gives both elements 6 digits
@@ -149,7 +149,14 @@ internal static class NorthAmericanCouponCode
     /// </summary>
     private ref struct CouponReader
     {
+        /// <summary>
+        /// The coupon code, all digits.
+        /// </summary>
         private readonly ReadOnlySpan<char> data;
+
+        /// <summary>
+        /// The position of the next element.
+        /// </summary>
         private int position;
 
         /// <summary>

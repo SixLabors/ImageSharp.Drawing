@@ -52,7 +52,7 @@ public class FourStateMailmarkSymbologyTests
         Assert.Equal(4, numbers[15]);
 
         int[] check = new int[6];
-        FourStateMailmarkEncoder.CheckNumbers(numbers, [1, 17, 26, 30, 27, 30, 24], check);
+        FourStateMailmarkEncoder.CheckNumbers(numbers, check);
 
         Assert.Equal([14, 7, 23, 3, 23, 15], check);
 
@@ -62,7 +62,7 @@ public class FourStateMailmarkSymbologyTests
         Assert.Equal(4, numbersL[18]);
 
         int[] checkL = new int[7];
-        FourStateMailmarkEncoder.CheckNumbers(numbersL, [1, 5, 9, 5, 26, 17, 25, 22], checkL);
+        FourStateMailmarkEncoder.CheckNumbers(numbersL, checkL);
 
         Assert.Equal([20, 1, 20, 7, 14, 11, 18], checkL);
     }

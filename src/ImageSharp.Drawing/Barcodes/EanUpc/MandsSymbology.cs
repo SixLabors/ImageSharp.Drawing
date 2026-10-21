@@ -14,8 +14,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 public sealed class MandsSymbology : BarcodeSymbology
 {
     /// <summary>
-    /// The quiet zone in modules. Wider than the EAN-8 minimum of seven so the M and S letters, placed twelve modules before and two modules after the symbol,
-    /// stay inside the reserved area.
+    /// The quiet zone in modules. This quiet zone is wider than the EAN-8 minimum of seven. The M and S letters sit twelve modules before and two modules after
+    /// the symbol. The wider quiet zone keeps these letters inside the reserved area.
     /// </summary>
     private const int QuietZone = 12;
 
@@ -34,10 +34,7 @@ public sealed class MandsSymbology : BarcodeSymbology
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        if (text.Length is not (7 or 8))
-        {
-            throw new ArgumentException($"An M&S barcode must be 7 or 8 characters; got {text.Length}.", nameof(text));
-        }
+        Guard.MustBeBetweenOrEqualTo(text.Length, 7, 8, nameof(text));
 
         // An M&S number is seven or eight characters with the check digit last, and a seven character one carries an implied leading zero, so the padded
         // form fits eight inline characters.

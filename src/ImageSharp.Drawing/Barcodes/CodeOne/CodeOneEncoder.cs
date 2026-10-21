@@ -17,7 +17,7 @@ internal static class CodeOneEncoder
     /// <summary>
     /// The longest input: version H holds 1480 data codewords, and Decimal mode, the densest, writes three digits in 10 bits, so at most 3550 characters fit.
     /// </summary>
-    public const int MaximumLength = 3550;
+    private const int MaximumLength = 3550;
 
     /// <summary>
     /// The ASCII codeword that pads the data codewords to the capacity of the version.
@@ -390,19 +390,19 @@ internal static class CodeOneEncoder
     /// </summary>
     /// <param name="text">The digits.</param>
     /// <param name="dataCount">The data codeword count of the version.</param>
-    /// <param name="codewords">The buffer the codewords are written to.</param>
+    /// <param name="codewords">The buffer that receives the codewords.</param>
+    /// <exception cref="ArgumentException">The text is not digits, or has more digits than the version carries.</exception>
     private static void EncodeNumber(ReadOnlySpan<char> text, int dataCount, Span<int> codewords)
     {
-        if (text.Length > 18 || text.ContainsAnyExceptInRange('0', '9'))
+        // S-10, S-20 and S-30 carry 6, 12 and 18 digits in 4, 8 and 12 codewords, three digits for every two codewords. The largest number of that many
+        // digits, plus one, then fits the 5 bits of each codeword: 10^6 is under 2^20, 10^12 under 2^40 and 10^18 under 2^60.
+        int maximumDigits = dataCount * 3 / 2;
+        if (text.Length > maximumDigits || text.ContainsAnyExceptInRange('0', '9'))
         {
-            throw new ArgumentException("A Code One S version carries 1 to 18 digits.", nameof(text));
+            throw new ArgumentException($"This Code One S version carries 1 to {maximumDigits} digits.", nameof(text));
         }
 
         ulong value = ulong.Parse(text, System.Globalization.CultureInfo.InvariantCulture) + 1;
-        if (value >> (5 * dataCount) != 0)
-        {
-            throw new ArgumentException("The number does not fit in the requested Code One S version.", nameof(text));
-        }
 
         for (int i = dataCount - 1; i >= 0; i--)
         {
@@ -430,15 +430,15 @@ internal static class CodeOneEncoder
     }
 
     /// <summary>
-    /// Fills the entries the look-ahead reads, one for each position of the message and one past its end. Each entry holds three runs from its position: the
-    /// digits that start there, the distance to the next X12 terminator, carriage return, asterisk or greater than, and the distance to the next character X12
-    /// cannot carry. The entry past the end stops each run, and a distance with no end stands past the end. Each entry also holds the running sums of the costs
-    /// of the ASCII, C40, Text, X12 and Byte modes before its position.
+    /// Fills the entries the look-ahead reads, one for each position of the message and one past its end. Each entry holds three runs from its position. The
+    /// first run is the digits that start there. The second run is the distance to the next X12 terminator, carriage return, asterisk or greater than. The
+    /// third run is the distance to the next character that X12 cannot carry. The entry past the end stops each run, and a distance with no end stands past the
+    /// end. Each entry also holds the running sums of the costs of the ASCII, C40, Text, X12 and Byte modes before its position.
     /// <para>
-    /// A digit costs half a codeword in ASCII mode and a character above 127 two whole codewords; any other character rounds the count up first, because it
-    /// cannot share a codeword with a digit before it. A basic set character costs two thirds of a codeword in C40, Text and X12 mode, one of three values in
-    /// two codewords. A shifted character costs two values and an Upper Shift two more. X12 costs a character it cannot carry 10/3 codewords, or 13/3 above
-    /// 127. Byte mode costs one codeword a byte.
+    /// In ASCII mode, a digit costs half a codeword, and a character above 127 costs two whole codewords. Any other character rounds the count up first,
+    /// because it cannot share a codeword with a digit before it. In C40, Text and X12 mode, a basic set character costs two thirds of a codeword, one of three
+    /// values in two codewords. A shifted character costs two values and an Upper Shift two more. X12 costs a character it cannot carry 10/3 codewords, or
+    /// 13/3 above 127. Byte mode costs one codeword a byte.
     /// </para>
     /// </summary>
     /// <param name="message">The message, characters U+0000 to U+00FF.</param>
@@ -687,8 +687,9 @@ internal static class CodeOneEncoder
             cells[(dots[d + 1] * columns) + dots[d]] = 1;
         }
 
-        // The data cells, in reading order, are the data grid of the version row by row. A brick is two rows high: an 8-bit codeword is 4 modules wide, its
-        // first four bits on top, and two 5-bit codewords make a brick 5 modules wide, the first three bits of each on top.
+        // The data cells, in reading order, are the data grid of the version row by row. A brick is two rows high. An 8-bit codeword is 4 modules wide, with
+        // its first four bits on top. Two 5-bit codewords make a brick 5 modules wide: the top row holds the first three bits of the first codeword and then
+        // the first two bits of the second.
         int dataColumns = info.DataColumns;
         bool numeric = info.IsNumeric;
         int brickWidth = numeric ? 5 : 4;

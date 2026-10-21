@@ -4,9 +4,9 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Shared encodation and layout for the two and five digit EAN/UPC add-on symbols. Add-on bars are uniform in height and, unlike the main symbols, the GS1
-/// General Specifications print the human readable interpretation above the bars, so the digits face the bar tops. The room they need belongs to the renderer,
-/// which is what knows the font.
+/// Shared encodation and layout for the two and five digit EAN/UPC add-on symbols. Add-on bars are uniform in height. For add-ons, unlike the main symbols,
+/// the GS1 General Specifications print the human readable interpretation above the bars. As a result, the digits face the bar tops. The renderer reserves the
+/// room for the digits, because it knows the font.
 /// </summary>
 internal static class AddOnLayout
 {

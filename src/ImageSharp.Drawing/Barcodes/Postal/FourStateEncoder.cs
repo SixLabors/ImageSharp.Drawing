@@ -53,10 +53,10 @@ internal static class FourStateEncoder
         int barPixels = options.ModulePixels(xDimension);
         double spacePixels = Math.Max(1, Math.Round(metrics.SpaceUnitsAt(xDimension) * (double)metrics.RunUnit * barPixels, MidpointRounding.AwayFromZero));
 
-        // A specification that limits the bars per inch limits the pitch, a bar and a space: a pitch of Dpi / n pixels is n bars per inch. Whole pixels can
-        // leave that range, at a bar width at the end of its range or at a low resolution, so the pitch is clamped in whole pixels as ResolveXDimension clamps
-        // the module: the largest whole number of pixels at or under the largest pitch, and the smallest at or over the smallest pitch with a space of at
-        // least one pixel. The smallest pitch applies last.
+        // A specification that limits the bars per inch also limits the pitch, which is one bar and one space. A pitch of Dpi / n pixels is n bars per inch.
+        // Whole pixels can leave that range at a bar width at the end of its range or at a low resolution. Thus the code clamps the pitch in whole pixels, as
+        // ResolveXDimension clamps the module. The upper limit is the largest whole number of pixels at or under the largest pitch. The lower limit is the
+        // smallest whole number of pixels at or over the smallest pitch, with a space of at least one pixel. The lower limit applies last.
         double highest = Math.Floor((options.Dpi / metrics.MinimumBarsPerInch) + BarcodeOptions.LimitTolerance);
         double lowest = Math.Max(barPixels + 1, Math.Ceiling((options.Dpi / metrics.MaximumBarsPerInch) - BarcodeOptions.LimitTolerance));
         int space = (int)Math.Max(Math.Min(barPixels + spacePixels, highest), lowest) - barPixels;

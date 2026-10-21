@@ -33,11 +33,6 @@ internal static class MicroPdf417Encoder
     private const int QuietZone = 1;
 
     /// <summary>
-    /// The most codewords a symbol holds, four columns of 44 rows.
-    /// </summary>
-    private const int MaximumCodewords = 176;
-
-    /// <summary>
     /// The number of entries in each of the two row address pattern tables.
     /// </summary>
     private const int AddressPatternCount = 52;
@@ -242,7 +237,7 @@ internal static class MicroPdf417Encoder
         ref BarcodeSymbol symbol)
     {
         // The data codewords, the pad codewords that fill the data region with 900, and the error correction codewords. A MicroPDF417 symbol has no Symbol
-        // Length Descriptor. A symbol holds at most MaximumCodewords codewords, so they fit inline.
+        // Length Descriptor. A symbol holds at most 176 codewords, four columns of 44 rows, so they fit inline.
         int k = size.ErrorCorrection;
         InlineArray256<int> codewordStorage = default;
         Span<int> codewords = ((Span<int>)codewordStorage)[..(size.Columns * size.Rows)];
@@ -326,7 +321,7 @@ internal static class MicroPdf417Encoder
     /// <summary>
     /// The row address patterns of the first row of a symbol, each counted from 1. Every row after it takes the next pattern of each table.
     /// </summary>
-    internal readonly struct AddressPatterns
+    public readonly struct AddressPatterns
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="AddressPatterns"/> struct.

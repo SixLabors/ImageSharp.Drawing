@@ -14,49 +14,44 @@ internal static class FourStateMailmarkEncoder
     /// <summary>
     /// The length of the application string of a Mailmark barcode C.
     /// </summary>
-    public const int LengthC = 22;
+    private const int LengthC = 22;
 
     /// <summary>
     /// The length of the application string of a Mailmark barcode L.
     /// </summary>
-    public const int LengthL = 26;
+    private const int LengthL = 26;
 
     /// <summary>
     /// The number of bars in a group, which carries one six-bit extender group.
     /// </summary>
-    public const int BarsPerGroup = 3;
+    private const int BarsPerGroup = 3;
 
     /// <summary>
     /// The allowed characters of the Format field, Table 2, in value order.
     /// </summary>
-    public const string FormatCharacters = "01234";
+    private const string FormatCharacters = "01234";
 
     /// <summary>
     /// The allowed characters of the Version ID field, Table 2, in value order. Section 2.2.1: the encoding process "is valid only for cases in which the value
     /// of the Version ID External User Field is 1".
     /// </summary>
-    public const string VersionCharacters = "1234";
+    private const string VersionCharacters = "1234";
 
     /// <summary>
     /// The allowed characters of the Class field, Table 2, in value order.
     /// </summary>
-    public const string ClassCharacters = "0123456789ABCDE";
-
-    /// <summary>
-    /// The full alphabetic character type of a domestic sorting code, Table 3.
-    /// </summary>
-    public const string FullAlphabetic = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    private const string ClassCharacters = "0123456789ABCDE";
 
     /// <summary>
     /// The limited alphabetic character type of a domestic sorting code, Table 3.
     /// </summary>
-    public const string LimitedAlphabetic = "ABDEFGHJLNPQRSTUWXYZ";
+    private const string LimitedAlphabetic = "ABDEFGHJLNPQRSTUWXYZ";
 
     /// <summary>
     /// The international designation of the destination field, section 2.2.2: "a nine-character string with five trailing spaces", whose internal user field
     /// value is zero.
     /// </summary>
-    public const string International = "XY11     ";
+    private const string International = "XY11     ";
 
     /// <summary>
     /// The length of the Destination Post Code plus DPS field.
@@ -106,16 +101,6 @@ internal static class FourStateMailmarkEncoder
         1UL + 5_408_000_000UL + 5_408_000_000UL + 54_080_000_000UL + 140_608_000_000UL,
         1UL + 5_408_000_000UL + 5_408_000_000UL + 54_080_000_000UL + 140_608_000_000UL + 208_000_000UL,
     ];
-
-    /// <summary>
-    /// Gets the generator polynomial of barcode C, section 2.2.5, from the x^6 term down: x^6 + 17x^5 + 26x^4 + 30x^3 + 27x^2 + 30x + 24.
-    /// </summary>
-    private static ReadOnlySpan<byte> GeneratorC => [1, 17, 26, 30, 27, 30, 24];
-
-    /// <summary>
-    /// Gets the generator polynomial of barcode L, section 2.2.5, from the x^7 term down: x^7 + 5x^6 + 9x^5 + 5x^4 + 26x^3 + 17x^2 + 25x + 22.
-    /// </summary>
-    private static ReadOnlySpan<byte> GeneratorL => [1, 5, 9, 5, 26, 17, 25, 22];
 
     /// <summary>
     /// Gets Table 6 of barcode C: the extender group of each data symbol D0 to D15 and check symbol C0 to C5.
@@ -177,7 +162,7 @@ internal static class FourStateMailmarkEncoder
         InlineArray26<int> numberStorage = default;
         Span<int> numbers = ((Span<int>)numberStorage)[..(dataCount + checkCount)];
         DataNumbers(consolidated, numbers[..dataCount], thirtyValued);
-        CheckNumbers(numbers[..dataCount], isL ? GeneratorL : GeneratorC, numbers[dataCount..]);
+        CheckNumbers(numbers[..dataCount], numbers[dataCount..]);
 
         ReadOnlySpan<byte> groups = isL ? ExtenderGroupsL : ExtenderGroupsC;
         InlineArray26<byte> groupStorage = default;
@@ -217,7 +202,7 @@ internal static class FourStateMailmarkEncoder
                 switch ((char)types[i])
                 {
                     case 'F':
-                        matches = c is >= 'A' and <= 'Z';
+                        matches = char.IsAsciiLetterUpper(c);
                         value = (value * 26) + (ulong)(c - 'A');
                         break;
                     case 'N':
@@ -271,21 +256,15 @@ internal static class FourStateMailmarkEncoder
     /// check numbers and divided by the generator polynomial over the Galois field of 32 values.
     /// </summary>
     /// <param name="data">The data numbers.</param>
-    /// <param name="generator">The generator polynomial coefficients as section 2.2.5 prints them, highest term first.</param>
-    /// <param name="check">The buffer that receives the check numbers, C0 first.</param>
-    public static void CheckNumbers(ReadOnlySpan<int> data, ReadOnlySpan<byte> generator, Span<int> check)
+    /// <param name="check">The buffer that receives the check numbers, C0 first. Its length is the number of check numbers.</param>
+    public static void CheckNumbers(ReadOnlySpan<int> data, Span<int> check)
     {
-        // The field takes the coefficients from the x^0 term up, with the leading 1 implied, so the printed order reverses. Barcode L has the most check
-        // numbers, 7.
-        int checkCount = generator.Length - 1;
-        InlineArray8<int> coefficientStorage = default;
-        Span<int> coefficients = ((Span<int>)coefficientStorage)[..checkCount];
-        for (int j = 0; j < checkCount; j++)
-        {
-            coefficients[j] = generator[checkCount - j];
-        }
-
-        Field.Remainder(data, 1, data.Length, coefficients, check);
+        // Section 2.2.5 prints the generator polynomials of barcode C and barcode L. Each is the product of (x + α^i) for i = 1 to the number of check
+        // numbers, so the field calculates it from the first root α^1. Barcode L has the most check numbers, 7.
+        InlineArray7<int> generatorStorage = default;
+        Span<int> generator = ((Span<int>)generatorStorage)[..check.Length];
+        Field.Generator(1, generator);
+        Field.Remainder(data, 1, data.Length, generator, check);
     }
 
     /// <summary>
@@ -294,7 +273,7 @@ internal static class FourStateMailmarkEncoder
     /// </summary>
     /// <param name="extenderGroups">The extender groups in physical order.</param>
     /// <param name="states">The buffer that receives the bar states.</param>
-    public static void Bars(ReadOnlySpan<byte> extenderGroups, Span<FourState> states)
+    private static void Bars(ReadOnlySpan<byte> extenderGroups, Span<FourState> states)
     {
         for (int group = 0; group < extenderGroups.Length; group++)
         {

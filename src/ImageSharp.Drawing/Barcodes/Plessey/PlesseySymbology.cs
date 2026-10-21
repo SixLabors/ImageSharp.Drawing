@@ -63,10 +63,7 @@ public sealed class PlesseySymbology : BarcodeSymbology
         Guard.MustBeLessThanOrEqualTo(text.Length, PlesseyEncoder.MaximumLength, nameof(text));
 
         int minimum = this.ValidateCheckCharacters ? PlesseyEncoder.CheckCharacterCount + 1 : 1;
-        if (text.Length < minimum)
-        {
-            throw new ArgumentException($"Plessey carries at least one data character; got {text.Length} characters.", nameof(text));
-        }
+        Guard.MustBeGreaterThanOrEqualTo(text.Length, minimum, nameof(text));
 
         SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
         while (codePoints.MoveNext())

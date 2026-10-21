@@ -21,11 +21,6 @@ public sealed class PlanetSymbology : BarcodeSymbology
 
         BarcodeSymbology.ValidateDigits(text);
 
-        // At most thirteen digits and the correction digit.
-        InlineArray14<char> digitStorage = default;
-        Span<char> digits = ((Span<char>)digitStorage)[..(text.Length + 1)];
-        text.CopyTo(digits);
-        digits[^1] = (char)('0' + UspsPostalEncoder.CorrectionDigit(text));
-        UspsPostalEncoder.BuildSymbol(digits, options, false, ref symbol);
+        UspsPostalEncoder.BuildSymbol(text, options, false, ref symbol);
     }
 }

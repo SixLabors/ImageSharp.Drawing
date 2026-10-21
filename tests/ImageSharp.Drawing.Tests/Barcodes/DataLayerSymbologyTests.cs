@@ -178,7 +178,7 @@ public class DataLayerSymbologyTests
     [InlineData("0642119")]
     [InlineData("064211A")]
     public void Mands_RejectsInvalidInput(string text)
-        => Assert.Throws<ArgumentException>(() => Encode(new MandsSymbology(), text));
+        => Assert.ThrowsAny<ArgumentException>(() => Encode(new MandsSymbology(), text));
 
     /// <summary>
     /// Encodes the text with the default options.

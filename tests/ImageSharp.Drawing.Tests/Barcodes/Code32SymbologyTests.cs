@@ -91,6 +91,16 @@ public class Code32SymbologyTests
             1e-12);
 
     /// <summary>
+    /// Section 4.4 e) of ISO/IEC 16388 recommends a bar height of at least 15 % of the symbol width. The wide element rounds to a whole pixel, so the drawn
+    /// width can differ from the nominal ratio of 2.5. At 0.42 mm and 300 dots per inch, a module is 5 pixels and a wide element is 13 pixels, a ratio of 2.6.
+    /// The bars must still be at least 15 % of the width that the symbol draws at.
+    /// </summary>
+    [Fact]
+    public void DrawsTheBarsAtLeastFifteenPercentOfTheDrawnWidth()
+        => SymbolEncoder.Encode(new Code32Symbology(), "012345676", new BarcodeOptions { XDimension = 0.42 }, static (ref symbol) =>
+            Assert.True(symbol.BarHeights[0] >= 0.15F * symbol.WidthInModules, $"{symbol.BarHeights[0]} < 0.15 x {symbol.WidthInModules}"));
+
+    /// <summary>
     /// The symbology calculates the check digit of section 3 when the input has eight digits, so the eight digits give the same bars as the nine.
     /// </summary>
     [Fact]

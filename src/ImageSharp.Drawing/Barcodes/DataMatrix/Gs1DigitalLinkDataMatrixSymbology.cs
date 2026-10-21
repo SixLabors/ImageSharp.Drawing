@@ -14,8 +14,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// the order of the URI. The URI does not print.
 /// </para>
 /// <para>
-/// Table 5-46, symbol specification table 1 addendum 2, gives an X dimension of 0.396 to 0.990 millimetres with a target of 0.495, and an X dimension outside
-/// that range is clamped to it.
+/// Table 5-46, symbol specification table 1 addendum 2, gives an X dimension of 0.396 to 0.990 millimetres with a target of 0.495. An X dimension outside
+/// that range draws at the nearest limit.
 /// </para>
 /// </summary>
 public sealed class Gs1DigitalLinkDataMatrixSymbology : BarcodeSymbology

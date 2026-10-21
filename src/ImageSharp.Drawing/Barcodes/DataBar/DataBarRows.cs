@@ -4,8 +4,8 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Builds the rows of the stacked GS1 DataBar symbols from their modules. A row or a separator row can start and end with a light module, which a bar sequence
-/// cannot, so a zero width bar stands at a light end.
+/// Builds the rows of the stacked GS1 DataBar symbols from their modules. A row or a separator row can start and end with a light module. A bar sequence cannot
+/// start or end with a light module, so a zero width bar stands at a light end.
 /// </summary>
 internal static class DataBarRows
 {

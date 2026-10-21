@@ -13,17 +13,17 @@ internal static class IntelligentMailEncoder
     /// <summary>
     /// The number of bars in a symbol.
     /// </summary>
-    public const int BarCount = 65;
+    private const int BarCount = 65;
 
     /// <summary>
     /// The number of digits in the tracking code.
     /// </summary>
-    public const int TrackingLength = 20;
+    private const int TrackingLength = 20;
 
     /// <summary>
     /// The number of codewords, and of characters, in a symbol.
     /// </summary>
-    public const int CharacterCount = 10;
+    private const int CharacterCount = 10;
 
     /// <summary>
     /// The number of entries in the table of characters with five bits set, Table 19.
@@ -41,14 +41,54 @@ internal static class IntelligentMailEncoder
     private const int GeneratorPolynomial = 0xF35;
 
     /// <summary>
-    /// The dimensions of Figure 6, which gives every vertical dimension as a minimum and a maximum from the centerline: a full bar of 0.125 to 0.165 inch, a
-    /// tracker of 0.039 to 0.057 inch and an ascender or descender bar of 0.083 to 0.111 inch. The metrics are the middle of each range: a full bar of 0.145
-    /// inch, a tracker of 0.048 inch and an extender of 0.0485 inch above or below it. Section 2.3.1 gives the bar width of 0.020 inch and an "overall barcode
-    /// pitch of 22±2 bars per inch", and section 2.3.2 a clear zone of 0.125 inch on each end and 0.028 inch above and below the bars. Section 2.4.1 keeps the
-    /// human readable information at least 0.028 inch below the bars, and section 2.4.2 aligns "the left edge of the leftmost digit" with the leftmost bar. The
-    /// pitch is 20 to 24 bars per inch. The lengths of section 2.3.1 are that range over the 64 pitches: 3.225 inches is 64 / 20 inch and the widest bar of
-    /// 0.025 inch, and 2.667 inches is 64 / 24 inch, rounded up. The full bar is clamped to the "overall barcode height of 0.125 inch to 0.165 inch" of
-    /// section 2.3.1. At each end of that range, the tracker and the ascender and descender bars stay inside their own ranges.
+    /// The number of bits of the frame check sequence, section 2.2.2.
+    /// </summary>
+    private const int FrameCheckBits = 11;
+
+    /// <summary>
+    /// The mask of the bits of the frame check sequence.
+    /// </summary>
+    private const int FrameCheckMask = (1 << FrameCheckBits) - 1;
+
+    /// <summary>
+    /// The most significant bit of the frame check sequence.
+    /// </summary>
+    private const int FrameCheckTopBit = 1 << (FrameCheckBits - 1);
+
+    /// <summary>
+    /// The radix of the rightmost codeword J, section 2.2.3.
+    /// </summary>
+    private const uint CodewordJRadix = 636;
+
+    /// <summary>
+    /// The radix of the codewords I to B, section 2.2.3: one value for each character of Table 19 and Table 20.
+    /// </summary>
+    private const uint CodewordRadix = FiveOf13Length + TwoOf13Length;
+
+    /// <summary>
+    /// The value that codeword A gains when the most significant bit of the frame check sequence is set, section 2.2.4.
+    /// </summary>
+    private const int CodewordAOffset = 659;
+
+    /// <summary>
+    /// The mask of the 13 bits of a character, section 2.2.5.
+    /// </summary>
+    private const int CharacterMask = (1 << 13) - 1;
+
+    /// <summary>
+    /// The dimensions of Figure 6, which gives every vertical dimension as a minimum and a maximum from the centerline:
+    /// <list type="bullet">
+    /// <item><description>A full bar of 0.125 to 0.165 inch.</description></item>
+    /// <item><description>A tracker of 0.039 to 0.057 inch.</description></item>
+    /// <item><description>An ascender or descender bar of 0.083 to 0.111 inch.</description></item>
+    /// </list>
+    /// The metrics are the middle of each range: a full bar of 0.145 inch, a tracker of 0.048 inch and an extender of 0.0485 inch above or below it. Section
+    /// 2.3.1 gives the bar width of 0.020 inch and an "overall barcode pitch of 22±2 bars per inch". Section 2.3.2 gives a clear zone of 0.125 inch on each end
+    /// and 0.028 inch above and below the bars. Section 2.4.1 keeps the human readable information at least 0.028 inch below the bars. Section 2.4.2 aligns
+    /// "the left edge of the leftmost digit" with the leftmost bar. The pitch is 20 to 24 bars per inch. The lengths of section 2.3.1 are that range over the 64
+    /// pitches. 3.225 inches is 64 / 20 inch and the widest bar of 0.025 inch. 2.667 inches is 64 / 24 inch, rounded up. The code clamps the full bar to the
+    /// "overall barcode height of 0.125 inch to 0.165 inch" of section 2.3.1. At each end of that range, the tracker and the ascender and descender bars stay
+    /// inside their own ranges.
     /// </summary>
     public static readonly FourStateMetrics Metrics = new(
         UspsPostalEncoder.NominalXDimension,
@@ -225,7 +265,7 @@ internal static class IntelligentMailEncoder
     /// <returns>The frame check sequence.</returns>
     public static int FrameCheckSequence(UInt128 data)
     {
-        int fcs = 0x7FF;
+        int fcs = FrameCheckMask;
         int word = ((int)(data >> 96) & 0xFF) << 5;
         for (int bit = 2; bit < 8; bit++)
         {
@@ -246,7 +286,7 @@ internal static class IntelligentMailEncoder
         return fcs;
 
         static int Shift(int fcs, int word)
-            => (((fcs ^ word) & 0x400) != 0 ? (fcs << 1) ^ GeneratorPolynomial : fcs << 1) & 0x7FF;
+            => (((fcs ^ word) & FrameCheckTopBit) != 0 ? (fcs << 1) ^ GeneratorPolynomial : fcs << 1) & FrameCheckMask;
     }
 
     /// <summary>
@@ -258,18 +298,18 @@ internal static class IntelligentMailEncoder
     /// <param name="codewords">The buffer that receives the ten codewords, A first.</param>
     public static void Codewords(UInt128 data, int fcs, Span<int> codewords)
     {
-        codewords[9] = (int)(data % 636U) * 2;
-        data /= 636U;
+        codewords[9] = (int)(data % CodewordJRadix) * 2;
+        data /= CodewordJRadix;
         for (int i = 8; i >= 1; i--)
         {
-            codewords[i] = (int)(data % 1365U);
-            data /= 1365U;
+            codewords[i] = (int)(data % CodewordRadix);
+            data /= CodewordRadix;
         }
 
         codewords[0] = (int)data;
-        if ((fcs & 0x400) != 0)
+        if ((fcs & FrameCheckTopBit) != 0)
         {
-            codewords[0] += 659;
+            codewords[0] += CodewordAOffset;
         }
     }
 
@@ -288,7 +328,7 @@ internal static class IntelligentMailEncoder
             characters[i] = codeword < FiveOf13Length ? FiveOf13[codeword] : TwoOf13[codeword - FiveOf13Length];
             if (((fcs >> i) & 1) != 0)
             {
-                characters[i] ^= 0x1FFF;
+                characters[i] ^= CharacterMask;
             }
         }
     }
@@ -298,7 +338,7 @@ internal static class IntelligentMailEncoder
     /// </summary>
     /// <param name="characters">The ten characters.</param>
     /// <param name="states">The buffer that receives the 65 bar states.</param>
-    public static void Bars(ReadOnlySpan<int> characters, Span<FourState> states)
+    private static void Bars(ReadOnlySpan<int> characters, Span<FourState> states)
     {
         for (int bar = 0; bar < BarCount; bar++)
         {

@@ -11,7 +11,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// <para>
 /// Industrial and IATA encode a digit in five bars with a narrow space after each bar, so a digit is ten elements. Matrix, COOP and Datalogic encode a digit in
 /// three bars and two spaces with a narrow space after them, so a digit is six elements. The check digit is optional in every variant and is the modulo 10
-/// calculation of Appendix C of AIM USS-I 2/5. No document gives a wide element width, a quiet zone or a bar height for these symbologies; the values are those
+/// calculation of Appendix C of AIM USS-I 2/5. No document gives a wide element width, a quiet zone or a bar height for these symbologies. The values are those
 /// of Interleaved 2 of 5.
 /// </para>
 /// </summary>
@@ -20,12 +20,18 @@ internal static class Code2Of5Encoder
     /// <summary>
     /// The largest number of digits a symbol carries. None of the symbologies fixes a maximum of its own.
     /// </summary>
-    public const int MaximumLength = 500;
+    private const int MaximumLength = 500;
 
     /// <summary>
-    /// The quiet zone in modules on each side.
+    /// The quiet zone in modules on each side, or <see cref="MinimumQuietZoneMillimetres"/> when that is wider, as section 3.2 of AIM USS-I 2/5 gives it for
+    /// Interleaved 2 of 5.
     /// </summary>
     private const int QuietZone = 10;
+
+    /// <summary>
+    /// The smallest quiet zone in millimetres, the 0.10 inch of section 3.2 of AIM USS-I 2/5.
+    /// </summary>
+    private const double MinimumQuietZoneMillimetres = 2.54;
 
     /// <summary>
     /// The number of digits a symbol holds inline. Data this long covers the labels the symbologies are used for, and longer data rents its buffer once.
@@ -43,7 +49,7 @@ internal static class Code2Of5Encoder
     private const int PatternElements = 5;
 
     /// <summary>
-    /// The bar height as a fraction of the symbol width, quiet zones excluded, when the caller sets no height: 15 per cent, and at least
+    /// The bar height as a fraction of the symbol length, quiet zones included, when the caller sets no height: 15 per cent, and at least
     /// <see cref="MinimumBarHeightMillimetres"/>.
     /// </summary>
     private const float NominalBarHeightFraction = 0.15F;
@@ -114,7 +120,9 @@ internal static class Code2Of5Encoder
         BarcodeSymbology.ValidateDigits(text);
 
         ReadOnlySpan<char> data = checkDigit == CheckCharacterMode.Validate ? text.Slice(0, text.Length - 1) : text;
-        int? check = checkDigit == CheckCharacterMode.None ? null : CheckDigit(data);
+
+        // The modulo 10 check digit of Appendix C of AIM USS-I 2/5 weights the digits 3 and 1 from the right, the same as the GS1 calculation.
+        int? check = checkDigit == CheckCharacterMode.None ? null : Gs1Data.ComputeCheckDigit(data);
         if (checkDigit == CheckCharacterMode.Validate && text[^1] - '0' != check)
         {
             throw new ArgumentException($"Incorrect check digit: expected {check}, got {text[^1]}.", nameof(text));
@@ -128,6 +136,7 @@ internal static class Code2Of5Encoder
         Span<char> encoded = carried <= InlineBufferLength
             ? ((Span<char>)digitStorage)[..carried]
             : (rented = new PooledBuffer<char>(carried)).Span;
+
         try
         {
             data.CopyTo(encoded);
@@ -143,25 +152,6 @@ internal static class Code2Of5Encoder
         {
             rented.Dispose();
         }
-    }
-
-    /// <summary>
-    /// Calculates the modulo 10 check digit of Appendix C of AIM USS-I 2/5: the digits are weighted 3 and 1 alternately from the rightmost digit, which takes
-    /// 3, and the check digit lifts the sum to the next multiple of ten.
-    /// </summary>
-    /// <param name="digits">The data digits.</param>
-    /// <returns>The check digit value.</returns>
-    private static int CheckDigit(ReadOnlySpan<char> digits)
-    {
-        int sum = 0;
-        int weight = 3;
-        for (int i = digits.Length - 1; i >= 0; i--)
-        {
-            sum += (digits[i] - '0') * weight;
-            weight = 4 - weight;
-        }
-
-        return (10 - (sum % 10)) % 10;
     }
 
     /// <summary>
@@ -222,7 +212,10 @@ internal static class Code2Of5Encoder
 
         int widthInModules = BarcodeSymbol.RunWidth(runs);
 
-        float nominalBarHeight = MathF.Max(widthInModules * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
+        // As in Interleaved 2 of 5, the quiet zone is ten modules or 2.54 mm when that is wider, and the bar height is 15 per cent of the symbol length with
+        // its quiet zones.
+        float quietZone = MathF.Max(QuietZone, (float)(MinimumQuietZoneMillimetres / xDimension));
+        float nominalBarHeight = MathF.Max((widthInModules + (2 * quietZone)) * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
         float barHeight = options.ResolveBarHeight(xDimension, 0, nominalBarHeight, float.PositiveInfinity);
         heights.Fill(barHeight);
 
@@ -232,7 +225,7 @@ internal static class Code2Of5Encoder
             symbol.AddText(readable, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);
         }
 
-        symbol.EndLinear(QuietZone, QuietZone);
+        symbol.EndLinear(quietZone, quietZone);
     }
 
     /// <summary>

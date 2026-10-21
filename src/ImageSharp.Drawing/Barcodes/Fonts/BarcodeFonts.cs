@@ -6,13 +6,13 @@ using SixLabors.Fonts;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The house fonts for barcode text. They are built clean-room from the dimensioned character drawings of the OCR standards. No symbology selects them. To use
-/// one, set it on <see cref="BarcodeOptions.Font"/> or <see cref="BarcodeOptions.CaptionFont"/> at the size you need.
+/// The OCR-A and OCR-B fonts for barcode text. No symbology selects them. To use one, set it on <see cref="BarcodeOptions.Font"/> or
+/// <see cref="BarcodeOptions.CaptionFont"/> at the size you need.
 /// </summary>
 public static class BarcodeFonts
 {
     /// <summary>
-    /// Gets the SixLabors OCR-A font family, built from the character drawings of FIPS PUB 32 (1974).
+    /// Gets the SixLabors OCR-A font family.
     /// </summary>
     public static FontFamily OcrA => OcrAFamily.Value;
 

@@ -65,8 +65,8 @@ public sealed class Code39ExtendedSymbology : BarcodeSymbology
     /// Initializes a new instance of the <see cref="Code39ExtendedSymbology"/> class.
     /// </summary>
     /// <param name="checkCharacter"> Whether the symbol carries the modulo 43 check character, and whether the encoder calculates it.
-    /// <see cref="CheckCharacterMode.Validate"/> is rejected: the check character covers the substituted symbol characters, which a caller working in ASCII
-    /// does not have. </param>
+    /// The symbology rejects <see cref="CheckCharacterMode.Validate"/>. The check character covers the substituted symbol characters, and a caller that works
+    /// in ASCII does not have these characters. </param>
     /// <param name="printCheckCharacter"> Whether a check character the symbol carries is part of the human readable interpretation. </param>
     public Code39ExtendedSymbology(CheckCharacterMode checkCharacter, bool printCheckCharacter)
     {

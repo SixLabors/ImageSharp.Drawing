@@ -10,10 +10,11 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// full definition. Every symbol character is six elements wide, three bars and three spaces of one to four modules, and carries eleven modules. The stop
 /// character is the one exception: seven elements over thirteen modules.
 /// <para>
-/// A GS1 symbol starts with Start C and a Function 1 character, step 1 of section 5.4.7.6 of the GS1 General Specifications. Other text starts in code set C
-/// before four or more digits or before two digits that are the whole text, and otherwise in the one of code sets A and B that carries the first character only
-/// one of them carries. A run of four or more digits changes to code set C, after its first digit when the run is odd, as step 3 does. A character that only
-/// the other of code sets A and B carries takes a Shift when the next such character is in the current code set, and a code set change otherwise.
+/// A GS1 symbol starts with Start C and a Function 1 character, step 1 of section 5.4.7.6 of the GS1 General Specifications. When other text starts with four
+/// or more digits, or when the whole text is two digits, the text starts in code set C. Otherwise, the text starts in the one of code sets A and B that carries
+/// the first character that only one of them carries. A run of four or more digits changes to code set C, as step 3 does. When the run is odd, the change comes
+/// after its first digit. Some characters are only in the other of code sets A and B. When the next such character is in the current code set, a character of
+/// this type takes a Shift. Otherwise, the character takes a code set change.
 /// </para>
 /// <para>
 /// Clause 4.3.4.2 d) of ISO/IEC 15417 encodes the byte values 128 to 255, ISO/IEC 8859-1 by default, with the FNC4 character. A single FNC4 adds 128 to the
@@ -30,22 +31,22 @@ internal static class Code128Encoder
     public const int QuietZone = 10;
 
     /// <summary>
+    /// The largest number of characters this library encodes in one Code 128 symbol. The value sizes the buffers. The symbology sets no maximum of its own.
+    /// </summary>
+    public const int MaximumLength = 500;
+
+    /// <summary>
     /// The symbol character value of the Function 1 character. Section 5.4.2 places it directly after the start character to mark a GS1-128 symbol, and section
     /// 5.4.7.4 transmits it "in the third or subsequent character position" as the control character GS, the separator of section 7.8.6.2.
     /// </summary>
-    public const int FunctionOne = 102;
-
-    /// <summary>
-    /// The largest number of characters a Code 128 symbol carries.
-    /// </summary>
-    public const int MaximumLength = 500;
+    private const int FunctionOne = 102;
 
     /// <summary>
     /// The nominal X dimension in millimetres of a GS1 symbol: the target of 0.495 mm of Table 5-51 of the GS1 General Specifications, and of most other GS1
     /// symbol specification tables that list GS1-128. A Code 128 symbol that is not a GS1 symbol takes <see cref="BarcodeSymbology.DefaultXDimension"/>,
     /// because section 4.4.1 of ISO/IEC 15417 gives no value: "The width of a module should be defined by the application specification".
     /// </summary>
-    public const double NominalXDimension = 0.495;
+    private const double NominalXDimension = 0.495;
 
     /// <summary>
     /// The symbol character value of Shift, which changes code set A to B, or B to A, for one character.
@@ -135,10 +136,10 @@ internal static class Code128Encoder
     private const int StopModules = 13;
 
     /// <summary>
-    /// The character count the inline buffers are sized for: 128 values, two for each character of ASCII text or three for each character of text that has a
-    /// character above 127, and 256 look-ahead bytes, four for each character. The values also hold five characters that are not text, so ASCII text of at
-    /// most 61 characters encodes inline. Section 5.4.4.3 caps a GS1-128 symbol at 48 data characters of ASCII, so every conforming GS1-128 symbol encodes
-    /// inline.
+    /// The character count that the inline buffers hold. The buffers hold 128 values and 256 look-ahead bytes. ASCII text takes two values for each character.
+    /// Text that has a character above 127 takes three values for each character. The look-ahead takes four bytes for each character. The values also hold five
+    /// characters that are not text, so ASCII text of at most 61 characters encodes inline. Section 5.4.4.3 caps a GS1-128 symbol at 48 data characters of
+    /// ASCII, so every conforming GS1-128 symbol encodes inline.
     /// </summary>
     private const int InlineLength = 64;
 
@@ -175,6 +176,90 @@ internal static class Code128Encoder
         0x114311, 0x411113, 0x411311, 0x113141, 0x114131, 0x311141, 0x411131, 0x211412,
         0x211214, 0x211232, 0x2331112,
     ];
+
+    /// <summary>
+    /// Builds a GS1-128 symbol that carries one element string of a predefined length, such as the GTIN of EAN-14 or the SSCC of SSCC-18. The input is the
+    /// Application Identifier in parentheses and the data digits, with the check digit or without it. Spaces are ignored. The check digit is the one of
+    /// section 7.9. The interpretation prints the input as given. When the input leaves out the check digit, the calculated one follows it, after a space when
+    /// the input groups its digits with spaces.
+    /// </summary>
+    /// <param name="text">The input.</param>
+    /// <param name="identifier">The two digit Application Identifier.</param>
+    /// <param name="dataLength">The number of data digits with the check digit, at most 18.</param>
+    /// <param name="minimumXDimension">The smallest X dimension in millimetres.</param>
+    /// <param name="maximumXDimension">The largest X dimension in millimetres.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    /// <exception cref="ArgumentException">The input is not the identifier and the digits, or the check digit is not correct.</exception>
+    public static void BuildFixedElementString(
+        ReadOnlySpan<char> text,
+        ReadOnlySpan<char> identifier,
+        int dataLength,
+        double minimumXDimension,
+        double maximumXDimension,
+        BarcodeOptions options,
+        ref BarcodeSymbol symbol)
+    {
+        // The element string without grouping spaces is the four characters of the identifier in parentheses and the digits. The caption repeats the input,
+        // so the input is bounded too: at most one grouping space after each character of the element string.
+        int elementStringLength = 4 + dataLength;
+        Guard.MustBeLessThanOrEqualTo(text.Length, elementStringLength * 2, nameof(text));
+
+        // The longest element string is the 22 characters of an SSCC.
+        InlineArray24<char> compactStorage = default;
+        Span<char> compact = ((Span<char>)compactStorage)[..elementStringLength];
+        int length = 0;
+        foreach (char character in text)
+        {
+            if (character == ' ')
+            {
+                continue;
+            }
+
+            if (length == compact.Length)
+            {
+                throw new ArgumentException(
+                    $"The text takes the ({identifier}) application identifier and {dataLength - 1} or {dataLength} digits.",
+                    nameof(text));
+            }
+
+            compact[length++] = character;
+        }
+
+        if (length < elementStringLength - 1)
+        {
+            throw new ArgumentException(
+                $"The text takes the ({identifier}) application identifier and {dataLength - 1} or {dataLength} digits; got {length} characters.",
+                nameof(text));
+        }
+
+        if (compact[0] != '(' || !compact.Slice(1, 2).SequenceEqual(identifier) || compact[3] != ')')
+        {
+            throw new ArgumentException($"The text begins with the ({identifier}) application identifier.", nameof(text));
+        }
+
+        ReadOnlySpan<char> supplied = compact[4..length];
+        BarcodeSymbology.ValidateDigits(supplied);
+
+        int check = Gs1Data.ComputeCheckDigit(supplied[..(dataLength - 1)]);
+        if (supplied.Length == dataLength && supplied[^1] - '0' != check)
+        {
+            throw new ArgumentException($"Incorrect check digit: expected {check}, got {supplied[^1]}.", nameof(text));
+        }
+
+        // The symbol carries the identifier and the digits with no separator, because Table 7-6 gives this element string a predefined length.
+        char checkCharacter = (char)('0' + check);
+        InlineArray24<char> encodedStorage = default;
+        Span<char> encoded = ((Span<char>)encodedStorage)[..(2 + dataLength)];
+        identifier.CopyTo(encoded);
+        supplied[..(dataLength - 1)].CopyTo(encoded[2..]);
+        encoded[^1] = checkCharacter;
+
+        // The caption is the input as given, with the check digit after it when the input left it out, set off by a space when the input groups its digits
+        // with spaces.
+        ReadOnlySpan<char> suffix = supplied.Length == dataLength ? [] : text.Contains(' ') ? [' ', checkCharacter] : [checkCharacter];
+        BuildSymbol(encoded, true, [], text, suffix, minimumXDimension, maximumXDimension, Code128Linkage.None, options, ref symbol);
+    }
 
     /// <summary>
     /// Encodes text and builds the symbol. The runs carry the start character, the code set switches, the check character of section 5.4.3.6 and the stop
@@ -686,8 +771,8 @@ internal static class Code128Encoder
 
         /// <summary>
         /// Fills the look-ahead tables in one backward walk. The distance to the next character that only one of code sets A and B can carry decides which set
-        /// to start in and which to latch back to. The walk runs backwards, so the distances have to be held; everything else the encoder needs is one step
-        /// ahead of the write. Both distances saturate at the byte maximum, which is further than any comparison can reach.
+        /// to start in and which to latch back to. Because the walk runs backwards, the tables must hold the distances. Everything else that the encoder needs
+        /// is one step ahead of the write. Both distances saturate at the byte maximum, which is further than any comparison can reach.
         /// </summary>
         private readonly void MeasureLookahead()
         {

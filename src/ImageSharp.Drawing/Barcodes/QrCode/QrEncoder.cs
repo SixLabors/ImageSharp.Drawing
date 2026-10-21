@@ -9,10 +9,10 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Builds QR Code and Micro QR Code symbols, ISO/IEC 18004, and Rectangular Micro QR Code symbols, ISO/IEC 23941: the mode segments of the data, the symbol
-/// version, the Reed-Solomon error correction, the module placement, the data mask and the format and version information. Rectangular Micro QR Code shares the
-/// data encodation, the error correction and the placement of QR Code, with its own function patterns, indicator lengths, format information and a single data
-/// mask.
+/// Builds QR Code and Micro QR Code symbols, ISO/IEC 18004, and Rectangular Micro QR Code symbols, ISO/IEC 23941. The encoder builds the mode segments of the
+/// data, the symbol version, the Reed-Solomon error correction and the module placement. It also builds the data mask and the format and version information.
+/// Rectangular Micro QR Code shares the data encodation, the error correction and the placement of QR Code. It has its own function patterns, indicator
+/// lengths, format information and a single data mask.
 /// </summary>
 internal static class QrEncoder
 {
@@ -24,7 +24,7 @@ internal static class QrEncoder
     /// <summary>
     /// The message value of the FNC1 character, which separates element strings in a symbol in FNC1 first position mode. No byte has a negative value.
     /// </summary>
-    public const int Fnc1 = -1;
+    private const int Fnc1 = -1;
 
     /// <summary>
     /// The message value of a % of the data in a symbol in FNC1 first position mode. Clause 13.4 of ISO/IEC 18004 writes it as %% in Alphanumeric mode,
@@ -55,12 +55,12 @@ internal static class QrEncoder
     private const int RectangularMask = 4;
 
     /// <summary>
-    /// The mask the format information of a Rectangular Micro QR Code symbol is XORed with, beside the finder pattern.
+    /// The mask that the encoder XORs with the format information of a Rectangular Micro QR Code symbol, beside the finder pattern.
     /// </summary>
     private const int RectangularFormatMaskLeft = 0x1FAB2;
 
     /// <summary>
-    /// The mask the format information of a Rectangular Micro QR Code symbol is XORed with, beside the finder sub-pattern.
+    /// The mask that the encoder XORs with the format information of a Rectangular Micro QR Code symbol, beside the finder sub-pattern.
     /// </summary>
     private const int RectangularFormatMaskRight = 0x20A7B;
 
@@ -68,6 +68,11 @@ internal static class QrEncoder
     /// A count no run reaches. A mode change that needs it never happens.
     /// </summary>
     private const short Never = 10000;
+
+    /// <summary>
+    /// The digits that end the data and make it start in Numeric mode, the same in every version group.
+    /// </summary>
+    private const int FirstNumericToEnd = 1;
 
     /// <summary>
     /// The distance stored where no character of a class follows, larger than any message.
@@ -90,12 +95,12 @@ internal static class QrEncoder
     private const int VersionGenerator = 0x1F25;
 
     /// <summary>
-    /// The mask the format information of a QR Code symbol is XORed with, section 6.9.1.
+    /// The mask that the encoder XORs with the format information of a QR Code symbol, section 6.9.1.
     /// </summary>
     private const int FormatMask = 0b101010000010010;
 
     /// <summary>
-    /// The mask the format information of a Micro QR Code symbol is XORed with, section 6.9.2.
+    /// The mask that the encoder XORs with the format information of a Micro QR Code symbol, section 6.9.2.
     /// </summary>
     private const int MicroFormatMask = 0b100010001000101;
 
@@ -329,15 +334,6 @@ internal static class QrEncoder
     ];
 
     /// <summary>
-    /// Gets the digits that end the data and make it start in Numeric mode.
-    /// </summary>
-    private static ReadOnlySpan<short> FirstNumericToEnd =>
-    [
-        1, 1, 1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    ];
-
-    /// <summary>
     /// Gets the characters only Alphanumeric mode holds that leave Byte mode when a Byte mode character follows them.
     /// </summary>
     private static ReadOnlySpan<short> ByteToAlphanumericBeforeByte =>
@@ -509,10 +505,6 @@ internal static class QrEncoder
         }
 
         int length = text.Length;
-        if (length > MaximumLength)
-        {
-            throw new ArgumentException($"The data takes {length} characters; a {name} symbol carries at most {MaximumLength}.", nameof(text));
-        }
 
         // One rent holds the message, the seven rows of per-position runs and the mode segments. Each run row has one entry past the message, which stops the
         // runs. Every segment holds at least one character, so the message length bounds the segments, and each segment takes two ints.
@@ -1675,9 +1667,10 @@ internal static class QrEncoder
     }
 
     /// <summary>
-    /// The per-position runs of a message, from which <see cref="BuildSegments(int, Span{Segment})"/> divides it into mode segments. A character is a digit, a
-    /// character only Alphanumeric mode holds besides the digits (Table 5, and the FNC1 character, which Alphanumeric mode writes as %), or a character only
-    /// Byte mode holds. Each row has one entry past the message, which stops the runs.
+    /// The per-position runs of a message, from which <see cref="BuildSegments(int, Span{Segment})"/> divides it into mode segments. A character is one of
+    /// three types. The first type is a digit. The second type is a character that only Alphanumeric mode holds besides the digits (Table 5), or the FNC1
+    /// character, which Alphanumeric mode writes as %. The third type is a character that only Byte mode holds. Each row has one entry past the message, which
+    /// stops the runs.
     /// </summary>
     private readonly ref struct CharacterRuns
     {
@@ -1817,7 +1810,7 @@ internal static class QrEncoder
                     {
                         next = SegmentMode.Numeric;
                     }
-                    else if (this.Ends(i, numericCount, FirstNumericToEnd[group]))
+                    else if (this.Ends(i, numericCount, FirstNumericToEnd))
                     {
                         next = SegmentMode.Numeric;
                     }

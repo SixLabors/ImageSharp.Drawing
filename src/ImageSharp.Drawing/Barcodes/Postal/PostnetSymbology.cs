@@ -21,11 +21,6 @@ public sealed class PostnetSymbology : BarcodeSymbology
 
         BarcodeSymbology.ValidateDigits(text);
 
-        // At most eleven digits and the correction digit.
-        InlineArray12<char> digitStorage = default;
-        Span<char> digits = ((Span<char>)digitStorage)[..(text.Length + 1)];
-        text.CopyTo(digits);
-        digits[^1] = (char)('0' + UspsPostalEncoder.CorrectionDigit(text));
-        UspsPostalEncoder.BuildSymbol(digits, options, true, ref symbol);
+        UspsPostalEncoder.BuildSymbol(text, options, true, ref symbol);
     }
 }

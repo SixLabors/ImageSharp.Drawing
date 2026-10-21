@@ -14,14 +14,14 @@ internal static class Pdf417Patterns
     public const int CodewordCount = 929;
 
     /// <summary>
-    /// The number of modules in a symbol character.
-    /// </summary>
-    public const int ModuleCount = 17;
-
-    /// <summary>
     /// The number of elements in a symbol character, four bars and four spaces.
     /// </summary>
     public const int ElementCount = 8;
+
+    /// <summary>
+    /// The number of modules in a symbol character.
+    /// </summary>
+    private const int ModuleCount = 17;
 
     /// <summary>
     /// Gets the symbol characters of the three clusters. The entry at index <c>(cluster * 929) + codeword</c> holds the 17 modules of that codeword in cluster

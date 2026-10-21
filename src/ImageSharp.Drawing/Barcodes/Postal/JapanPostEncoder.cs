@@ -19,42 +19,42 @@ internal static class JapanPostEncoder
     public const int CodeCount = 20;
 
     /// <summary>
-    /// The number of bars in one code.
-    /// </summary>
-    public const int BarsPerCode = 3;
-
-    /// <summary>
     /// The number of bars in a symbol.
     /// </summary>
     public const int BarCount = 2 + ((CodeCount + 1) * BarsPerCode) + 2;
 
     /// <summary>
+    /// The number of bars in one code.
+    /// </summary>
+    private const int BarsPerCode = 3;
+
+    /// <summary>
     /// The value of the hyphen.
     /// </summary>
-    public const int Hyphen = 10;
+    private const int Hyphen = 10;
 
     /// <summary>
     /// The value of control code CC1; CC2 to CC8 follow it.
     /// </summary>
-    public const int ControlCode1 = 11;
+    private const int ControlCode1 = 11;
 
     /// <summary>
     /// The value of control code CC4, the filler.
     /// </summary>
-    public const int ControlCode4 = 14;
+    private const int ControlCode4 = 14;
 
     /// <summary>
     /// The modulus of the check calculation.
     /// </summary>
-    public const int Modulus = 19;
+    private const int Modulus = 19;
 
     /// <summary>
     /// The dimensions of page 12 of the Japan Post zip code and barcode manual at the 10 point size: a bar width of 0.6 mm, a bar pitch of 1.2 mm, so a space
     /// of 0.6 mm, a timing bar of 1.2 mm and a long bar of 3.6 mm, so an extender of 1.2 mm above or below the timing bar. Every size is "×a/10" for a size of
     /// a points, 8 to 11.5, so the bars stay proportional to the bar width. Page 13: "2mm以上の空白", a clear space of at least 2 mm above, below, left and right
-    /// of the barcode. The bar width sets the size a, so it is clamped to the bar width of 0.6×a/10 mm at the permitted sizes "8≦ａ≦11.5": 0.48 to 0.69 mm.
-    /// The long bar is clamped to its range "3.40×a/10～3.60×a/10", which is 3.40 / 0.6 to 3.60 / 0.6 modules. The timing bar then stays inside its own range
-    /// "1.05×a/10～1.35×a/10".
+    /// of the barcode. The bar width sets the size a. Thus the code clamps the bar width to 0.6×a/10 mm at the permitted sizes "8≦ａ≦11.5": 0.48 to
+    /// 0.69 mm. The code clamps the long bar to its range "3.40×a/10～3.60×a/10", which is 3.40 / 0.6 to 3.60 / 0.6 modules. The timing bar then stays
+    /// inside its own range "1.05×a/10～1.35×a/10".
     /// </summary>
     public static readonly FourStateMetrics Metrics = new(
         0.6,
@@ -100,29 +100,32 @@ internal static class JapanPostEncoder
         while (codePoints.MoveNext())
         {
             int value = codePoints.Current.Value;
-            int needed = value is >= 'A' and <= 'Z' ? 2 : 1;
+
+            // A letter is two codes, and a digit or the hyphen is one. The switch validates the character before the capacity check, so an invalid
+            // character gets its own message.
+            int needed = value switch
+            {
+                >= 'A' and <= 'Z' => 2,
+                (>= '0' and <= '9') or '-' => 1,
+                _ => throw new ArgumentException(
+                    $"The Japan Post barcode carries only digits, capital letters and the hyphen; got {codePoints.Current.ToDisplayString()}.",
+                    nameof(text)),
+            };
+
             if (count + needed > CodeCount)
             {
                 throw new ArgumentException($"The Japan Post barcode carries {CodeCount} codes, and a letter is two codes; got more in {text}.", nameof(text));
             }
 
-            switch (value)
+            if (needed == 2)
             {
-                case >= '0' and <= '9':
-                    codes[count++] = (byte)(value - '0');
-                    break;
-                case '-':
-                    codes[count++] = Hyphen;
-                    break;
-                case >= 'A' and <= 'Z':
-                    int letter = value - 'A';
-                    codes[count++] = (byte)(ControlCode1 + (letter / 10));
-                    codes[count++] = (byte)(letter % 10);
-                    break;
-                default:
-                    throw new ArgumentException(
-                        $"The Japan Post barcode carries only digits, capital letters and the hyphen; got {codePoints.Current.ToDisplayString()}.",
-                        nameof(text));
+                int letter = value - 'A';
+                codes[count++] = (byte)(ControlCode1 + (letter / 10));
+                codes[count++] = (byte)(letter % 10);
+            }
+            else
+            {
+                codes[count++] = (byte)(value == '-' ? Hyphen : value - '0');
             }
         }
 

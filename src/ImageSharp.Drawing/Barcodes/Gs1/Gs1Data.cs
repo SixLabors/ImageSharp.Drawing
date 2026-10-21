@@ -31,12 +31,6 @@ internal static class Gs1Data
     public const int InlineElementCount = 16;
 
     /// <summary>
-    /// The smallest height in millimetres of the font of the human readable interpretation. Section 4.14 rule 2a.iii of the GS1 General Specifications: "The
-    /// font size SHOULD be at least 2 mm (0.08 in) in height".
-    /// </summary>
-    public const float MinimumTextHeight = 2F;
-
-    /// <summary>
     /// The size in points of a font whose em is <see cref="MinimumTextHeight"/> high. A point is 1/72 inch, so the em of a font is its size times 25.4 / 72
     /// millimetres high at any resolution.
     /// </summary>
@@ -125,6 +119,12 @@ internal static class Gs1Data
     public const double DigitalLinkMaximumXDimension = 0.990;
 
     /// <summary>
+    /// The smallest height in millimetres of the font of the human readable interpretation. Section 4.14 rule 2a.iii of the GS1 General Specifications: "The
+    /// font size SHOULD be at least 2 mm (0.08 in) in height".
+    /// </summary>
+    private const float MinimumTextHeight = 2F;
+
+    /// <summary>
     /// Returns the factor that lifts a font to <see cref="MinimumTextHeight"/>, or 1 for a font that is that high or higher.
     /// </summary>
     /// <param name="font">The font of the human readable interpretation.</param>
@@ -187,7 +187,7 @@ internal static class Gs1Data
     /// section 4.14 rule 2c requires them in the human readable interpretation alone.
     /// </summary>
     /// <param name="text">The element strings to parse.</param>
-    /// <param name="encoded"> The builder the encoded data is written to: each Application Identifier and its data in turn, with a <see cref="Separator"/>
+    /// <param name="encoded"> The builder that receives the encoded data: each Application Identifier and its data in turn, with a <see cref="Separator"/>
     /// after every variable length element string but the last. </param>
     /// <exception cref="ArgumentException">The text is not valid element string syntax, or an element string or a pair of them breaks a rule of the GS1 General
     /// Specifications.</exception>
@@ -216,7 +216,7 @@ internal static class Gs1Data
     /// rules of <see cref="ValidateSymbol"/> apply to the whole symbol and not to one component.
     /// </summary>
     /// <param name="text">The validated element strings.</param>
-    /// <param name="encoded"> The builder the encoded data is written to: each Application Identifier and its data in turn, with a <see cref="Separator"/>
+    /// <param name="encoded"> The builder that receives the encoded data: each Application Identifier and its data in turn, with a <see cref="Separator"/>
     /// after every variable length element string but the last. </param>
     /// <exception cref="ArgumentException">The text is not valid element string syntax.</exception>
     public static void Encode(ReadOnlySpan<char> text, ref ValueStringBuilder encoded)
@@ -382,48 +382,6 @@ internal static class Gs1Data
     }
 
     /// <summary>
-    /// Validates the data of one element string against its entry of the GS1 Barcode Syntax Dictionary: its length, and each component in turn with its
-    /// character set and its checks.
-    /// </summary>
-    /// <param name="entry">The dictionary entry of the Application Identifier.</param>
-    /// <param name="identifier">The Application Identifier.</param>
-    /// <param name="data">The data.</param>
-    /// <exception cref="ArgumentException">The data breaks its format.</exception>
-    private static void ValidateData(Gs1ApplicationIdentifier entry, ReadOnlySpan<char> identifier, ReadOnlySpan<char> data)
-    {
-        if (data.Length < entry.MinimumLength || data.Length > entry.MaximumLength)
-        {
-            string range = entry.MinimumLength == entry.MaximumLength ? $"{entry.MinimumLength}" : $"{entry.MinimumLength} to {entry.MaximumLength}";
-            throw new ArgumentException($"The data of Application Identifier ({identifier}) is {range} characters; got {data.Length}.", nameof(data));
-        }
-
-        // Each component takes as many characters as remain, up to its maximum. Only the last component can vary in length, and an optional component that
-        // finds no data left is skipped.
-        foreach (Gs1Component component in entry.Components)
-        {
-            int length = Math.Min(component.Maximum, data.Length);
-            if (length == 0 && component.Optional)
-            {
-                continue;
-            }
-
-            if (length < component.Minimum)
-            {
-                throw new ArgumentException($"The data of Application Identifier ({identifier}) is too short for its components.", nameof(data));
-            }
-
-            ReadOnlySpan<char> part = data[..length];
-            Gs1Linters.CheckCharacterSet(component.CharacterSet, identifier, part);
-            foreach (Gs1Linter linter in component.Linters)
-            {
-                Gs1Linters.Check(linter, identifier, part);
-            }
-
-            data = data[length..];
-        }
-    }
-
-    /// <summary>
     /// Parses the element string syntax into the positions of its element strings.
     /// </summary>
     /// <param name="text">The element strings to parse.</param>
@@ -539,13 +497,55 @@ internal static class Gs1Data
     }
 
     /// <summary>
+    /// Validates the data of one element string against its entry of the GS1 Barcode Syntax Dictionary: its length, and each component in turn with its
+    /// character set and its checks.
+    /// </summary>
+    /// <param name="entry">The dictionary entry of the Application Identifier.</param>
+    /// <param name="identifier">The Application Identifier.</param>
+    /// <param name="data">The data.</param>
+    /// <exception cref="ArgumentException">The data breaks its format.</exception>
+    private static void ValidateData(Gs1ApplicationIdentifier entry, ReadOnlySpan<char> identifier, ReadOnlySpan<char> data)
+    {
+        if (data.Length < entry.MinimumLength || data.Length > entry.MaximumLength)
+        {
+            string range = entry.MinimumLength == entry.MaximumLength ? $"{entry.MinimumLength}" : $"{entry.MinimumLength} to {entry.MaximumLength}";
+            throw new ArgumentException($"The data of Application Identifier ({identifier}) is {range} characters; got {data.Length}.", nameof(data));
+        }
+
+        // Each component takes as many characters as remain, up to its maximum. Only the last component can vary in length, and an optional component that
+        // finds no data left is skipped.
+        foreach (Gs1Component component in entry.Components)
+        {
+            int length = Math.Min(component.Maximum, data.Length);
+            if (length == 0 && component.Optional)
+            {
+                continue;
+            }
+
+            if (length < component.Minimum)
+            {
+                throw new ArgumentException($"The data of Application Identifier ({identifier}) is too short for its components.", nameof(data));
+            }
+
+            ReadOnlySpan<char> part = data[..length];
+            Gs1Linters.CheckCharacterSet(component.CharacterSet, identifier, part);
+            foreach (Gs1Linter linter in component.Linters)
+            {
+                Gs1Linters.Check(linter, identifier, part);
+            }
+
+            data = data[length..];
+        }
+    }
+
+    /// <summary>
     /// Writes the data a symbol carries for parsed element strings: each Application Identifier and its data in turn. Section 7.8.6.2: an element string
     /// without a predefined length is terminated by a separator, unless it is the last one in the symbol. The dictionary marks the predefined lengths of
     /// Table 7-6.
     /// </summary>
     /// <param name="text">The buffer the element strings are in.</param>
     /// <param name="elements">The element strings.</param>
-    /// <param name="encoded">The builder the encoded data is written to.</param>
+    /// <param name="encoded">The builder that receives the encoded data.</param>
     private static void AppendElements(scoped ReadOnlySpan<char> text, scoped ReadOnlySpan<Gs1Element> elements, ref ValueStringBuilder encoded)
     {
         for (int i = 0; i < elements.Length; i++)

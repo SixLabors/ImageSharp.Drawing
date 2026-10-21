@@ -15,7 +15,7 @@ internal static class UltracodeEncoder
     /// <summary>
     /// The longest text, in characters: at level EC1, 263 characters make 266 message codewords and 16 check codewords, the 282 tiles of the largest symbol.
     /// </summary>
-    public const int MaximumLength = 263;
+    private const int MaximumLength = 263;
 
     /// <summary>
     /// The quiet zone on each of the four sides in modules.
@@ -319,7 +319,7 @@ internal static class UltracodeEncoder
             generator[0] = (generator[0] * root) % Modulus;
         }
 
-        // The coefficients of x^(k-1), x^(k-3) and so on are negated, which turns the product of (x + a) into the product of (x - a) for the terms the
+        // The loop negates the coefficients of x^(k-1), x^(k-3) and so on. This turns the product of (x + a) into the product of (x - a) for the terms that the
         // division uses.
         for (int j = k - 1; j >= 0; j -= 2)
         {

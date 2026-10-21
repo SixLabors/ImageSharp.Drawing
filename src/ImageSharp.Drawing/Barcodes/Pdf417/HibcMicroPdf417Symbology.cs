@@ -58,7 +58,7 @@ public sealed class HibcMicroPdf417Symbology : BarcodeSymbology
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         InlineArray64<char> bufferStorage = default;
-        int capacity = HibcData.PreparedCapacity(text.Length);
+        int capacity = HibcData.PreparedCapacity(text, Pdf417Codewords.MicroMaximumLength);
         ValueStringBuilder encoded = capacity <= HibcData.InlineBufferLength ? new(bufferStorage) : new(capacity);
         try
         {

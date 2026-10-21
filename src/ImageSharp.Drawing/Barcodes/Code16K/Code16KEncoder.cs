@@ -7,7 +7,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
 /// Encodation for Code 16K, AIM USS-16K. Section 2.1: a symbol is 2 to 16 rows, and each row is a start character, a one module guard bar, five symbol
-/// characters and a stop character, 70 modules in all. The symbol characters are ordered from the first row down. The first is the starting symbol character
+/// characters and a stop character, 70 modules in all. The symbol characters run from the first row down. The first is the starting symbol character
 /// and the last two are the check characters. Section 2.2: a symbol character is the eleven module Code 128 pattern of Table 2, three spaces alternating with
 /// three bars, starting with a space.
 /// </summary>
@@ -16,53 +16,53 @@ internal static class Code16KEncoder
     /// <summary>
     /// The quiet zone in modules before the start character: the "ten modules adjacent to the start pattern" of section 3.4.
     /// </summary>
-    public const int LeadingQuietZone = 10;
+    private const int LeadingQuietZone = 10;
 
     /// <summary>
     /// The quiet zone in modules after the stop character: the "one module adjacent to the stop pattern" of section 3.4.
     /// </summary>
-    public const int TrailingQuietZone = 1;
+    private const int TrailingQuietZone = 1;
 
     /// <summary>
     /// The width of a row in modules: "the 70X bars and spaces" of section 3.6.1.
     /// </summary>
-    public const int RowWidth = 70;
+    private const int RowWidth = 70;
 
     /// <summary>
     /// The smallest number of rows, section 2.1.
     /// </summary>
-    public const int MinimumRows = 2;
+    private const int MinimumRows = 2;
 
     /// <summary>
     /// The largest number of rows, section 2.1.
     /// </summary>
-    public const int MaximumRows = 16;
+    private const int MaximumRows = 16;
 
     /// <summary>
     /// The number of symbol characters in a row, section 2.1.
     /// </summary>
-    public const int CharactersPerRow = 5;
+    private const int CharactersPerRow = 5;
 
     /// <summary>
     /// The bar height of a row in modules, nominal and smallest. Section 4.5 d) of EN 12323: "row height (Y dimension): minimum 8X". The section gives no
     /// largest row height.
     /// </summary>
-    public const float NominalBarHeight = 8F;
+    private const float NominalBarHeight = 8F;
 
     /// <summary>
     /// The height in modules of the separator bars: the "1-module high separator bar" of section 2.1.
     /// </summary>
-    public const float SeparatorHeight = 1F;
+    private const float SeparatorHeight = 1F;
 
     /// <summary>
     /// The modulus of the check characters, section 2.6.
     /// </summary>
-    public const int Modulus = 107;
+    private const int Modulus = 107;
 
     /// <summary>
     /// The pad character, section 2.3.5: "When it appears at the end of the symbol characters, just before the check characters, it represents no data."
     /// </summary>
-    public const int Pad = 103;
+    private const int Pad = 103;
 
     /// <summary>
     /// The double shift of code sets A and B, Double Shift B in code set A and Double Shift A in code set B, Table 2. Code sets A and B take the values 98 to
@@ -259,27 +259,13 @@ internal static class Code16KEncoder
             throw new ArgumentException($"Code 16K encodes ASCII 0 to 127; {text.CodePointAt(invalid).ToDisplayString()} is outside that range.", nameof(text));
         }
 
-        // The lookahead takes one entry for every position and one past the end, which the text bound keeps inline. A data character costs at most two symbol
-        // characters, and the symbol adds three, so the values take twice the text and three more, and at least the sixteen rows of the largest symbol. A short
-        // text keeps the values inline and a longer one rents them once.
+        // The lookahead takes one entry for every position and one past the end, which the text bound keeps inline. The encoder stops when the values pass the
+        // capacity of the largest symbol, so the values stay inside its sixteen rows and the four values of one more step.
         InlineArray256<Lookahead> lookaheadStorage = default;
         Span<Lookahead> lookahead = ((Span<Lookahead>)lookaheadStorage)[..(text.Length + 1)];
-        int valueLength = Math.Max((text.Length * 2) + Overhead, MaximumRows * CharactersPerRow);
         InlineArray128<int> valueStorage = default;
-        PooledBuffer<int> rented = default;
-        Span<int> values = valueLength <= 128
-            ? ((Span<int>)valueStorage)[..valueLength]
-            : (rented = new PooledBuffer<int>(valueLength)).Span;
-
-        try
-        {
-            int total = Encode(text, lookahead, values);
-            WriteRows(values[..total], readable, options, ref symbol);
-        }
-        finally
-        {
-            rented.Dispose();
-        }
+        int total = Encode(text, lookahead, valueStorage);
+        WriteRows(((Span<int>)valueStorage)[..total], readable, options, ref symbol);
     }
 
     /// <summary>
@@ -350,9 +336,15 @@ internal static class Code16KEncoder
             set = CodeSet.B;
         }
 
-        // Rules 3, 4 and 5: the next symbol character from the data that remains, in the current code set.
+        // Rules 3, 4 and 5: the next symbol character from the data that remains, in the current code set. One step writes at most four values, so a check at
+        // each step keeps the values inside the symbol and the four that the last step can add.
         while (i < n)
         {
+            if (count - 1 > capacity)
+            {
+                throw new ArgumentException($"Code 16K carries at most {capacity} symbol characters in sixteen rows; the text needs more.", nameof(text));
+            }
+
             char c = text[i];
             int run = lookahead[i].DigitRun;
             if (set == CodeSet.C)

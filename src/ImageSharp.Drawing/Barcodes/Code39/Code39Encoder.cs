@@ -19,15 +19,15 @@ internal static class Code39Encoder
     public const int MaximumLength = 500;
 
     /// <summary>
-    /// The quiet zone in modules on each side. Section 4.4 d): "Minimum width of quiet zone: 10 X".
-    /// </summary>
-    public const int QuietZone = 10;
-
-    /// <summary>
     /// The number of characters a caller holds inline to build symbol data in. Data this long covers the labels the symbology is used for, and longer data
     /// rents its buffer once.
     /// </summary>
     public const int InlineBufferLength = 64;
+
+    /// <summary>
+    /// The quiet zone in modules on each side. Section 4.4 d): "Minimum width of quiet zone: 10 X".
+    /// </summary>
+    private const int QuietZone = 10;
 
     /// <summary>
     /// The element count of a symbol character and the gap that follows it.
@@ -97,8 +97,8 @@ internal static class Code39Encoder
     }
 
     /// <summary>
-    /// Validates the given text against the Code 39 character set. Walking code points rather than UTF-16 units reports a surrogate pair as the one character
-    /// it is, instead of showing half of it back to the caller.
+    /// Validates the given text against the Code 39 character set. The method walks code points, not UTF-16 units, so the message reports a surrogate pair as
+    /// one character.
     /// </summary>
     /// <param name="text">The text to validate.</param>
     /// <exception cref="ArgumentException">The text carries a character outside the set.</exception>

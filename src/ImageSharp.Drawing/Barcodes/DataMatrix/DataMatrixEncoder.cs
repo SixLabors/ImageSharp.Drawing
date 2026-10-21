@@ -24,16 +24,6 @@ internal static class DataMatrixEncoder
     private const int QuietZone = 1;
 
     /// <summary>
-    /// The length of the header of a message in format 05 or 06, [)&gt;RS05GS.
-    /// </summary>
-    private const int MacroHeaderLength = 7;
-
-    /// <summary>
-    /// The length of the trailer of a message in format 05 or 06, RS EOT.
-    /// </summary>
-    private const int MacroTrailerLength = 2;
-
-    /// <summary>
     /// The most modules a mapping matrix holds: the 132 x 132 of the 144 x 144 symbol.
     /// </summary>
     private const int MaximumMappingModules = 132 * 132;
@@ -187,15 +177,13 @@ internal static class DataMatrixEncoder
     {
         // A message in format 05 or 06, between the header [)>RS05GS or [)>RS06GS and the trailer RS EOT, takes one Macro character for the header and the
         // trailer. The length limit applies to the message values, so it counts the Macro character, not the header and the trailer.
-        bool macro = !gs1
-            && text.Length >= MacroHeaderLength + MacroTrailerLength
-            && text.StartsWith("[)>\u001E0")
-            && text[5] is '5' or '6'
-            && text[6] == '\u001D'
-            && text.EndsWith("\u001E\u0004");
+        bool macro = !gs1 && MacroMessage.Format(text) != 0;
 
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
-        Guard.MustBeLessThanOrEqualTo(macro ? text.Length - MacroHeaderLength - MacroTrailerLength + 1 : text.Length, MaximumLength, nameof(text));
+        Guard.MustBeLessThanOrEqualTo(
+            macro ? text.Length - MacroMessage.HeaderLength - MacroMessage.TrailerLength + 1 : text.Length,
+            MaximumLength,
+            nameof(text));
 
         // Clause 5.2.2 of ISO/IEC 16022: the default character set is ISO/IEC 8859-1, so each character must be one byte value. The check runs by code point so
         // a surrogate pair reports as one character.
@@ -239,7 +227,7 @@ internal static class DataMatrixEncoder
                 if (macro)
                 {
                     messageBuffer[messageLength++] = text[5] == '5' ? DataMatrixCodewords.Macro05 : DataMatrixCodewords.Macro06;
-                    text = text[MacroHeaderLength..^MacroTrailerLength];
+                    text = text[MacroMessage.HeaderLength..^MacroMessage.TrailerLength];
                 }
 
                 foreach (char c in text)
@@ -434,8 +422,19 @@ internal static class DataMatrixEncoder
     /// </summary>
     private readonly ref struct MappingMatrix
     {
+        /// <summary>
+        /// The modules, row by row.
+        /// </summary>
         private readonly Span<sbyte> modules;
+
+        /// <summary>
+        /// The number of rows of the mapping matrix.
+        /// </summary>
         private readonly int rows;
+
+        /// <summary>
+        /// The number of columns of the mapping matrix.
+        /// </summary>
         private readonly int columns;
 
         /// <summary>

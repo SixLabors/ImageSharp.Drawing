@@ -43,6 +43,10 @@ internal static class Gs1CompositeLayout
     /// <exception cref="ArgumentException">The text is not valid element string syntax, or an element string or a pair of them breaks a rule.</exception>
     public static void Validate(ReadOnlySpan<char> linear, ReadOnlySpan<char> component)
     {
+        // The length checks run before the buffers take their size from the texts. GS1 DataBar Expanded carries the most data of the linear components.
+        _ = Gs1Data.PreparedCapacity(linear, DataBarExpandedEncoder.MaximumDataCharacters);
+        _ = Gs1Data.PreparedCapacity(component, Gs1CompositeComponentEncoder.MaximumPrepared);
+
         int length = linear.Length + component.Length;
         PooledBuffer<char> joined = new(length);
         InlineArray16<Gs1Element> elementStorage = default;
@@ -163,7 +167,8 @@ internal static class Gs1CompositeLayout
             }
 
             Span<int> separatorRuns = buffer.Span[(width * 2)..];
-            linear.InsertRow(0, separatorRuns[..ToRuns(separator, separatorRuns)], 1F);
+            int separatorRunCount = ToRuns(separator, separatorRuns);
+            linear.InsertRows(0, separatorRuns[..separatorRunCount], [separatorRunCount], 1F);
         }
         finally
         {
@@ -183,37 +188,6 @@ internal static class Gs1CompositeLayout
         Span<int> finders = finderStorage;
         int finderCount = ExpandedFinderStarts(BarcodeSymbol.RunWidth(linear.Runs.Slice(row.RunStart, row.RunCount)), finders);
         AddSeparator(ref linear, 4, 4, finders[..finderCount], false);
-    }
-
-    /// <summary>
-    /// Adds the 6X separator pattern of an EAN/UPC Composite symbol, section 11.4, below the rows of the 2D component: a light space with two 1X bars that
-    /// extend the outermost guard bars of the linear component. The bars step outward by 1X after 2X and back after 4X, three segments of 2X.
-    /// </summary>
-    /// <param name="component">The 2D component.</param>
-    /// <param name="left">The module of the 2D component above the left outermost guard bar.</param>
-    /// <param name="right">The module of the 2D component above the right outermost guard bar.</param>
-    public static void AddEanUpcSeparator(ref BarcodeSymbol component, int left, int right)
-    {
-        int width = (int)component.WidthInModules;
-        PooledBuffer<int> buffer = new((width * 2) + 2);
-        try
-        {
-            Span<int> modules = buffer.Span[..width];
-            Span<int> runs = buffer.Span[width..];
-            for (int segment = 0; segment < 3; segment++)
-            {
-                // The middle segment stands one module further out on each side.
-                int step = segment == 1 ? 1 : 0;
-                modules.Clear();
-                modules[left - step] = 1;
-                modules[right + step] = 1;
-                component.InsertRow(component.Rows.Length, runs[..ToRuns(modules, runs)], EanUpcSeparatorSegment);
-            }
-        }
-        finally
-        {
-            buffer.Dispose();
-        }
     }
 
     /// <summary>
@@ -301,6 +275,45 @@ internal static class Gs1CompositeLayout
     {
         int pixels = options.ModulePixels(parts[0].XDimension);
         return new PointF(linearOrigin.X + (offset * pixels), linearOrigin.Y - (parts[1].HeightInModules * pixels));
+    }
+
+    /// <summary>
+    /// Adds the 6X separator pattern of an EAN/UPC Composite symbol, section 11.4, below the rows of the 2D component: a light space with two 1X bars that
+    /// extend the outermost guard bars of the linear component. The bars step outward by 1X after 2X and back after 4X, three segments of 2X.
+    /// </summary>
+    /// <param name="component">The 2D component.</param>
+    /// <param name="left">The module of the 2D component above the left outermost guard bar.</param>
+    /// <param name="right">The module of the 2D component above the right outermost guard bar.</param>
+    private static void AddEanUpcSeparator(ref BarcodeSymbol component, int left, int right)
+    {
+        int width = (int)component.WidthInModules;
+        PooledBuffer<int> buffer = new((width * 2) + 2);
+        try
+        {
+            Span<int> modules = buffer.Span[..width];
+            Span<int> runs = buffer.Span[width..];
+
+            // Each segment row has two bars, so it has at most six runs, and the three rows fit the run buffer together. One insert takes all three rows.
+            InlineArray4<int> countStorage = default;
+            Span<int> counts = ((Span<int>)countStorage)[..3];
+            int written = 0;
+            for (int segment = 0; segment < counts.Length; segment++)
+            {
+                // The middle segment stands one module further out on each side.
+                int step = segment == 1 ? 1 : 0;
+                modules.Clear();
+                modules[left - step] = 1;
+                modules[right + step] = 1;
+                counts[segment] = ToRuns(modules, runs[written..]);
+                written += counts[segment];
+            }
+
+            component.InsertRows(component.Rows.Length, runs[..written], counts, EanUpcSeparatorSegment);
+        }
+        finally
+        {
+            buffer.Dispose();
+        }
     }
 
     /// <summary>

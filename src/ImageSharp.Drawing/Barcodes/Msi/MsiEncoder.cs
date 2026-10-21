@@ -16,11 +16,6 @@ internal static class MsiEncoder
     public const int MaximumLength = 500;
 
     /// <summary>
-    /// The quiet zone in modules on each side.
-    /// </summary>
-    public const int QuietZone = 10;
-
-    /// <summary>
     /// The number of characters a caller holds inline to build symbol data in. Longer data rents its buffer once.
     /// </summary>
     public const int InlineBufferLength = 64;
@@ -39,6 +34,11 @@ internal static class MsiEncoder
     /// The largest number of check digits a symbol carries after its data: a modulo 10 or modulo 11 check digit and a second modulo 10 check digit.
     /// </summary>
     public const int MaximumCheckDigits = 2;
+
+    /// <summary>
+    /// The quiet zone in modules on each side.
+    /// </summary>
+    private const int QuietZone = 10;
 
     /// <summary>
     /// The number of bits in a digit.
@@ -96,26 +96,6 @@ internal static class MsiEncoder
     }
 
     /// <summary>
-    /// Calculates the modulo 11 check value over the digits. The digits are weighted from the right, starting at 2 and returning to 2 after the maximum weight,
-    /// and the check value lifts the weighted sum to the next multiple of eleven. The value 10 cannot be carried in one digit.
-    /// </summary>
-    /// <param name="digits">The digits the check value covers.</param>
-    /// <param name="maximumWeight">The highest weight, 7 for the IBM calculation and 9 for the NCR calculation.</param>
-    /// <returns>The check value, 0 to 10.</returns>
-    public static int Modulo11(ReadOnlySpan<char> digits, int maximumWeight)
-    {
-        int sum = 0;
-        int weight = 2;
-        for (int i = digits.Length - 1; i >= 0; i--)
-        {
-            sum += weight * (digits[i] - '0');
-            weight = weight == maximumWeight ? 2 : weight + 1;
-        }
-
-        return (11 - (sum % 11)) % 11;
-    }
-
-    /// <summary>
     /// Encodes digits and builds the symbol. The runs start with the bar of the start character and end on the last bar of the stop character. MSI carries no
     /// guard bars, so every bar runs the full height, and the human readable interpretation sits below the symbol.
     /// </summary>
@@ -154,7 +134,7 @@ internal static class MsiEncoder
         float barHeight = options.ResolveBarHeight(xDimension, 0, widthInModules * NominalBarHeightFraction, float.PositiveInfinity);
         heights.Fill(barHeight);
 
-        if (options.Font is not null && readable.Length > 0)
+        if (options.Font is not null)
         {
             symbol.ReserveText(1, readable.Length);
             symbol.AddText(readable, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);

@@ -82,18 +82,13 @@ public sealed class IsbnSymbology : BarcodeSymbology
 
             compact[..12].CopyTo(digits);
             captionPrefix = "ISBN ";
-            captionBody = EanUpcEncoder.TakeHyphenatedPrefix(text, 12);
+            captionBody = TakeHyphenatedPrefix(text, 12);
         }
         else if (compact.Length is 9 or 10)
         {
-            // ISO 2108 ISBN-10 check: weights 10 down to 2 over the nine data digits, modulus 11, with X representing the value ten.
-            int sum = 0;
-            for (int i = 0; i < 9; i++)
-            {
-                sum += (10 - i) * (compact[i] - '0');
-            }
-
-            int check = (11 - (sum % 11)) % 11;
+            // ISO 2108 ISBN-10 check: weights 10 down to 2 over the nine data digits, modulus 11, with X representing the value ten. From the right, the
+            // weights are 2 to 10.
+            int check = Modulo11(compact[..9], 10);
             if (compact.Length == 10)
             {
                 int provided = compact[9] == 'X' ? 10 : compact[9] - '0';
@@ -106,7 +101,7 @@ public sealed class IsbnSymbology : BarcodeSymbology
             "978".CopyTo(digits);
             compact[..9].CopyTo(digits[3..]);
             captionPrefix = "ISBN 978-";
-            captionBody = EanUpcEncoder.TakeHyphenatedPrefix(text, 9);
+            captionBody = TakeHyphenatedPrefix(text, 9);
         }
         else
         {
@@ -125,5 +120,29 @@ public sealed class IsbnSymbology : BarcodeSymbology
             EanUpcEncoder.BuildEan13(digits, options, captionPrefix, captionBody, ['-', digits[12]], ref symbol);
             symbol.SetCaptionMinimumSize(MinimumCaptionSize);
         }
+    }
+
+    /// <summary>
+    /// Returns the prefix of a hyphenated number that contains the given count of digits. The prefix keeps the hyphens of the caller and drops a trailing
+    /// hyphen. The ISBN caption shows the number as the caller wrote it, without its check character.
+    /// </summary>
+    /// <param name="text">The hyphenated input.</param>
+    /// <param name="digitCount">The number of digits the prefix must contain.</param>
+    /// <returns>The hyphenated prefix.</returns>
+    private static ReadOnlySpan<char> TakeHyphenatedPrefix(ReadOnlySpan<char> text, int digitCount)
+    {
+        int digits = 0;
+        int end = 0;
+        while (digits < digitCount)
+        {
+            if (text[end] != '-')
+            {
+                digits++;
+            }
+
+            end++;
+        }
+
+        return text[..end];
     }
 }

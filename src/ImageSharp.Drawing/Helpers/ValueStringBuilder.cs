@@ -19,8 +19,19 @@ namespace SixLabors.ImageSharp.Drawing.Helpers;
 /// </summary>
 internal ref struct ValueStringBuilder
 {
+    /// <summary>
+    /// The rented array, or <see langword="null"/> while the builder uses the initial buffer.
+    /// </summary>
     private byte[]? pooled;
+
+    /// <summary>
+    /// The characters of the buffer in use.
+    /// </summary>
     private Span<char> characters;
+
+    /// <summary>
+    /// The number of characters written.
+    /// </summary>
     private int position;
 
     /// <summary>

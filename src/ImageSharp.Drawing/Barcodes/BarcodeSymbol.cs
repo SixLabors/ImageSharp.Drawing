@@ -18,7 +18,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// An encoder writes the symbol once: it begins a linear, stacked or matrix symbol with the sizes that its validated input gives, fills the spans that the
 /// begin methods return, adds the text and ends the symbol. The symbol keeps its values in three buffers rented from the shared <see cref="byte"/> pool. The
 /// layout buffer holds the rows, runs and bars or the modules. <see cref="BeginLinear"/>, <see cref="BeginStacked"/> or
-/// <see cref="BeginMatrix(int, int, int, double)"/> rents it, and <see cref="InsertRow"/> replaces it with a larger buffer. The text buffer holds the text
+/// <see cref="BeginMatrix(int, int, int, double)"/> rents it, and <see cref="InsertRows"/> replaces it with a larger buffer. The text buffer holds the text
 /// placements and their characters, and <see cref="ReserveText"/> rents it. The overlay buffer holds the edges of the overlay graphic, and
 /// <see cref="AddOverlay"/> rents it. Each rent happens before the encoder's loops, with the exact size that its validated input gives. <see cref="Dispose"/>
 /// returns all three buffers. A rented range is cleared, so every value that the encoder does not write is zero. The caller declares the symbol as a local
@@ -168,9 +168,9 @@ internal struct BarcodeSymbol : IDisposable
     public int MatrixRows { get; private set; }
 
     /// <summary>
-    /// Gets the X dimension in millimetres, the width of one module: the X dimension of the options, else the nominal X dimension the specification of the
-    /// symbology gives for this symbol. The encoder resolves it once, measures every height it states in millimetres with it, and the emitter draws the modules
-    /// at it.
+    /// Gets the X dimension in millimetres, the width of one module. The encoder resolves it once from the X dimension of the options, else the nominal X
+    /// dimension of the specification. <see cref="BarcodeOptions.XDimension"/> gives the rules that round and clamp it. The encoder measures every height it
+    /// states in millimetres with it, and the emitter draws the modules at it.
     /// </summary>
     public double XDimension { get; private set; }
 
@@ -373,17 +373,18 @@ internal struct BarcodeSymbol : IDisposable
     }
 
     /// <summary>
-    /// Inserts a row into an ended linear or stacked symbol that has no bearer bar and no edge bars, so the symbol becomes a stacked symbol. The rows from the
-    /// index down and the text lines at or below the top of the new row move down by its height. A GS1 Composite symbol joins its parts with such a row:
+    /// Inserts rows into an ended linear or stacked symbol that has no bearer bar and no edge bars, so the symbol becomes a stacked symbol. The rows from the
+    /// index down and the text lines at or below the top of the new rows move down by their height. A GS1 Composite symbol joins its parts with such rows:
     /// section 11.4 of ISO/IEC 24723 puts a separator pattern between the linear component and the 2D component.
     /// </summary>
-    /// <param name="index">The index the new row takes: 0 for a row above the symbol, or the row count for a row below it.</param>
-    /// <param name="runs">The runs of the new row, as wide as the symbol.</param>
-    /// <param name="height">The height of the new row in modules.</param>
-    public void InsertRow(int index, ReadOnlySpan<int> runs, float height)
+    /// <param name="index">The index the first new row takes: 0 for rows above the symbol, or the row count for rows below it.</param>
+    /// <param name="runs">The runs of the new rows, one row after the other. Each row is as wide as the symbol.</param>
+    /// <param name="rowRunCounts">The number of runs of each new row.</param>
+    /// <param name="height">The height of each new row in modules.</param>
+    public void InsertRows(int index, ReadOnlySpan<int> runs, ReadOnlySpan<int> rowRunCounts, float height)
     {
         // The layout buffer holds the rows, the runs and the bars in one block sized when the symbol began, so the rows copy into a new block with room for the
-        // new row. The old block stays rented until the copy ends.
+        // new rows. All new rows take one rent. The old block stays rented until the copy ends.
         PooledBuffer<byte> old = this.layoutBuffer;
         int oldRowCount = this.rowCount;
         int oldRunCount = this.runCount;
@@ -399,7 +400,13 @@ internal struct BarcodeSymbol : IDisposable
             ReadOnlySpan<float> oldHeights = Slice<float>(old, oldBarOffset, oldBarCount);
             ReadOnlySpan<float> oldTops = Slice<float>(old, oldBarOffset + (oldBarCapacity * sizeof(float)), oldBarCount);
 
-            this.Reserve(oldRowCount + 1, oldRunCount + runs.Length, oldBarCount + ((runs.Length + 1) >> 1));
+            int newBarCount = 0;
+            foreach (int count in rowRunCounts)
+            {
+                newBarCount += (count + 1) >> 1;
+            }
+
+            this.Reserve(oldRowCount + rowRunCounts.Length, oldRunCount + runs.Length, oldBarCount + newBarCount);
             this.rowCount = 0;
             this.runCount = 0;
             this.barCount = 0;
@@ -407,8 +414,13 @@ internal struct BarcodeSymbol : IDisposable
             {
                 if (r == index)
                 {
-                    runs.CopyTo(this.AddRow(runs.Length, out Span<float> newHeights, out _));
-                    newHeights.Fill(height);
+                    int start = 0;
+                    foreach (int count in rowRunCounts)
+                    {
+                        runs.Slice(start, count).CopyTo(this.AddRow(count, out Span<float> newHeights, out _));
+                        newHeights.Fill(height);
+                        start += count;
+                    }
                 }
 
                 if (r < oldRowCount)
@@ -428,7 +440,8 @@ internal struct BarcodeSymbol : IDisposable
         this.Kind = BarcodeSymbolKind.Stacked;
         this.HeightInModules = this.EndRows(0F);
 
-        // A text line at or below the new row keeps its place relative to the bars it belongs to.
+        // A text line at or below the new rows keeps its place relative to the bars it belongs to.
+        float insertedHeight = height * rowRunCounts.Length;
         Span<BarcodeTextPlacement> placements = Slice<BarcodeTextPlacement>(this.textBuffer, 0, this.textCount);
         for (int i = 0; i < placements.Length; i++)
         {
@@ -441,7 +454,7 @@ internal struct BarcodeSymbol : IDisposable
                     placement.Left,
                     placement.Right,
                     placement.Side,
-                    placement.TextEdge + height,
+                    placement.TextEdge + insertedHeight,
                     placement.FontScale,
                     placement.IsCaption,
                     placement.Alignment,

@@ -8,17 +8,13 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
 /// Encodation for Codablock F. A symbol is 2 to 44 rows of Code 128 characters. Every row carries a Start A character, a code set selector, a row indicator,
-/// the data columns, a modulo 103 row check character and the stop character. The first row's indicator is the row count less two and every other row's is its
-/// index plus 42. The last row gives two of its data columns to the modulo 86 check characters K1 and K2 of the whole message. The row and check values map to
-/// code set A and B characters as 64 to 95 for 0 to 31, 0 to 15 for 32 to 47 and 26 to 63 for 48 to 85, and to code set C characters as themselves.
+/// the data columns, a modulo 103 row check character and the stop character. The first row's indicator is the row count less two. The indicator of every other
+/// row is its index plus 42. The last row gives two of its data columns to the modulo 86 check characters K1 and K2 of the whole message. In code sets A and B,
+/// the row and check values 0 to 31 map to the characters 64 to 95. The values 32 to 47 map to the characters 0 to 15. The values 48 to 85 map to the
+/// characters 26 to 63. In code set C, each row and check value maps to the character with the same value.
 /// </summary>
 internal static class CodablockFEncoder
 {
-    /// <summary>
-    /// The quiet zone in modules on each side.
-    /// </summary>
-    public const int QuietZone = 10;
-
     /// <summary>
     /// The smallest number of data columns in a row.
     /// </summary>
@@ -35,33 +31,39 @@ internal static class CodablockFEncoder
     public const int DefaultColumns = 8;
 
     /// <summary>
-    /// The smallest number of rows.
+    /// The longest text a symbol carries: two digits per character over 44 rows of 62 columns.
     /// </summary>
-    public const int MinimumRows = 2;
+    public const int MaximumText = MaximumRows * MaximumColumns * 2;
+
+    /// <summary>
+    /// The quiet zone in modules on each side.
+    /// </summary>
+    private const int QuietZone = 10;
 
     /// <summary>
     /// The largest number of rows.
     /// </summary>
-    public const int MaximumRows = 44;
+    private const int MaximumRows = 44;
 
     /// <summary>
     /// The characters a row carries beyond its data columns: the start character, the code set selector, the row indicator, the row check character and the
     /// stop character.
     /// </summary>
-    public const int Overhead = 5;
+    private const int Overhead = 5;
 
     /// <summary>
     /// The height in modules of the separator bars between rows and at the top and bottom of the symbol.
     /// </summary>
-    public const float SeparatorHeight = 1F;
+    private const float SeparatorHeight = 1F;
 
     /// <summary>
     /// The modulus of the check characters K1 and K2.
     /// </summary>
-    public const int CheckModulus = 86;
+    private const int CheckModulus = 86;
 
     /// <summary>
-    /// The symbol character value of Shift, which changes code set A to B, or B to A, for one character.
+    /// The symbol character value of Shift, which changes code set A to B, or B to A, for one character. After the start character of a row, the same value
+    /// selects code set A for the row.
     /// </summary>
     private const int Shift = 98;
 
@@ -109,11 +111,6 @@ internal static class CodablockFEncoder
     /// The row indicator of the second row; each row that follows adds one.
     /// </summary>
     private const int SecondRowIndicator = 43;
-
-    /// <summary>
-    /// The longest text a symbol carries: two digits per character over 44 rows of 62 columns.
-    /// </summary>
-    private const int MaximumText = MaximumRows * MaximumColumns * 2;
 
     /// <summary>
     /// The code sets of the Code 128 symbol characters.
@@ -180,26 +177,10 @@ internal static class CodablockFEncoder
     ];
 
     /// <summary>
-    /// Returns the nominal row height in modules for a column count: ten, or 0.55 modules per data column plus three when that is more.
-    /// </summary>
-    /// <param name="columns">The number of data columns.</param>
-    /// <returns>The nominal row height in modules.</returns>
-    public static float NominalRowHeight(int columns)
-        => MathF.Max(10F, (0.55F * columns) + 3F);
-
-    /// <summary>
-    /// Returns the width of a row in modules: eleven per character and thirteen for the stop character.
-    /// </summary>
-    /// <param name="columns">The number of data columns.</param>
-    /// <returns>The row width in modules.</returns>
-    public static int RowWidth(int columns)
-        => (11 * (columns + Overhead - 1)) + 13;
-
-    /// <summary>
-    /// Encodes text and builds the symbol. The Code 128 character values of the whole symbol run one row after another, each row <paramref name="columns"/>
-    /// plus <see cref="Overhead"/> values long. Each row of values becomes one row of Code 128 patterns. A separator between rows keeps the start and stop
-    /// patterns and fills the columns between them, a solid bar runs at the top and at the bottom, and the data prints as a text line below the bottom bar when
-    /// a font is set. The check characters are not printed.
+    /// Encodes text and builds the symbol. The Code 128 character values of the whole symbol run one row after another. Each row is
+    /// <paramref name="columns"/> plus <see cref="Overhead"/> values long. Each row of values becomes one row of Code 128 patterns. A separator between rows
+    /// keeps the start and stop patterns and fills the columns between them. A solid bar runs at the top and at the bottom. When a font is set, the data prints
+    /// as a text line below the bottom bar. The text line does not show the check characters.
     /// </summary>
     /// <param name="text">The text to encode. Every character must be U+0000 to U+00FF.</param>
     /// <param name="columns">The number of data columns in a row, 4 to 62.</param>
@@ -224,9 +205,9 @@ internal static class CodablockFEncoder
                 nameof(text));
         }
 
-        // The value count is known only once the rows are laid out, but the encoder checks the 44 row limit before it starts each row, so the values take room
-        // for 44 rows. The lookahead takes one entry, two integers, for every position and one past the end. The text is at most MaximumText characters, so one
-        // bounded array, rented once, holds the values and the lookahead.
+        // The encoder knows the value count only after it lays out the rows. Because the encoder checks the 44 row limit before it starts each row, the values
+        // take room for 44 rows. The lookahead takes one entry, two integers, for every position and one past the end. Because the text is at most MaximumText
+        // characters, one bounded array holds the values and the lookahead. The encoder rents this array once.
         int rowSize = columns + Overhead;
         int capacity = MaximumRows * rowSize;
         PooledBuffer<int> buffer = new(capacity + ((n + 1) * 2));
@@ -299,6 +280,22 @@ internal static class CodablockFEncoder
             buffer.Dispose();
         }
     }
+
+    /// <summary>
+    /// Returns the nominal row height in modules for a column count: ten, or 0.55 modules per data column plus three when that is more.
+    /// </summary>
+    /// <param name="columns">The number of data columns.</param>
+    /// <returns>The nominal row height in modules.</returns>
+    private static float NominalRowHeight(int columns)
+        => MathF.Max(10F, (0.55F * columns) + 3F);
+
+    /// <summary>
+    /// Returns the width of a row in modules: eleven per character and thirteen for the stop character.
+    /// </summary>
+    /// <param name="columns">The number of data columns.</param>
+    /// <returns>The row width in modules.</returns>
+    private static int RowWidth(int columns)
+        => (11 * (columns + Overhead - 1)) + 13;
 
     /// <summary>
     /// Encodes text into character values: the rows with their pad, the check characters and the row indicators.

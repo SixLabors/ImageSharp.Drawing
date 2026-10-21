@@ -401,10 +401,10 @@ internal static class MatrixEmitter
             Brush brush = (BarcodeModuleColor)c switch
             {
                 BarcodeModuleColor.Dark => barBrush,
-                BarcodeModuleColor.Cyan => Brushes.Solid(Color.Cyan),
-                BarcodeModuleColor.Magenta => Brushes.Solid(Color.Magenta),
-                BarcodeModuleColor.Yellow => Brushes.Solid(Color.Yellow),
-                _ => Brushes.Solid(Color.Lime),
+                BarcodeModuleColor.Cyan => ModuleBrushes.Cyan,
+                BarcodeModuleColor.Magenta => ModuleBrushes.Magenta,
+                BarcodeModuleColor.Yellow => ModuleBrushes.Yellow,
+                _ => ModuleBrushes.Green,
             };
 
             canvas.Fill(brush, new BarcodePath(runs[c], bounds[c]));
@@ -704,5 +704,31 @@ internal static class MatrixEmitter
         /// <param name="row">The row, 0 to the row count.</param>
         /// <returns>The edge in pixels.</returns>
         public float RowEdge(int row) => (float)Math.Round(this.Top + ((double)row * this.ModuleWidth));
+    }
+
+    /// <summary>
+    /// The brushes of the colored modules. Brushes are immutable, so every draw shares them. A nested class creates them on the first colored symbol only.
+    /// </summary>
+    private static class ModuleBrushes
+    {
+        /// <summary>
+        /// The brush of a cyan module.
+        /// </summary>
+        public static readonly SolidBrush Cyan = Brushes.Solid(Color.Cyan);
+
+        /// <summary>
+        /// The brush of a magenta module.
+        /// </summary>
+        public static readonly SolidBrush Magenta = Brushes.Solid(Color.Magenta);
+
+        /// <summary>
+        /// The brush of a yellow module.
+        /// </summary>
+        public static readonly SolidBrush Yellow = Brushes.Solid(Color.Yellow);
+
+        /// <summary>
+        /// The brush of a green module.
+        /// </summary>
+        public static readonly SolidBrush Green = Brushes.Solid(Color.Lime);
     }
 }

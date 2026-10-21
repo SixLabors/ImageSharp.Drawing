@@ -34,8 +34,8 @@ public sealed class HibcPdf417Symbology : BarcodeSymbology
     /// Initializes a new instance of the <see cref="HibcPdf417Symbology"/> class.
     /// </summary>
     /// <param name="columns">The number of data columns in a row, 1 to 30. The row count follows from the data.</param>
-    /// <param name="validateCheckCharacter">Whether the last character of the input is the check character, which the encoder validates against the data,
-    /// rather than data the encoder appends a check character to.</param>
+    /// <param name="validateCheckCharacter">Whether the last character of the input is the check character. When <see langword="true"/>, the encoder validates
+    /// this character against the data. Otherwise, the encoder appends a check character to the data.</param>
     public HibcPdf417Symbology(int columns, bool validateCheckCharacter)
     {
         Guard.MustBeBetweenOrEqualTo(columns, Pdf417Encoder.MinimumColumns, Pdf417Encoder.MaximumColumns, nameof(columns));
@@ -58,7 +58,7 @@ public sealed class HibcPdf417Symbology : BarcodeSymbology
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         InlineArray64<char> bufferStorage = default;
-        int capacity = HibcData.PreparedCapacity(text.Length);
+        int capacity = HibcData.PreparedCapacity(text, Pdf417Codewords.MaximumLength);
         ValueStringBuilder encoded = capacity <= HibcData.InlineBufferLength ? new(bufferStorage) : new(capacity);
         try
         {

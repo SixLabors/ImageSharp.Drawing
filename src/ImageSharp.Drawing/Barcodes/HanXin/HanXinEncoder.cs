@@ -18,7 +18,7 @@ internal static class HanXinEncoder
     /// The longest input: version 84 at level L1 holds 3264 data codewords, 26112 bits, and Numeric mode, the densest, takes 10 bits for three digits, so no
     /// more than 7827 characters fit.
     /// </summary>
-    public const int MaximumLength = 7827;
+    private const int MaximumLength = 7827;
 
     /// <summary>
     /// The quiet zone on each of the four sides in modules.
@@ -47,14 +47,19 @@ internal static class HanXinEncoder
     private const int MaximumSide = 21 + (2 * VersionCount);
 
     /// <summary>
-    /// The shortest digit run that starts a Numeric segment, or <see cref="ShortestFinalNumericRun"/> when the run ends the data.
+    /// The shortest digit run that starts a Numeric segment between two Byte segments.
     /// </summary>
     private const int ShortestNumericRun = 8;
 
     /// <summary>
-    /// The shortest digit run that starts a Numeric segment when the run ends the data.
+    /// The shortest digit run that starts a Numeric segment with a Byte segment on one side only.
     /// </summary>
-    private const int ShortestFinalNumericRun = 5;
+    private const int ShortestNumericRunBesideByte = 5;
+
+    /// <summary>
+    /// The shortest digit run that starts a Numeric segment with no Byte segment on either side. Every digit run is then shorter in Numeric mode.
+    /// </summary>
+    private const int ShortestNumericRunAlone = 1;
 
     /// <summary>
     /// The number of bits of the byte count of a Byte segment. A segment is at most <see cref="MaximumLength"/> bytes, which the 13 bits hold.
@@ -369,8 +374,11 @@ internal static class HanXinEncoder
     private static int WriteBits(ReadOnlySpan<char> text, Span<int> codewords)
     {
         // A Numeric segment of D digits costs a 4-bit mode indicator, 10 bits for each group of three digits and a 10-bit terminator. The same digits in a Byte
-        // segment cost 8 bits each. A Numeric segment inside Byte data also starts a new Byte segment after it, a 4-bit mode indicator and a 13-bit count. So 8
-        // digits, 61 bits against 64, is the shortest run that saves bits, and 5 digits, 34 bits against 40, when no Byte segment follows.
+        // segment cost 8 bits each. A Byte segment costs a 4-bit mode indicator and a 13-bit count of its own, so the shortest run that saves bits depends on
+        // the Byte segments beside it:
+        // - Between two Byte segments, the Numeric segment also starts a new Byte segment: 8 digits, 61 bits against 64.
+        // - With a Byte segment on one side only: 5 digits, 34 bits against 40.
+        // - With no Byte segment on either side, the digits alone would make a Byte segment: 1 digit, 24 bits against 25.
         BitWriter writer = new(codewords);
 
         // The start of the pending Byte segment, or -1 when there is none.
@@ -403,7 +411,10 @@ internal static class HanXinEncoder
 
             // A run too short for a Numeric segment joins the Byte segment whole. Each later start in the run gives a shorter run with the same end, so none of
             // them is long enough either.
-            if (digits >= (i + digits == text.Length ? ShortestFinalNumericRun : ShortestNumericRun))
+            bool byteBefore = byteStart >= 0;
+            bool byteAfter = i + digits < text.Length;
+            int shortest = byteBefore && byteAfter ? ShortestNumericRun : byteBefore || byteAfter ? ShortestNumericRunBesideByte : ShortestNumericRunAlone;
+            if (digits >= shortest)
             {
                 if (byteStart >= 0)
                 {
@@ -532,8 +543,8 @@ internal static class HanXinEncoder
             }
         }
 
-        // The function information carries the mask, so its cells are reserved light here and written after the mask is chosen. As function cells, they also
-        // stay out of the masking.
+        // The function information carries the mask, so this loop reserves its cells as light. The encoder writes these cells after it chooses the mask. As
+        // function cells, they also stay out of the masking.
         for (int i = 0; i < FunctionBits; i++)
         {
             FunctionPositions(i, size, out int x1, out int y1, out int x2, out int y2);

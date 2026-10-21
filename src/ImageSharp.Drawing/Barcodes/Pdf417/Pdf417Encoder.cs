@@ -73,6 +73,14 @@ internal static class Pdf417Encoder
     private static ReadOnlySpan<int> Stop => [7, 1, 1, 3, 1, 1, 1, 2, 1];
 
     /// <summary>
+    /// Returns the recommended minimum error correction level of Table E.1 of ISO/IEC 15438 for a number of data codewords.
+    /// </summary>
+    /// <param name="dataCodewords">The number of data codewords.</param>
+    /// <returns>The error correction level, 2 to 5.</returns>
+    public static int RecommendedErrorCorrectionLevel(int dataCodewords)
+        => dataCodewords <= 40 ? 2 : dataCodewords <= 160 ? 3 : dataCodewords <= 320 ? 4 : 5;
+
+    /// <summary>
     /// Encodes the text into a symbol.
     /// </summary>
     /// <param name="text">The data, the characters U+0000 to U+00FF.</param>
@@ -90,9 +98,9 @@ internal static class Pdf417Encoder
         BarcodeOptions options,
         ref BarcodeSymbol symbol)
     {
-        // A character takes at most two data codewords: a numeric or text run costs less than two for each character with its latch, a single byte shifted out
-        // of Text Compaction mode costs two, and a byte run costs one latch and at most one codeword for each byte. The text is bounded, so the builder never
-        // grows: short data works inline and longer data rents once.
+        // A character takes at most two data codewords. A numeric or text run costs less than two for each character with its latch. A single byte shifted
+        // out of Text Compaction mode costs two. A byte run costs one latch and at most one codeword for each byte. The text is bounded, so the builder never
+        // grows. Short data works inline, and longer data rents once.
         Guard.MustBeLessThanOrEqualTo(text.Length, Pdf417Codewords.MaximumLength, nameof(text));
         InlineArray64<int> dataStorage = default;
         int capacity = (2 * text.Length) + 1;
@@ -142,7 +150,7 @@ internal static class Pdf417Encoder
         }
         else
         {
-            level = m <= 40 ? 2 : m <= 160 ? 3 : m <= 320 ? 4 : 5;
+            level = RecommendedErrorCorrectionLevel(m);
             level = Math.Min(level, BitOperations.Log2((uint)(MaximumCodewords - 1 - m)) - 1);
         }
 

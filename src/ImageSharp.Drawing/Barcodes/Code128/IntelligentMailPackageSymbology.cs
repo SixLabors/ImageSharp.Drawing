@@ -20,8 +20,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// Section 2.4 makes three more elements part of the IMpb structure: the PIC below the bars, a service banner above them, and an identification bar above the
 /// banner and below the PIC. The structure "shall include" all three, so the symbol needs a font. Section 2.4.1 and section 2.4.2 call for a "boldface*, sans
 /// serif font". The caller supplies a sans serif font, and the text renders bold, with a synthetic weight when the font has no bold face. Section 2.2.2 limits
-/// the X dimension to 0.013 to 0.021 inch, and section 2.2.4 requires a bar height of at least 0.75 inch. An X dimension outside that range is clamped to
-/// it, and a bar height under that minimum draws at 0.75 inch.
+/// the X dimension to 0.013 to 0.021 inch, and section 2.2.4 requires a bar height of at least 0.75 inch. An X dimension outside that range draws at the
+/// nearest limit. A bar height under that minimum draws at 0.75 inch.
 /// </para>
 /// </summary>
 public sealed class IntelligentMailPackageSymbology : BarcodeSymbology

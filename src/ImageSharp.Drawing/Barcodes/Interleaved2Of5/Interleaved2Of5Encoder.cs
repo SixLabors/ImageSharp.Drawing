@@ -184,23 +184,4 @@ internal static class Interleaved2Of5Encoder
 
         symbol.EndLinear(layout.QuietZone, layout.QuietZone, bearerBarThickness, runUnit, false);
     }
-
-    /// <summary>
-    /// Calculates the optional check digit of section 2.5 of AIM USS-I 2/5 by the modulo 10 calculation of Appendix C: the digits are weighted 3 and 1
-    /// alternately from the rightmost digit, which takes 3, and the check digit lifts the sum to the next multiple of ten.
-    /// </summary>
-    /// <param name="digits">The data digits.</param>
-    /// <returns>The check digit value.</returns>
-    public static int CheckDigit(ReadOnlySpan<char> digits)
-    {
-        int sum = 0;
-        int weight = 3;
-        for (int i = digits.Length - 1; i >= 0; i--)
-        {
-            sum += (digits[i] - '0') * weight;
-            weight = 4 - weight;
-        }
-
-        return (10 - (sum % 10)) % 10;
-    }
 }

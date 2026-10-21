@@ -27,8 +27,9 @@ public sealed class BarcodeOptions
     private double? barHeight;
 
     /// <summary>
-    /// Gets or sets the resolution in dots per inch. A module is <see cref="XDimension"/> / 25.4 x <see cref="Dpi"/> pixels wide. The text also uses this
-    /// resolution. Set this value to the resolution of the device that prints or shows the image. The default is 300. Many printers use this resolution.
+    /// Gets or sets the resolution in dots per inch. This value converts the millimetre sizes to pixels. <see cref="XDimension"/> gives the rule that rounds a
+    /// module to whole pixels. The text also uses this resolution. Set this value to the resolution of the device that prints or shows the image. The default
+    /// is 300. Many printers use this resolution.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">The value is not greater than zero.</exception>
     public float Dpi
@@ -51,11 +52,11 @@ public sealed class BarcodeOptions
     /// <para>
     /// A symbol draws at the X dimension of the nearest whole number of pixels at <see cref="Dpi"/>, at least one pixel, so every module of the symbol is
     /// the same number of pixels wide. The symbol can then be slightly larger or smaller than this X dimension gives. Where the specification of the symbology
-    /// gives a smallest and a largest X dimension, the number of pixels is clamped to that range, so a value outside the range draws at the nearest limit. The
-    /// specification sets the range to make sure that a scanner can read the symbol. Thus each symbol stays inside its specification for all values. At
-    /// a resolution where no whole number of pixels is inside the range, the symbol draws at the smallest whole number of pixels over the smallest X
+    /// gives a smallest and a largest X dimension, the code clamps the number of pixels to that range. A value outside the range thus draws at the nearest
+    /// limit. The specification sets the range to make sure that a scanner can read the symbol. Thus each symbol stays inside its specification for all
+    /// values. At a resolution where no whole number of pixels is inside the range, the symbol draws at the smallest whole number of pixels over the smallest X
     /// dimension. <see cref="MaxiCodeSymbology"/>, whose hexagonal modules do not stand on whole pixels, and <see cref="SwissQrCodeSymbology"/>, whose width
-    /// the specification fixes, draw at the exact X dimension.
+    /// the specification fixes, draw at the exact X dimension. <see cref="SwissQrCodeSymbology"/> throws when this value is set.
     /// </para>
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">The value is not greater than zero.</exception>
@@ -110,10 +111,11 @@ public sealed class BarcodeOptions
     /// <summary>
     /// Gets or sets the font for the human readable interpretation, whose size is in points and renders at <see cref="Dpi"/>. Set <see langword="null"/> to
     /// print no text. The text prints at the size of this font, except where the standard of a symbology sets a size. The text of an Intelligent Mail Package
-    /// Barcode moves into its printed character height of 0.090 to 0.125 inch, and prints bold, as its standard requires, with a synthetic weight when the font
-    /// has no bold face. The text of an Intelligent Mail barcode prints at 10 points or larger, and the text of an Australia Post barcode at 8 points or
-    /// smaller. The text of a GS1-128, GS1 DataBar, ITF-14 or GS1 two-dimensional symbol prints at an em height of 2 mm or larger, which is about 5.67 points.
-    /// A line that must stay within its span prints smaller when it is wider than the span, such as the quiet zone digits of a UPC symbol.
+    /// Barcode moves into its printed character height of 0.090 to 0.125 inch. This text prints bold, as its standard requires. When the font has no bold face,
+    /// this text prints with a synthetic weight. The text of an Intelligent Mail barcode prints at 10 points or larger, and the text of an Australia Post
+    /// barcode at 8 points or smaller. The text of a PZN prints at 6 points or larger. The text of a GS1-128, GS1 DataBar, ITF-14 or GS1 two-dimensional symbol
+    /// prints at an em height of 2 mm or larger, which is about 5.67 points. When a line that must stay within its span is wider than the span, the line prints
+    /// smaller. The quiet zone digits of a UPC symbol are an example of such a line.
     /// </summary>
     public Font? Font { get; set; }
 

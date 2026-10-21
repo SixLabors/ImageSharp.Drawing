@@ -16,18 +16,18 @@ internal static class AustraliaPostEncoder
     /// <summary>
     /// The largest size of the text representation in points: it "should appear above the barcode in 8 point type or less".
     /// </summary>
-    public const float MaximumTextSize = 8F;
+    private const float MaximumTextSize = 8F;
 
     /// <summary>
     /// The number of digits in the format control code and the sorting code together.
     /// </summary>
-    public const int FixedDigits = 10;
+    private const int FixedDigits = 10;
 
     /// <summary>
     /// The number of error correction symbols, which the specification calls "the four parity check symbols of a (n,k) Reed Solomon code over Galois Field
     /// GF(64)".
     /// </summary>
-    public const int ParitySymbols = 4;
+    private const int ParitySymbols = 4;
 
     /// <summary>
     /// The number of bars from the start of the symbol to the customer information field: two start bars, four format control code bars and sixteen sorting
@@ -41,15 +41,20 @@ internal static class AustraliaPostEncoder
     private const int TrailingBars = 14;
 
     /// <summary>
-    /// The dimensions the specification gives as ranges, taken at the middle of each range: a bar width of 0.5 mm from "0.4" to "0.6", a tracker of 1.3 mm from
-    /// "1.0" to "1.6", an ascender or descender bar of 3.15 mm from "2.6" to "3.7", so an extender of 1.85 mm, and a bar density of 23.5 bars per 25.4 mm from
-    /// "22 to 25 bars per 25.4mm", so a pitch of 1.08 mm. A run unit of 0.01 mm is 1/50 module, a bar is 50 units and a space 58, inside the bar gap of "0.4"
-    /// to "0.7". Diagram 14 gives a quiet zone of 6 mm at each end and 2 mm above and below, and the text representation "should appear above the barcode" and
-    /// "must be outside of the barcode's minimum Quiet Zone". The bar width the symbol draws at is clamped to the "0.4" to "0.6" mm of the table on page 12,
-    /// and the bars per inch to the 22 to 25 of the bar density on page 13. The full bar is clamped to the "4.2" to "5.8" mm of bar type H in the same table.
-    /// At each end of that range, the tracker and the ascender and descender bars stay inside their own ranges.
+    /// The dimensions that the specification gives as ranges, at the middle of each range:
+    /// <list type="bullet">
+    /// <item><description>A bar width of 0.5 mm, from "0.4" to "0.6".</description></item>
+    /// <item><description>A tracker of 1.3 mm, from "1.0" to "1.6".</description></item>
+    /// <item><description>An ascender or descender bar of 3.15 mm, from "2.6" to "3.7". The extender is thus 1.85 mm.</description></item>
+    /// <item><description>A bar density of 23.5 bars per 25.4 mm, from "22 to 25 bars per 25.4mm". The pitch is thus 1.08 mm.</description></item>
+    /// </list>
+    /// A run unit of 0.01 mm is 1/50 module. A bar is 50 units and a space is 58 units, inside the bar gap of "0.4" to "0.7". Diagram 14 gives a quiet zone of
+    /// 6 mm at each end and 2 mm above and below. The text representation "should appear above the barcode" and "must be outside of the barcode's minimum
+    /// Quiet Zone". The table on page 12 gives the bar width of "0.4" to "0.6" mm, and the code clamps the drawn bar width to that range. The code clamps the
+    /// bars per inch to the 22 to 25 of the bar density on page 13. The code clamps the full bar to the "4.2" to "5.8" mm of bar type H in the same table. At
+    /// each end of that range, the tracker and the ascender and descender bars stay inside their own ranges.
     /// </summary>
-    public static readonly FourStateMetrics Metrics = new(
+    private static readonly FourStateMetrics Metrics = new(
         0.5,
         1F / 50F,
         50,
@@ -93,19 +98,6 @@ internal static class AustraliaPostEncoder
         2, 1, 3, 2, 2, 3, 2, 3, 0, 2, 3, 1, 2, 3, 2, 2, 3, 3, 3, 0, 3, 3, 1, 3, 3, 2, 3, 3, 3, 0, 3, 3, 1, 3, 3, 2, 3, 3, 3,
         0, 0, 3, 0, 1, 3,
     ];
-
-    /// <summary>
-    /// Returns the number of bars in the format a format control code selects, or 0 when the code is not one of the customer barcode formats.
-    /// </summary>
-    /// <param name="formatControlCode">The two digits of the format control code.</param>
-    /// <returns>37 for the Standard Customer Barcode and the Null Customer Barcode, 52 for Customer Barcode 2, 67 for Customer Barcode 3.</returns>
-    public static int BarCount(ReadOnlySpan<char> formatControlCode) => formatControlCode switch
-    {
-        "00" or "11" => 37,
-        "59" => 52,
-        "62" => 67,
-        _ => 0,
-    };
 
     /// <summary>
     /// Encodes the text into a symbol.
@@ -250,12 +242,25 @@ internal static class AustraliaPostEncoder
     }
 
     /// <summary>
+    /// Returns the number of bars in the format a format control code selects, or 0 when the code is not one of the customer barcode formats.
+    /// </summary>
+    /// <param name="formatControlCode">The two digits of the format control code.</param>
+    /// <returns>37 for the Standard Customer Barcode and the Null Customer Barcode, 52 for Customer Barcode 2, 67 for Customer Barcode 3.</returns>
+    private static int BarCount(ReadOnlySpan<char> formatControlCode) => formatControlCode switch
+    {
+        "00" or "11" => 37,
+        "59" => 52,
+        "62" => 67,
+        _ => 0,
+    };
+
+    /// <summary>
     /// Converts three bars to their decimal value by the Bar to Decimal Conversion Table, in which the bar values are the digits of a base 4 number.
     /// </summary>
     /// <param name="values">The bar values.</param>
     /// <param name="start">The index of the first of the three bars.</param>
     /// <returns>The decimal value.</returns>
-    public static int SymbolValue(ReadOnlySpan<byte> values, int start)
+    private static int SymbolValue(ReadOnlySpan<byte> values, int start)
         => (values[start] * 16) + (values[start + 1] * 4) + values[start + 2];
 
     /// <summary>

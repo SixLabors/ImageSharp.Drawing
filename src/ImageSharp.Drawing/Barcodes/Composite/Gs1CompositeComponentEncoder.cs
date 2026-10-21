@@ -58,6 +58,12 @@ internal static class Gs1CompositeComponentEncoder
     private const int MaximumBits = 8304;
 
     /// <summary>
+    /// The longest prepared data a 2D component can hold. No encodation of ISO/IEC 24723 takes fewer than 2 bits for a character of prepared data, so data
+    /// longer than half of <see cref="MaximumBits"/> never fits.
+    /// </summary>
+    public const int MaximumPrepared = MaximumBits / 2;
+
+    /// <summary>
     /// The number of bits section 8.5 converts into one group of base 928 codewords.
     /// </summary>
     private const int Base928GroupBits = 69;
@@ -185,6 +191,9 @@ internal static class Gs1CompositeComponentEncoder
         double xDimension,
         ref BarcodeSymbol symbol)
     {
+        // The length check runs before the buffers take their size from the text.
+        _ = Gs1Data.PreparedCapacity(text, MaximumPrepared);
+
         // An element string is at least five characters of text, so the text holds at most a fifth of its length in element strings. The general purpose field
         // drops the parentheses and adds at most one separator after each element string, so it is never longer than the text.
         InlineArray16<Gs1Element> elementStorage = default;
@@ -207,8 +216,9 @@ internal static class Gs1CompositeComponentEncoder
             int level;
             if (lastDigit != '\0')
             {
-                // Section 5.4.1 c): a single digit left at the end takes four bits as its value plus one when four to six bits remain in the smallest symbol
-                // that holds the bit stream so far, the fifth and sixth bits zero, and otherwise seven bits as a pair with a separator.
+                // Section 5.4.1 c) covers a single digit left at the end. The remaining bit count comes from the smallest symbol that holds the bit stream so
+                // far. When four to six bits remain, the digit takes four bits as its value plus one. The fifth and sixth bits are zero. Otherwise, the digit
+                // takes seven bits as a pair with a separator.
                 int remaining = Capacity(bits.Position, ref component, ref c, ccCColumns, out _, out _) - bits.Position;
                 if (remaining is >= 4 and <= 6)
                 {
@@ -300,8 +310,8 @@ internal static class Gs1CompositeComponentEncoder
                 bits.Append(0b11, 2);
             }
 
-            // A batch or lot number (10) next to the date carries its data alone, and a separator ends it when more data follows. Any other data after the
-            // date starts with a separator, which is not transmitted.
+            // A batch or lot number (10) next to the date carries its data alone, and a separator ends it when more data follows. Section 5.3.1: when no lot
+            // number follows the date directly, a separator follows the date, also when no other data follows. The separator is not transmitted.
             if (next < elements.Length && elements[next].Identifier(text).SequenceEqual("10"))
             {
                 written = Append(field, written, elements[next].Data(text));
@@ -739,7 +749,7 @@ internal static class Gs1CompositeComponentEncoder
         int bytes = (used + 7) / 8;
         int data = 2 + (ByteGroupCodewords * (bytes / ByteGroup)) + (bytes % ByteGroup);
         int largest = MaximumCcCColumns * MaximumCcCRows;
-        level = data <= 40 ? 2 : data <= 160 ? 3 : data <= 320 ? 4 : 5;
+        level = Pdf417Encoder.RecommendedErrorCorrectionLevel(data);
         while (level > 0 && data + 1 + (2 << level) > largest)
         {
             level--;

@@ -526,18 +526,69 @@ internal static class DataMatrixCodewords
     /// </summary>
     private ref struct Encoder
     {
+        /// <summary>
+        /// The message values.
+        /// </summary>
         private readonly ReadOnlySpan<int> message;
+
+        /// <summary>
+        /// The data codeword capacities of the symbols the data can take.
+        /// </summary>
         private readonly ReadOnlySpan<int> capacities;
+
+        /// <summary>
+        /// The number of digits that start at each position.
+        /// </summary>
         private readonly ReadOnlySpan<int> digits;
+
+        /// <summary>
+        /// The distance from each position to the next X12 terminator, carriage return, asterisk or greater than.
+        /// </summary>
         private readonly ReadOnlySpan<int> terminator;
+
+        /// <summary>
+        /// The distance from each position to the next character that X12 encodation cannot encode.
+        /// </summary>
         private readonly ReadOnlySpan<int> nonX12;
+
+        /// <summary>
+        /// The running sum, in units, of the ASCII encodation cost of the characters before each position.
+        /// </summary>
         private readonly ReadOnlySpan<int> asciiSums;
+
+        /// <summary>
+        /// The running sum, in units, of the C40 encodation cost of the characters before each position.
+        /// </summary>
         private readonly ReadOnlySpan<int> c40Sums;
+
+        /// <summary>
+        /// The running sum, in units, of the Text encodation cost of the characters before each position.
+        /// </summary>
         private readonly ReadOnlySpan<int> textSums;
+
+        /// <summary>
+        /// The running sum, in units, of the X12 encodation cost of the characters before each position.
+        /// </summary>
         private readonly ReadOnlySpan<int> x12Sums;
+
+        /// <summary>
+        /// The running sum, in units, of the EDIFACT encodation cost of the characters before each position.
+        /// </summary>
         private readonly ReadOnlySpan<int> edifactSums;
+
+        /// <summary>
+        /// The running sum, in units, of the Base 256 encodation cost of the characters before each position.
+        /// </summary>
         private readonly ReadOnlySpan<int> base256Sums;
+
+        /// <summary>
+        /// The buffer that receives the data codewords.
+        /// </summary>
         private readonly Span<int> codewords;
+
+        /// <summary>
+        /// The scratch for the values of a run of C40, Text, X12 or EDIFACT encodation.
+        /// </summary>
         private readonly Span<int> values;
 
         /// <summary>

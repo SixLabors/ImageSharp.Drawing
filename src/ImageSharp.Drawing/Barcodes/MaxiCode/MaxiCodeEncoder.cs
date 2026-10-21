@@ -15,7 +15,7 @@ internal static class MaxiCodeEncoder
     /// <summary>
     /// The longest data the secondary message can hold: 93 codewords of digits in numeric shift, 9 digits in 6 codewords.
     /// </summary>
-    public const int MaximumDataLength = 138;
+    private const int MaximumDataLength = 138;
 
     /// <summary>
     /// The number of module positions in a row.
@@ -31,6 +31,36 @@ internal static class MaxiCodeEncoder
     /// The number of codewords in a symbol, the primary and secondary messages with their check codewords.
     /// </summary>
     private const int CodewordCount = 144;
+
+    /// <summary>
+    /// The number of data codewords of the primary message. The first is the mode.
+    /// </summary>
+    private const int PrimaryDataCodewords = 10;
+
+    /// <summary>
+    /// The number of check codewords of the primary message.
+    /// </summary>
+    private const int PrimaryCheckCodewords = 10;
+
+    /// <summary>
+    /// The index of the first secondary data codeword, after the primary data and check codewords.
+    /// </summary>
+    private const int SecondaryStart = PrimaryDataCodewords + PrimaryCheckCodewords;
+
+    /// <summary>
+    /// The number of secondary data codewords with standard error correction, modes 2, 3, 4 and 6.
+    /// </summary>
+    private const int StandardSecondaryLength = 84;
+
+    /// <summary>
+    /// The number of check codewords of one secondary block with standard error correction.
+    /// </summary>
+    private const int StandardSecondaryCheckCodewords = 20;
+
+    /// <summary>
+    /// The number of check codewords of one secondary block with enhanced error correction, mode 5.
+    /// </summary>
+    private const int EnhancedSecondaryCheckCodewords = 28;
 
     /// <summary>
     /// The length of a code set the search has not reached at a character.
@@ -480,7 +510,7 @@ internal static class MaxiCodeEncoder
         {
             primary.CopyTo(codewords);
             secondaryLength = CarrierCapacity;
-            Span<int> secondary = codewords.Slice(20, secondaryLength);
+            Span<int> secondary = codewords.Slice(SecondaryStart, secondaryLength);
             secondary.Fill(pad);
             message[..messageLength].CopyTo(secondary);
         }
@@ -488,13 +518,13 @@ internal static class MaxiCodeEncoder
         {
             // The mode is the first codeword and the message follows it, through the 9 remaining data codewords of the primary message and on into the
             // secondary message.
-            secondaryLength = capacity + 1 - 10;
-            codewords[..10].Fill(pad);
-            codewords.Slice(20, secondaryLength).Fill(pad);
+            secondaryLength = capacity + 1 - PrimaryDataCodewords;
+            codewords[..PrimaryDataCodewords].Fill(pad);
+            codewords.Slice(SecondaryStart, secondaryLength).Fill(pad);
             codewords[0] = (int)chosen;
-            int head = Math.Min(messageLength, 9);
+            int head = Math.Min(messageLength, PrimaryDataCodewords - 1);
             message[..head].CopyTo(codewords[1..]);
-            message[head..messageLength].CopyTo(codewords[20..]);
+            message[head..messageLength].CopyTo(codewords[SecondaryStart..]);
         }
 
         AddCheckCodewords(codewords, secondaryLength);
@@ -803,8 +833,8 @@ internal static class MaxiCodeEncoder
     }
 
     /// <summary>
-    /// Gets a value indicating whether an operation is open in a code set: the characters of a code set in it, the shifts into A in B, the shift into B in A,
-    /// the shifts into C, D and E in every other code set, and the numeric shift everywhere.
+    /// Returns whether an operation is open in a code set. The characters of a code set are open in it. In B, the shifts into A are open. In A, the shift into
+    /// B is open. In every other code set, the shifts into C, D and E are open. The numeric shift is open everywhere.
     /// </summary>
     /// <param name="op">The operation.</param>
     /// <param name="state">The code set, which is A or a code set the data needs.</param>
@@ -827,7 +857,7 @@ internal static class MaxiCodeEncoder
         };
 
     /// <summary>
-    /// Gets a value indicating whether an operation takes the characters ending at the current one.
+    /// Returns whether an operation takes the characters ending at the current one.
     /// </summary>
     /// <param name="op">The operation.</param>
     /// <param name="c">The current character.</param>
@@ -957,15 +987,15 @@ internal static class MaxiCodeEncoder
         InlineArray32<int> generatorStorage = default;
         InlineArray32<int> checkStorage = default;
         Span<int> generator = generatorStorage;
-        Field.Generator(1, generator[..10]);
-        Field.Remainder(codewords, 1, 10, generator[..10], codewords.Slice(10, 10));
+        Field.Generator(1, generator[..PrimaryCheckCodewords]);
+        Field.Remainder(codewords, 1, PrimaryDataCodewords, generator[..PrimaryCheckCodewords], codewords.Slice(PrimaryDataCodewords, PrimaryCheckCodewords));
 
         // The secondary message deals its codewords over two blocks, the odd and the even. The 84 codewords of standard error correction take 20 check
         // codewords a block, and the 68 of mode 5 take 28.
-        int checkCount = secondaryLength == 84 ? 20 : 28;
+        int checkCount = secondaryLength == StandardSecondaryLength ? StandardSecondaryCheckCodewords : EnhancedSecondaryCheckCodewords;
         Field.Generator(1, generator[..checkCount]);
         Field.InterleavedRemainders(
-            codewords.Slice(20, secondaryLength + (checkCount * 2)),
+            codewords.Slice(SecondaryStart, secondaryLength + (checkCount * 2)),
             secondaryLength,
             2,
             generator[..checkCount],
@@ -981,7 +1011,7 @@ internal static class MaxiCodeEncoder
     private static int LatchLength(CodeSet to, CodeSet from) => to == from ? 0 : to <= CodeSet.B ? 1 : 2;
 
     /// <summary>
-    /// Gets a value indicating whether a code set holds a byte.
+    /// Returns whether a code set holds a byte.
     /// </summary>
     /// <param name="set">The code set.</param>
     /// <param name="c">The byte.</param>

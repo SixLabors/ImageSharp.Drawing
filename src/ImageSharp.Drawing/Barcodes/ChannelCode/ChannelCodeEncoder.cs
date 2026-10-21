@@ -7,8 +7,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
 /// Encodation for the Channel Code symbology, which ANSI/AIM BC12-1998 defines. A symbol carries a finder pattern of five one-module bars with four one-module
-/// spaces between them, then one space and one bar per channel. A symbol of C channels is 4C + 7 modules wide whatever its value, and the value is the position
-/// of its space and bar widths in the ordered list of sequences that keep that width and the width rules of the symbology.
+/// spaces between them, then one space and one bar per channel. A symbol of C channels is 4C + 7 modules wide for all values. The value is the position of the
+/// space and bar widths of the symbol in an ordered list. This list holds the sequences that keep that width and the width rules of the symbology.
 /// </summary>
 internal static class ChannelCodeEncoder
 {
@@ -25,12 +25,12 @@ internal static class ChannelCodeEncoder
     /// <summary>
     /// The quiet zone in modules before the symbol: "at least 1X wide".
     /// </summary>
-    public const int LeadingQuietZone = 1;
+    private const int LeadingQuietZone = 1;
 
     /// <summary>
     /// The quiet zone in modules after the symbol: "at least 2X wide".
     /// </summary>
-    public const int TrailingQuietZone = 2;
+    private const int TrailingQuietZone = 2;
 
     /// <summary>
     /// The number of channels beyond the number of digits.
@@ -240,7 +240,7 @@ internal static class ChannelCodeEncoder
         /// <returns>The number of sequences.</returns>
         private int Count(int channel, int barWidth, int spaceWidth, int previousBar, int pair)
         {
-            // The last channel takes all the width left, so it completes one sequence when its bar may take that width.
+            // The last channel takes all the width left. When its bar can take that width, the last channel completes one sequence.
             if (channel == this.channels - 1)
             {
                 return FirstBar(spaceWidth, previousBar, pair) <= barWidth ? 1 : 0;
@@ -269,8 +269,9 @@ internal static class ChannelCodeEncoder
         }
 
         /// <summary>
-        /// Returns the narrowest width a bar may take. A bar starts at two modules when the space before it, the bar before that space and the bar and space
-        /// before that bar add to four or less, so no four consecutive elements other than the finder pattern are all one module wide.
+        /// Returns the narrowest width a bar can take. The elements before a bar are the space before it, the bar before that space, and the bar and space
+        /// before that bar. When the widths of these elements add to four or less, the bar starts at two modules. As a result, no four consecutive elements
+        /// other than the finder pattern are all one module wide.
         /// </summary>
         /// <param name="space">The width of the space before the bar.</param>
         /// <param name="previousBar">The width of the bar before that space, at most <see cref="WidthCap"/>.</param>

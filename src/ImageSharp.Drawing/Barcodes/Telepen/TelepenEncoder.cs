@@ -19,9 +19,24 @@ internal static class TelepenEncoder
     public const int MaximumLength = 500;
 
     /// <summary>
+    /// The number of characters a caller holds inline to build symbol data in. Longer data rents its buffer once.
+    /// </summary>
+    public const int InlineBufferLength = 64;
+
+    /// <summary>
+    /// The value that the numeric mode adds to a digit followed by X.
+    /// </summary>
+    public const int NumericSingleOffset = 17;
+
+    /// <summary>
+    /// The value that the numeric mode adds to a pair of digits read as a number.
+    /// </summary>
+    public const int NumericPairOffset = 27;
+
+    /// <summary>
     /// The quiet zone in modules on each side.
     /// </summary>
-    public const int QuietZone = 10;
+    private const int QuietZone = 10;
 
     /// <summary>
     /// The default X dimension in millimetres: 0.01125 inch. The Telepen history of SB Electronic Systems recommends 0.010 inch to 0.0125 inch: "For normal
@@ -36,34 +51,19 @@ internal static class TelepenEncoder
     private const double MinimumXDimension = 0.0075 * 25.4;
 
     /// <summary>
-    /// The number of characters a caller holds inline to build symbol data in. Longer data rents its buffer once.
-    /// </summary>
-    public const int InlineBufferLength = 64;
-
-    /// <summary>
     /// The start code, "binary 01011111 (ASCII _)".
     /// </summary>
-    public const int Start = '_';
+    private const int Start = '_';
 
     /// <summary>
     /// The stop code, "binary 11111010 (ASCII z)".
     /// </summary>
-    public const int Stop = 'z';
+    private const int Stop = 'z';
 
     /// <summary>
     /// The modulus of the check character.
     /// </summary>
-    public const int CheckModulus = 127;
-
-    /// <summary>
-    /// The value that the numeric mode adds to a digit followed by X.
-    /// </summary>
-    public const int NumericSingleOffset = 17;
-
-    /// <summary>
-    /// The value that the numeric mode adds to a pair of digits read as a number.
-    /// </summary>
-    public const int NumericPairOffset = 27;
+    private const int CheckModulus = 127;
 
     /// <summary>
     /// The number of bits in a character: seven ASCII bits and the parity bit.
@@ -153,7 +153,7 @@ internal static class TelepenEncoder
         float barHeight = options.ResolveBarHeight(xDimension, 0, nominalBarHeight, float.PositiveInfinity);
         heights[..((runs.Length + 1) >> 1)].Fill(barHeight);
 
-        if (options.Font is not null && readable.Length > 0)
+        if (options.Font is not null)
         {
             symbol.ReserveText(1, readable.Length);
             symbol.AddText(readable, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);

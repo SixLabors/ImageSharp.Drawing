@@ -7,16 +7,16 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// The Royal Mail 4-state Mailmark barcode, which the Royal Mail Mailmark barcode C and barcode L encoding and decoding instructions define. The text is the
 /// application string: a 22-character string gives barcode C of 66 bars and a 26-character string barcode L of 78 bars. The fields are the format, the version
 /// ID, the class, the supply chain ID of 2 or 6 digits, the item ID of 8 digits and the destination post code plus delivery point suffix of 9 characters. The
-/// bars are the 0.54 mm bars of Table 11 of the Mailmark barcode definition document, and an X dimension outside the acceptable 0.38 to 0.63 mm of that
-/// table is clamped to it. The symbol prints no text line, because the Mailmark documents define none.
+/// bars are the 0.54 mm bars of Table 11 of the Mailmark barcode definition document. An X dimension outside the acceptable 0.38 to 0.63 mm of that
+/// table draws at the nearest limit. The symbol prints no text line, because the Mailmark documents define none.
 /// </summary>
 public sealed class FourStateMailmarkSymbology : BarcodeSymbology
 {
     /// <summary>
-    /// The dimensions of Table 11, with the bar width clamped to the acceptable sizes of the same table, "Bar width (all) 0.54 0.38 - 0.63", and the bars per
-    /// inch to "Bar pitch ... 20 - 24 bars per inch (25.4mm)". The bar heights scale together, and the ascender and descender bars of "1.60 - 2.16" mm have
-    /// the narrowest range relative to their recommended 1.90 mm. So the full bar is clamped to 5.10 mm scaled by 1.60 / 1.90 and by 2.16 / 1.90. The
-    /// tracker bar and the full bar then stay inside their own acceptable sizes.
+    /// The dimensions of Table 11. The code clamps the bar width to the acceptable sizes of the same table, "Bar width (all) 0.54 0.38 - 0.63". The code
+    /// clamps the bars per inch to "Bar pitch ... 20 - 24 bars per inch (25.4mm)". The bar heights scale together. The ascender and descender bars of
+    /// "1.60 - 2.16" mm have the narrowest range relative to their recommended 1.90 mm. Thus the code clamps the full bar to 5.10 mm scaled by 1.60 / 1.90
+    /// and by 2.16 / 1.90. The tracker bar and the full bar then stay inside their own acceptable sizes.
     /// </summary>
     private static readonly FourStateMetrics Metrics = FourStateEncoder.RoyalMail with
     {

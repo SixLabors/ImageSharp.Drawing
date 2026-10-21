@@ -15,37 +15,37 @@ internal static class Code49Encoder
     /// <summary>
     /// The quiet zone in modules before the start pattern: the "ten modules adjacent to the start pattern" of section 3.4.
     /// </summary>
-    public const int LeadingQuietZone = 10;
+    private const int LeadingQuietZone = 10;
 
     /// <summary>
     /// The quiet zone in modules after the stop pattern: the "one module adjacent to the stop pattern" of section 3.4.
     /// </summary>
-    public const int TrailingQuietZone = 1;
+    private const int TrailingQuietZone = 1;
 
     /// <summary>
     /// The width of a row in modules: "the 70X bars and spaces" of section 3.6.1.
     /// </summary>
-    public const int RowWidth = 70;
+    private const int RowWidth = 70;
 
     /// <summary>
     /// The smallest number of rows, section 2.1.
     /// </summary>
-    public const int MinimumRows = 2;
+    private const int MinimumRows = 2;
 
     /// <summary>
     /// The largest number of rows, section 2.1.
     /// </summary>
-    public const int MaximumRows = 8;
+    private const int MaximumRows = 8;
 
     /// <summary>
     /// The number of code characters in a row, Table 3.
     /// </summary>
-    public const int CodeCharactersPerRow = 8;
+    private const int CodeCharactersPerRow = 8;
 
     /// <summary>
     /// The nominal bar height in modules: the "minimum bar height of 8X" of section 3.3.
     /// </summary>
-    public const float NominalBarHeight = 8F;
+    private const float NominalBarHeight = 8F;
 
     /// <summary>
     /// The smallest X dimension in millimetres. Section 3.2: "The minimum standard Xdimension used is 0.0075 inches (0.191 mm)". Appendix E permits a
@@ -56,39 +56,39 @@ internal static class Code49Encoder
     /// <summary>
     /// The height in modules of the separator bars: the "1-module high separator bar" of section 2.1.
     /// </summary>
-    public const float SeparatorHeight = 1F;
+    private const float SeparatorHeight = 1F;
 
     /// <summary>
     /// The modulus of the row check character, section 2.1.2.
     /// </summary>
-    public const int RowModulus = 49;
+    private const int RowModulus = 49;
 
     /// <summary>
     /// The modulus of the symbol check characters, Formula 2.
     /// </summary>
-    public const int SymbolModulus = 2401;
+    private const int SymbolModulus = 2401;
 
     /// <summary>
     /// The code character value of Shift 1, Table 6.
     /// </summary>
-    public const int ShiftOne = 43;
+    private const int ShiftOne = 43;
 
     /// <summary>
     /// The code character value of Shift 2, Table 6.
     /// </summary>
-    public const int ShiftTwo = 44;
+    private const int ShiftTwo = 44;
 
     /// <summary>
     /// The code character value of the numeric shift, Table 6, which section 2.2.1 also makes the pad character: "When one or more numeric shifts appear
     /// immediately preceding the symbol check characters, they are pad characters and do not represent data."
     /// </summary>
-    public const int NumericShift = 48;
+    private const int NumericShift = 48;
 
     /// <summary>
     /// The shortest digit run this encoder carries in the numeric encodation method: five digits, one block of section 2.2.2. Section 2.2.2 says only that
     /// "Long sequences of numeric digits can be compressed", and sets no shortest run.
     /// </summary>
-    public const int NumericRun = 5;
+    private const int NumericRun = 5;
 
     /// <summary>
     /// The number of symbol characters in a row, section 2.1.1.

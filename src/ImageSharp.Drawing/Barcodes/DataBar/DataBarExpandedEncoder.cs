@@ -11,8 +11,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// character.
 /// <para>
 /// The bit stream starts with a linkage bit and an encodation method. Common sequences of element strings that start with Application Identifier (01) compress
-/// into a fixed length field, and whatever remains is encoded in the general purpose field in numeric, alphanumeric or ISO/IEC 646 mode. A symbol character is
-/// 8 elements over 17 modules, an odd set of 4 and an even set of 4 interleaved, and its group gives the module count and the widest element of each set.
+/// into a fixed length field. The general purpose field encodes whatever remains in numeric, alphanumeric or ISO/IEC 646 mode. A symbol character is 8 elements
+/// over 17 modules: an odd set of 4 and an even set of 4, interleaved. The group of a character gives the module count and the widest element of each set.
 /// </para>
 /// </summary>
 internal static class DataBarExpandedEncoder
@@ -485,7 +485,7 @@ internal static class DataBarExpandedEncoder
         Span<int> odd = sets[..4];
         Span<int> even = sets[4..];
 
-        // Combinations without a one module element are excluded from the odd set only.
+        // Only the odd set excludes the combinations without a one module element.
         DataBarWidths.Calculate(odd, withinGroup / EvenCombinations[group], OddModules[group], OddWidest[group], true);
         DataBarWidths.Calculate(even, withinGroup % EvenCombinations[group], CharacterModules - OddModules[group], 9 - OddWidest[group], false);
         for (int k = 0; k < 4; k++)

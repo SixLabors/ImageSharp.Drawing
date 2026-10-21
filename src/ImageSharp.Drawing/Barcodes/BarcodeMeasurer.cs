@@ -17,8 +17,8 @@ public static class BarcodeMeasurer
     /// <param name="text">The text to encode.</param>
     /// <returns>The advance, the bounds and the renderable bounds of the barcode.</returns>
     /// <exception cref="ArgumentException">
-    /// The text is not valid for the symbology, or the options break a requirement of the standard of the symbology, such as its minimum bar
-    /// height or its maximum size.
+    /// The text is not valid for the symbology, or the options break a requirement of the standard of the symbology. Examples are an X
+    /// dimension for a symbol whose size the standard fixes, and a text line that does not fit its span at the smallest printed height.
     /// </exception>
     public static BarcodeMetrics Measure(BarcodeSymbology symbology, BarcodeOptions options, PointF origin, ReadOnlySpan<char> text)
     {
@@ -48,7 +48,7 @@ public static class BarcodeMeasurer
     /// <returns>The advance, the bounds and the renderable bounds of the barcode.</returns>
     /// <exception cref="ArgumentException">
     /// The composite does not have two parts, a text is not valid, the parts do not join, or the options break a requirement of the standard of the
-    /// symbology, such as its minimum bar height or its maximum size.
+    /// symbology. Examples are an X dimension for a symbol whose size the standard fixes, and a text line that does not fit its span.
     /// </exception>
     public static BarcodeMetrics Measure(
         CompositeBarcodeSymbology symbology,
@@ -75,7 +75,7 @@ public static class BarcodeMeasurer
     /// <returns>The advance, the bounds and the renderable bounds of the barcode.</returns>
     /// <exception cref="ArgumentException">
     /// The composite does not have three parts, a text is not valid, the parts do not join, or the options break a requirement of the standard of the
-    /// symbology, such as its minimum bar height or its maximum size.
+    /// symbology. Examples are an X dimension for a symbol whose size the standard fixes, and a text line that does not fit its span.
     /// </exception>
     public static BarcodeMetrics Measure(
         CompositeBarcodeSymbology symbology,
@@ -100,8 +100,8 @@ public static class BarcodeMeasurer
     /// <param name="text">The text to encode.</param>
     /// <returns>The rectangle that holds the barcode and the line box of each text line, relative to the origin.</returns>
     /// <exception cref="ArgumentException">
-    /// The text is not valid for the symbology, or the options break a requirement of the standard of the symbology, such as its minimum bar
-    /// height or its maximum size.
+    /// The text is not valid for the symbology, or the options break a requirement of the standard of the symbology. Examples are an X
+    /// dimension for a symbol whose size the standard fixes, and a text line that does not fit its span at the smallest printed height.
     /// </exception>
     public static RectangleF MeasureAdvance(BarcodeSymbology symbology, BarcodeOptions options, PointF origin, ReadOnlySpan<char> text)
         => Measure(symbology, options, origin, text).Advance;
@@ -117,7 +117,7 @@ public static class BarcodeMeasurer
     /// <returns>The rectangle that holds the parts and the line box of each text line, relative to the origin.</returns>
     /// <exception cref="ArgumentException">
     /// The composite does not have two parts, a text is not valid, the parts do not join, or the options break a requirement of the standard of the
-    /// symbology, such as its minimum bar height or its maximum size.
+    /// symbology. Examples are an X dimension for a symbol whose size the standard fixes, and a text line that does not fit its span.
     /// </exception>
     public static RectangleF MeasureAdvance(
         CompositeBarcodeSymbology symbology,
@@ -139,7 +139,7 @@ public static class BarcodeMeasurer
     /// <returns>The rectangle that holds the parts and the line box of each text line, relative to the origin.</returns>
     /// <exception cref="ArgumentException">
     /// The composite does not have three parts, a text is not valid, the parts do not join, or the options break a requirement of the standard of the
-    /// symbology, such as its minimum bar height or its maximum size.
+    /// symbology. Examples are an X dimension for a symbol whose size the standard fixes, and a text line that does not fit its span.
     /// </exception>
     public static RectangleF MeasureAdvance(
         CompositeBarcodeSymbology symbology,
@@ -159,8 +159,8 @@ public static class BarcodeMeasurer
     /// <param name="text">The text to encode.</param>
     /// <returns>The rectangle that the bars or modules and the glyphs of the text cover.</returns>
     /// <exception cref="ArgumentException">
-    /// The text is not valid for the symbology, or the options break a requirement of the standard of the symbology, such as its minimum bar
-    /// height or its maximum size.
+    /// The text is not valid for the symbology, or the options break a requirement of the standard of the symbology. Examples are an X
+    /// dimension for a symbol whose size the standard fixes, and a text line that does not fit its span at the smallest printed height.
     /// </exception>
     public static RectangleF MeasureBounds(BarcodeSymbology symbology, BarcodeOptions options, PointF origin, ReadOnlySpan<char> text)
         => Measure(symbology, options, origin, text).Bounds;
@@ -176,7 +176,7 @@ public static class BarcodeMeasurer
     /// <returns>The rectangle that the bars or modules and the glyphs of the text of all parts cover.</returns>
     /// <exception cref="ArgumentException">
     /// The composite does not have two parts, a text is not valid, the parts do not join, or the options break a requirement of the standard of the
-    /// symbology, such as its minimum bar height or its maximum size.
+    /// symbology. Examples are an X dimension for a symbol whose size the standard fixes, and a text line that does not fit its span.
     /// </exception>
     public static RectangleF MeasureBounds(
         CompositeBarcodeSymbology symbology,
@@ -198,7 +198,7 @@ public static class BarcodeMeasurer
     /// <returns>The rectangle that the bars or modules and the glyphs of the text of all parts cover.</returns>
     /// <exception cref="ArgumentException">
     /// The composite does not have three parts, a text is not valid, the parts do not join, or the options break a requirement of the standard of the
-    /// symbology, such as its minimum bar height or its maximum size.
+    /// symbology. Examples are an X dimension for a symbol whose size the standard fixes, and a text line that does not fit its span.
     /// </exception>
     public static RectangleF MeasureBounds(
         CompositeBarcodeSymbology symbology,
@@ -218,8 +218,8 @@ public static class BarcodeMeasurer
     /// <param name="text">The text to encode.</param>
     /// <returns>The union of the advance, positioned at the origin, and the ink bounds.</returns>
     /// <exception cref="ArgumentException">
-    /// The text is not valid for the symbology, or the options break a requirement of the standard of the symbology, such as its minimum bar
-    /// height or its maximum size.
+    /// The text is not valid for the symbology, or the options break a requirement of the standard of the symbology. Examples are an X
+    /// dimension for a symbol whose size the standard fixes, and a text line that does not fit its span at the smallest printed height.
     /// </exception>
     public static RectangleF MeasureRenderableBounds(BarcodeSymbology symbology, BarcodeOptions options, PointF origin, ReadOnlySpan<char> text)
         => Measure(symbology, options, origin, text).RenderableBounds;
@@ -235,7 +235,7 @@ public static class BarcodeMeasurer
     /// <returns>The union of the advance, positioned at the origin, and the ink bounds.</returns>
     /// <exception cref="ArgumentException">
     /// The composite does not have two parts, a text is not valid, the parts do not join, or the options break a requirement of the standard of the
-    /// symbology, such as its minimum bar height or its maximum size.
+    /// symbology. Examples are an X dimension for a symbol whose size the standard fixes, and a text line that does not fit its span.
     /// </exception>
     public static RectangleF MeasureRenderableBounds(
         CompositeBarcodeSymbology symbology,
@@ -257,7 +257,7 @@ public static class BarcodeMeasurer
     /// <returns>The union of the advance, positioned at the origin, and the ink bounds.</returns>
     /// <exception cref="ArgumentException">
     /// The composite does not have three parts, a text is not valid, the parts do not join, or the options break a requirement of the standard of the
-    /// symbology, such as its minimum bar height or its maximum size.
+    /// symbology. Examples are an X dimension for a symbol whose size the standard fixes, and a text line that does not fit its span.
     /// </exception>
     public static RectangleF MeasureRenderableBounds(
         CompositeBarcodeSymbology symbology,

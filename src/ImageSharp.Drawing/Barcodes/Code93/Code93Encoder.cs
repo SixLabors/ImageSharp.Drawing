@@ -9,32 +9,32 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// <summary>
 /// Shared encodation for the Code 93 symbology family, defined by ANSI/AIM BC5-1995. Every symbol character is six elements wide, three bars and three spaces,
 /// and spans nine modules. A symbol carries a quiet zone, the start character, the data and two check characters. The stop character with its termination bar
-/// and a second quiet zone close the symbol. No gap separates the characters, which is what distinguishes the symbology from Code 39.
+/// and a second quiet zone close the symbol. No gap separates the characters.
 /// </summary>
 internal static class Code93Encoder
 {
-    /// <summary>
-    /// The number of data characters ANSI/AIM BC5-1995 carries. They are the 43 of <see cref="AlphanumericCharacterSet"/>, and the four shift characters take
-    /// the values above them.
-    /// </summary>
-    public const int DataCharacters = 43;
-
     /// <summary>
     /// The largest number of characters a symbol carries. ANSI/AIM BC5-1995 makes the data string length variable, so the symbology sets no maximum of its own.
     /// </summary>
     public const int MaximumLength = 500;
 
     /// <summary>
-    /// The quiet zone in modules on each side. Section 2.6 of ANSI/AIM BC5-1995 measures a symbol as <c>(9 * (C + 4) + 1) * X + 2 * Q</c>, where C is the data
-    /// character count and Q is ten modules.
-    /// </summary>
-    public const int QuietZone = 10;
-
-    /// <summary>
     /// The number of characters a caller holds inline to build symbol data in. Data this long covers the labels the symbology is used for, and longer data
     /// rents its buffer once.
     /// </summary>
     public const int InlineBufferLength = 64;
+
+    /// <summary>
+    /// The number of data characters ANSI/AIM BC5-1995 carries. They are the 43 of <see cref="AlphanumericCharacterSet"/>, and the four shift characters take
+    /// the values above them.
+    /// </summary>
+    private const int DataCharacters = 43;
+
+    /// <summary>
+    /// The quiet zone in modules on each side. Section 2.6 of ANSI/AIM BC5-1995 measures a symbol as <c>(9 * (C + 4) + 1) * X + 2 * Q</c>, where C is the data
+    /// character count and Q is ten modules.
+    /// </summary>
+    private const int QuietZone = 10;
 
     /// <summary>
     /// The element count of a symbol character. ANSI/AIM BC5-1995 gives every character three bars and three spaces.
@@ -105,19 +105,8 @@ internal static class Code93Encoder
     private static ReadOnlySpan<byte> StartStopPattern => [1, 1, 1, 1, 4, 1, 1];
 
     /// <summary>
-    /// Gets the value ANSI/AIM BC5-1995 assigns the given character, or a negative number when the character is outside the symbol character set.
-    /// </summary>
-    /// <param name="codePoint">The code point to value.</param>
-    /// <returns>The value, or a negative number.</returns>
-    public static int Value(int codePoint) => codePoint switch
-    {
-        >= 'a' and <= 'd' => codePoint - 'a' + DataCharacters,
-        _ => AlphanumericCharacterSet.Value(codePoint),
-    };
-
-    /// <summary>
-    /// Validates the given text against the data character set of ANSI/AIM BC5-1995. Walking code points rather than UTF-16 units reports a surrogate pair as
-    /// the one character it is, instead of showing half of it back to the caller.
+    /// Validates the given text against the data character set of ANSI/AIM BC5-1995. The method walks code points, not UTF-16 units, so the message reports a
+    /// surrogate pair as one character.
     /// </summary>
     /// <param name="text">The text to validate.</param>
     /// <exception cref="ArgumentException">The text carries a character outside the set.</exception>
@@ -181,6 +170,17 @@ internal static class Code93Encoder
 
         symbol.EndLinear(QuietZone, QuietZone);
     }
+
+    /// <summary>
+    /// Gets the value ANSI/AIM BC5-1995 assigns the given character, or a negative number when the character is outside the symbol character set.
+    /// </summary>
+    /// <param name="codePoint">The code point to value.</param>
+    /// <returns>The value, or a negative number.</returns>
+    private static int Value(int codePoint) => codePoint switch
+    {
+        >= 'a' and <= 'd' => codePoint - 'a' + DataCharacters,
+        _ => AlphanumericCharacterSet.Value(codePoint),
+    };
 
     /// <summary>
     /// Calculates both check characters of ANSI/AIM BC5-1995 in one backward pass over the symbol characters. The first, called C, weights the characters one

@@ -13,7 +13,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// <para>
 /// When a font is set, that same string prints below the symbol between delimiters, with a space printed as an underscore and a zero as "Ø". Primary and
 /// secondary data that the symbol joins with "/" print on two lines, broken after the "/". When the options set no X dimension, the X dimension
-/// is 0.015 inch, from section 5.2 of ANSI/HIBC 2.6.
+/// is 0.015 inch, from section 5.2 of ANSI/HIBC 2.6. An X dimension under 0.010 inch draws at 0.010 inch, the minimum of the same section.
 /// </para>
 /// </summary>
 public sealed class HibcDataMatrixRectangularSymbology : BarcodeSymbology
@@ -43,7 +43,7 @@ public sealed class HibcDataMatrixRectangularSymbology : BarcodeSymbology
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         InlineArray64<char> bufferStorage = default;
-        int capacity = HibcData.PreparedCapacity(text.Length);
+        int capacity = HibcData.PreparedCapacity(text, DataMatrixEncoder.MaximumLength);
         ValueStringBuilder encoded = capacity <= HibcData.InlineBufferLength ? new(bufferStorage) : new(capacity);
         try
         {

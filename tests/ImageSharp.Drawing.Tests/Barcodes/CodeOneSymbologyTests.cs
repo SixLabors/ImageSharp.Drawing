@@ -18,6 +18,8 @@ public class CodeOneSymbologyTests
     [Theory]
     [InlineData(CodeOneVersion.S10, "12345A")]
     [InlineData(CodeOneVersion.S10, "1234567")]
+    [InlineData(CodeOneVersion.S10, "1000000")]
+    [InlineData(CodeOneVersion.S20, "1000000000000")]
     [InlineData(CodeOneVersion.S20, "1234567890123")]
     [InlineData(CodeOneVersion.S30, "1234567890123456789")]
     public void NumericVersionRejectsTextItCannotHold(CodeOneVersion version, string text)

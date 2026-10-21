@@ -276,13 +276,6 @@ internal static class PosiCodeEncoder
     ];
 
     /// <summary>
-    /// Returns the quiet zone in modules on each side of a version: "12G on either side", and 13G for Limited PosiCode B.
-    /// </summary>
-    /// <param name="version">The version.</param>
-    /// <returns>The quiet zone in modules.</returns>
-    public static int QuietZone(PosiCodeVersion version) => version == PosiCodeVersion.LimitedB ? 13 : 12;
-
-    /// <summary>
     /// Returns whether a version carries only the limited character set.
     /// </summary>
     /// <param name="version">The version.</param>
@@ -307,10 +300,10 @@ internal static class PosiCodeEncoder
     }
 
     /// <summary>
-    /// Converts character values to the codewords the symbol carries. Characters at or above 128 drop their high bit and are announced by the function 4
-    /// character: once for a run shorter than five, or shorter than three at the end of the data, and twice, which switches the mode, for a longer run. Every
-    /// character then encodes in the current set, through a shift to set 2, through a latch when the next character is not in the current set either, or
-    /// through a shift to the other set.
+    /// Converts character values to the codewords the symbol carries. Characters at or above 128 drop their high bit. The function 4 character announces these
+    /// characters. For a run shorter than five, or shorter than three at the end of the data, the function 4 character occurs once. For a longer run, the
+    /// function 4 character occurs twice and switches the mode. Then every character encodes in the current set, through a shift to set 2, through a latch, or
+    /// through a shift to the other set. The encoder uses the latch when the next character is also not in the current set.
     /// </summary>
     /// <param name="values">The character values, 0 to 255.</param>
     /// <param name="codewords">The buffer that receives the codewords, at least four per value.</param>
@@ -462,6 +455,13 @@ internal static class PosiCodeEncoder
     }
 
     /// <summary>
+    /// Returns the quiet zone in modules on each side of a version: "12G on either side", and 13G for Limited PosiCode B.
+    /// </summary>
+    /// <param name="version">The version.</param>
+    /// <returns>The quiet zone in modules.</returns>
+    private static int QuietZone(PosiCodeVersion version) => version == PosiCodeVersion.LimitedB ? 13 : 12;
+
+    /// <summary>
     /// Writes run widths from a pattern table to the runs of the symbol.
     /// </summary>
     /// <param name="widths">The run widths in modules.</param>
@@ -476,9 +476,10 @@ internal static class PosiCodeEncoder
     }
 
     /// <summary>
-    /// Writes the twelve runs of the check character. The codewords are divided bit by bit by the check polynomial, and the ten bit remainder, offset by 45 in
-    /// the standard versions and moved past a reserved range in the limited versions, is mapped to six distances that add to twenty. Version B adds one to
-    /// every distance. The character is six bars of one module whose spaces are the distances less one, written from the last distance to the first.
+    /// Writes the twelve runs of the check character. The encoder divides the codewords bit by bit by the check polynomial. The standard versions offset the
+    /// ten bit remainder by 45. The limited versions move the remainder past a reserved range. Then the encoder maps the remainder to six distances that add to
+    /// twenty. Version B adds one to every distance. The character is six bars of one module whose spaces are the distances less one, written from the last
+    /// distance to the first.
     /// </summary>
     /// <param name="codewords">The codewords the check covers.</param>
     /// <param name="version">The version.</param>

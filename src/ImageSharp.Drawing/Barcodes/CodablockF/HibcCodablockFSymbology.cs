@@ -49,7 +49,7 @@ public sealed class HibcCodablockFSymbology : BarcodeSymbology
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         InlineArray64<char> bufferStorage = default;
-        int capacity = HibcData.PreparedCapacity(text.Length);
+        int capacity = HibcData.PreparedCapacity(text, CodablockFEncoder.MaximumText);
         ValueStringBuilder encoded = capacity <= HibcData.InlineBufferLength ? new(bufferStorage) : new(capacity);
         try
         {

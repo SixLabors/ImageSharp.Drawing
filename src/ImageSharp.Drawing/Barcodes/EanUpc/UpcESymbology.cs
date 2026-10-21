@@ -4,9 +4,9 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The UPC-E symbology, which the GS1 General Specifications specify. UPC-E is the zero suppression form of a GTIN-12 that starts with a zero and holds four
-/// or five zeros in the positions of one of four zero suppression rules. The text is the leading zero and the six digits that the rules leave, with an optional
-/// check digit. Text that the rules cannot produce is rejected.
+/// The UPC-E symbology, which the GS1 General Specifications specify. UPC-E is the zero suppression form of a GTIN-12 that starts with a zero. This GTIN-12
+/// holds four or five zeros in the positions of one of four zero suppression rules. The text is the leading zero and the six digits that the rules leave, with
+/// an optional check digit. The symbology rejects text that the rules cannot produce.
 /// <para>
 /// The symbol is 51 modules wide: a normal guard pattern, six symbol characters from number sets A and B, and a special right guard pattern. The number set
 /// parity of the six characters carries the check digit of the GTIN-12.
@@ -113,12 +113,7 @@ public sealed class UpcESymbology : BarcodeSymbology
     /// <exception cref="ArgumentException">The text is not the zero suppression of a GTIN-12, or carries a wrong check digit.</exception>
     internal static ReadOnlySpan<char> ExpandToGtin12(ReadOnlySpan<char> text, Span<char> destination)
     {
-        if (text.Length is not (7 or 8))
-        {
-            throw new ArgumentException(
-                $"UPC-E requires a leading zero and 6 data digits with an optional check digit; got {text.Length} characters.",
-                nameof(text));
-        }
+        Guard.MustBeBetweenOrEqualTo(text.Length, 7, 8, nameof(text));
 
         BarcodeSymbology.ValidateDigits(text);
 

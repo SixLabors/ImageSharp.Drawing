@@ -7,8 +7,8 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Encodes Aztec Code symbols, ISO/IEC 24778. The text becomes a bit stream in the five code sets and the byte shift of Table 2, the bit stream becomes B-bit
-/// codewords with no codeword of all zeros or all ones, Reed-Solomon check codewords fill the symbol, and the codewords spiral outward from the Core Symbol in
+/// Encodes Aztec Code symbols, ISO/IEC 24778. The text becomes a bit stream in the five code sets and the byte shift of Table 2. The bit stream becomes B-bit
+/// codewords with no codeword of all zeros or all ones. Reed-Solomon check codewords fill the symbol. The codewords spiral outward from the Core Symbol in
 /// reverse order. The mode search finds the shortest sequence of latches, shifts and characters for the whole message.
 /// </summary>
 internal static class AztecEncoder
@@ -369,7 +369,7 @@ internal static class AztecEncoder
             int bitCount = EncodeBits(text, ref bits);
             ReadOnlySpan<byte> stream = bits.Span[..bitCount];
 
-            // The codeword count after stuffing depends only on the codeword size, so each size is laid out once, and every symbol of that size reads the
+            // The codeword count after stuffing depends only on the codeword size, so the encoder lays out each size once. Every symbol of that size reads the
             // count.
             InlineArray14<int> dataCountsStorage = default;
             Span<int> dataCounts = ((Span<int>)dataCountsStorage)[..13];
@@ -581,7 +581,7 @@ internal static class AztecEncoder
 
                         // The mixed code set holds CR and the digit code set holds the comma and the period themselves, so a sequence in those states did not
                         // reach the first character through punctuation.
-                        bool inPunct = !(state == CodeSet.Mixed && lastCharacter == 13) && !(state == CodeSet.Digit && lastCharacter is 44 or 46);
+                        bool inPunct = !(state == CodeSet.Mixed && lastCharacter == '\r') && !(state == CodeSet.Digit && lastCharacter is ',' or '.');
                         if (!inPunct || currentCost[i] >= nextCost[i])
                         {
                             continue;
@@ -939,8 +939,9 @@ internal static class AztecEncoder
         int packedMiddle = ((packedSide - 1) / 2 * packedSide) + ((packedSide - 1) / 2);
 
         // The bit stream fills the layers from the inside out with the last bit first. The codewords stand at the end of the layer capacity, so the outermost
-        // dominos left over at the end of the spiral are light.
-        int capacityBits = (16 * layers * layers) + ((compact ? 88 : 112) * layers);
+        // dominos left over at the end of the spiral are light. Layer l, of width coreWidth + 4l, holds 8 (coreWidth + 4l + 4) bits, so L layers hold
+        // 16 L^2 + (8 coreWidth + 16) L bits.
+        int capacityBits = (16 * layers * layers) + (((8 * coreWidth) + 16) * layers);
         int offset = capacityBits - (codewords.Length * size);
         int index = 0;
         for (int layer = 1; layer <= layers; layer++)
@@ -1092,10 +1093,10 @@ internal static class AztecEncoder
     private static int Pair(int first, int second)
         => (first, second) switch
         {
-            (13, 10) => PairCrLf,
-            (46, 32) => PairPeriodSpace,
-            (44, 32) => PairCommaSpace,
-            (58, 32) => PairColonSpace,
+            ('\r', '\n') => PairCrLf,
+            ('.', ' ') => PairPeriodSpace,
+            (',', ' ') => PairCommaSpace,
+            (':', ' ') => PairColonSpace,
             _ => 0,
         };
 

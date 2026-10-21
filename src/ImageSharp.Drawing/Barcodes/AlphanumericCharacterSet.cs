@@ -14,7 +14,7 @@ internal static class AlphanumericCharacterSet
     /// <summary>
     /// The characters in value order, so the value of a character is its index.
     /// </summary>
-    public const string Characters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%";
+    private const string Characters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%";
 
     /// <summary>
     /// Gets the value the set assigns the given code point, or a negative number when the code point is outside the set. Taking a code point rather than a

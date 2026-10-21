@@ -21,14 +21,14 @@ internal static class Code11Encoder
     public const int MaximumLength = 500;
 
     /// <summary>
-    /// The quiet zone in modules on each side. There is no public specification of Code 11.
-    /// </summary>
-    public const int QuietZone = 10;
-
-    /// <summary>
     /// The number of data characters from which a symbol carries two check characters. Below it a symbol carries one.
     /// </summary>
     public const int TwoCheckCharactersFrom = 10;
+
+    /// <summary>
+    /// The quiet zone in modules on each side. There is no public specification of Code 11.
+    /// </summary>
+    private const int QuietZone = 10;
 
     /// <summary>
     /// The number of elements in a symbol character, its inter-character gap excluded.

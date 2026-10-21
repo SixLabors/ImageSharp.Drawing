@@ -18,18 +18,18 @@ internal static class DataBarLimitedEncoder
     /// <summary>
     /// The nominal X dimension in millimetres, the target X dimension of Table 5-50 of the GS1 General Specifications.
     /// </summary>
-    public const double NominalXDimension = 0.33;
+    private const double NominalXDimension = 0.33;
 
     /// <summary>
     /// The height in modules. Section 5.5.2.2 of the GS1 General Specifications: "The minimum height SHALL be 10X", which Table 5-50 gives as the target height
     /// too.
     /// </summary>
-    public const float Height = 10F;
+    private const float Height = 10F;
 
     /// <summary>
     /// The width in modules. Section 5.5.2.2: "The total symbol contains 47 elements comprising 79 modules."
     /// </summary>
-    public const int Width = 79;
+    private const int Width = 79;
 
     /// <summary>
     /// The number of elements: the leading guard pair, two symbol characters and the check character of 14 elements each, and the closing guard of three.
@@ -147,7 +147,7 @@ internal static class DataBarLimitedEncoder
 
             int withinGroup = character - GroupSum[group];
 
-            // Combinations without a one module element are excluded from the even set only.
+            // Only the even set excludes the combinations without a one module element.
             DataBarWidths.Calculate(odd, withinGroup / EvenCombinations[group], OddModules[group], OddWidest[group], false);
             DataBarWidths.Calculate(even, withinGroup % EvenCombinations[group], 26 - OddModules[group], 9 - OddWidest[group], true);
 

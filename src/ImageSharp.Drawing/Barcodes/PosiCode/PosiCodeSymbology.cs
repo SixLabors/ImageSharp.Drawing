@@ -86,6 +86,7 @@ public sealed class PosiCodeSymbology : BarcodeSymbology
                 Span<int> codewords = capacity <= 128
                     ? codewordStorage
                     : (rentedCodewords = new PooledBuffer<int>(capacity)).Span;
+
                 int written = PosiCodeEncoder.ToCodewords(values.AsSpan(), codewords);
                 PosiCodeEncoder.BuildSymbol(codewords[..written], this.Version, text, options, ref symbol);
             }

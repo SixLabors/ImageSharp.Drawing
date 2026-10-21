@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.ImageSharp.Drawing.Helpers;
-
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
@@ -20,19 +18,9 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 public sealed class Ean14Symbology : BarcodeSymbology
 {
     /// <summary>
-    /// The length of the GTIN of Application Identifier (01), section 3.3.2.
+    /// The length of the GTIN of Application Identifier (01), section 3.3.2, with its check digit.
     /// </summary>
-    private const int GtinLength = 14;
-
-    /// <summary>
-    /// The length of the element string without grouping spaces: the four characters of <c>(01)</c> and the GTIN.
-    /// </summary>
-    private const int ElementStringLength = 4 + GtinLength;
-
-    /// <summary>
-    /// The longest input. The caption repeats the input, so the input is bounded too: at most one grouping space after each character of the element string.
-    /// </summary>
-    private const int MaximumInputLength = ElementStringLength * 2;
+    private const int DataLength = 14;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Ean14Symbology"/> class.
@@ -43,67 +31,12 @@ public sealed class Ean14Symbology : BarcodeSymbology
 
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
-    {
-        Guard.MustBeLessThanOrEqualTo(text.Length, MaximumInputLength, nameof(text));
-
-        InlineArray18<char> compactStorage = default;
-        Span<char> compact = compactStorage;
-        int length = 0;
-        foreach (char character in text)
-        {
-            if (character == ' ')
-            {
-                continue;
-            }
-
-            if (length == compact.Length)
-            {
-                throw new ArgumentException("EAN-14 takes the (01) application identifier and 13 or 14 digits.", nameof(text));
-            }
-
-            compact[length++] = character;
-        }
-
-        if (length is not (ElementStringLength - 1 or ElementStringLength))
-        {
-            throw new ArgumentException($"EAN-14 takes the (01) application identifier and 13 or 14 digits; got {length} characters.", nameof(text));
-        }
-
-        if (!compact[..4].SequenceEqual("(01)"))
-        {
-            throw new ArgumentException("EAN-14 begins with the (01) application identifier.", nameof(text));
-        }
-
-        ReadOnlySpan<char> supplied = compact[4..length];
-        BarcodeSymbology.ValidateDigits(supplied);
-
-        int check = Gs1Data.ComputeCheckDigit(supplied[..(GtinLength - 1)]);
-        if (supplied.Length == GtinLength && supplied[^1] - '0' != check)
-        {
-            throw new ArgumentException($"Incorrect EAN-14 check digit: expected {check}, got {supplied[^1]}.", nameof(text));
-        }
-
-        // The symbol carries the identifier and the fourteen digits with no separator, because Table 7-6 gives this element string a predefined length.
-        char checkCharacter = (char)('0' + check);
-        InlineArray16<char> encodedStorage = default;
-        Span<char> encoded = encodedStorage;
-        "01".CopyTo(encoded);
-        supplied[..(GtinLength - 1)].CopyTo(encoded[2..]);
-        encoded[^1] = checkCharacter;
-
-        // The caption is the input as given, with the check digit after it when the input left it out, set off by a space when the input groups its
-        // digits with spaces.
-        ReadOnlySpan<char> suffix = supplied.Length == GtinLength ? [] : text.Contains(' ') ? [' ', checkCharacter] : [checkCharacter];
-        Code128Encoder.BuildSymbol(
-            encoded,
-            true,
-            [],
+        => Code128Encoder.BuildFixedElementString(
             text,
-            suffix,
+            "01",
+            DataLength,
             Gs1Data.Gs1128MinimumXDimension,
             Gs1Data.Gs1128MaximumXDimension,
-            Code128Linkage.None,
             options,
             ref symbol);
-    }
 }

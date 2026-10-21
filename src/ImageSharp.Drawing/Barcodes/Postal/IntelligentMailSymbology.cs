@@ -6,11 +6,12 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The United States Postal Service Intelligent Mail barcode, which USPS-B-3200 revision H defines. The text is a 20-digit tracking code followed by a routing
-/// code of 0, 5, 9 or 11 digits, so the symbol carries 20, 25, 29 or 31 digits. Section 2.1.3: the second digit of the barcode identifier "shall be constrained
-/// to the range of 0-4". Table 31 gives the postal barcode identifier 94 a "Fixed STID value of 009". The symbol is 65 bars. Section 2.4.3: the printed line is
-/// the fields of the tracking code, then the 5-digit ZIP Code, the 4-digit add-on and the remaining 2 digits of the routing code, "separated with a space added
-/// between data fields". Section 2.4.4: the line prints in "a minimum of 10- to 12-point size type", so a smaller font prints at 10 points.
+/// The United States Postal Service Intelligent Mail barcode, which USPS-B-3200 revision H defines. The text is a 20-digit tracking code and then a routing
+/// code of 0, 5, 9 or 11 digits. The symbol thus carries 20, 25, 29 or 31 digits. Section 2.1.3: the second digit of the barcode identifier "shall be
+/// constrained to the range of 0-4". Table 31 gives the postal barcode identifier 94 a "Fixed STID value of 009". The symbol is 65 bars. Section 2.4.3 gives
+/// the printed line: the fields of the tracking code, then the 5-digit ZIP Code, the 4-digit add-on and the remaining 2 digits of the routing code. The fields
+/// are "separated with a space added between data fields". Section 2.4.4: the line prints in "a minimum of 10- to 12-point size type". A smaller font thus
+/// prints at 10 points.
 /// </summary>
 public sealed class IntelligentMailSymbology : BarcodeSymbology
 {

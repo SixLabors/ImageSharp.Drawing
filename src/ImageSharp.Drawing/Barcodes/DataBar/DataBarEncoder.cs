@@ -56,18 +56,18 @@ internal static class DataBarEncoder
     /// The height of the upper row of GS1 DataBar Stacked in modules. With the lower row and the 1X separator it makes the 13X height of the "50X wide by 13X
     /// high" of section 5.5.2.1.3, which gives no height for each row.
     /// </summary>
-    public const float StackedUpperRowHeight = 5F;
+    private const float StackedUpperRowHeight = 5F;
 
     /// <summary>
     /// The height of the lower row of GS1 DataBar Stacked in modules.
     /// </summary>
-    public const float StackedLowerRowHeight = 7F;
+    private const float StackedLowerRowHeight = 7F;
 
     /// <summary>
     /// The nominal height of each row of GS1 DataBar Stacked Omnidirectional in modules. Table 5-44 gives 31.37 millimetres, 95X, at the target X dimension,
     /// and section 5.5.2.1.4 places a 3X separator between the two rows.
     /// </summary>
-    public const float StackedOmnidirectionalRowHeight = 46F;
+    private const float StackedOmnidirectionalRowHeight = 46F;
 
     /// <summary>
     /// The minimum height of each row of GS1 DataBar Stacked Omnidirectional in modules. Section 5.5.2.1.4: "69X is the minimum height of the symbol", and
@@ -78,12 +78,12 @@ internal static class DataBarEncoder
     /// <summary>
     /// The width of a single row symbol in modules, section 5.5.2.1.1: "Its dimensions are 96X wide".
     /// </summary>
-    public const int Width = 96;
+    private const int Width = 96;
 
     /// <summary>
     /// The width of a stacked symbol in modules, section 5.5.2.1.3: "Its dimensions are 50X wide".
     /// </summary>
-    public const int StackedWidth = 50;
+    private const int StackedWidth = 50;
 
     /// <summary>
     /// The number of elements in a symbol: a guard pair at each end, four symbol characters of 8 elements and two finder patterns of 5, starting with a space.
@@ -315,6 +315,28 @@ internal static class DataBarEncoder
     }
 
     /// <summary>
+    /// Adds the human readable interpretation below the symbol: the application identifier in parentheses and the 14 digits, as section 4.14 of the GS1 General
+    /// Specifications prints an element string, at the size of <see cref="Gs1Data.MinimumTextSize"/> or larger. A symbol without a font carries no text.
+    /// </summary>
+    /// <param name="gtin">The 14 digit GTIN.</param>
+    /// <param name="width">The symbol width in modules.</param>
+    /// <param name="height">The symbol height in modules.</param>
+    /// <param name="options">The options that carry the font.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    public static void AddCaption(ReadOnlySpan<char> gtin, int width, float height, BarcodeOptions options, ref BarcodeSymbol symbol)
+    {
+        if (options.Font is null)
+        {
+            return;
+        }
+
+        const string identifier = "(01)";
+        symbol.ReserveText(1, identifier.Length + gtin.Length);
+        symbol.AddText(identifier, gtin, [], 0F, width, BarcodeTextSide.BelowBars, height + BarcodeTextPlacement.Clearance);
+        symbol.SetTextSize(Gs1Data.MinimumTextSize, 0F);
+    }
+
+    /// <summary>
     /// Calculates the 46 element widths of the symbol, starting with the left guard space: the guard pair, the first character, the left finder, the second
     /// character reversed, the fourth character, the right finder reversed, the third character reversed and the guard pair.
     /// </summary>
@@ -493,27 +515,5 @@ internal static class DataBarEncoder
                 next = 1;
             }
         }
-    }
-
-    /// <summary>
-    /// Adds the human readable interpretation below the symbol: the application identifier in parentheses and the 14 digits, as section 4.14 of the GS1 General
-    /// Specifications prints an element string, at the size of <see cref="Gs1Data.MinimumTextSize"/> or larger. A symbol without a font carries no text.
-    /// </summary>
-    /// <param name="gtin">The 14 digit GTIN.</param>
-    /// <param name="width">The symbol width in modules.</param>
-    /// <param name="height">The symbol height in modules.</param>
-    /// <param name="options">The options that carry the font.</param>
-    /// <param name="symbol">The symbol to write.</param>
-    public static void AddCaption(ReadOnlySpan<char> gtin, int width, float height, BarcodeOptions options, ref BarcodeSymbol symbol)
-    {
-        if (options.Font is null)
-        {
-            return;
-        }
-
-        const string identifier = "(01)";
-        symbol.ReserveText(1, identifier.Length + gtin.Length);
-        symbol.AddText(identifier, gtin, [], 0F, width, BarcodeTextSide.BelowBars, height + BarcodeTextPlacement.Clearance);
-        symbol.SetTextSize(Gs1Data.MinimumTextSize, 0F);
     }
 }

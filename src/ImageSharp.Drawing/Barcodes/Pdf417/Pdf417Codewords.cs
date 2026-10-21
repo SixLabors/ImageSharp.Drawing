@@ -34,24 +34,24 @@ internal static class Pdf417Codewords
     public const int Pad = 900;
 
     /// <summary>
-    /// The modulus of the error correction arithmetic, section 5.10.
+    /// The mode latch to Byte Compaction mode for a byte count that is not a multiple of six, Table 2.
     /// </summary>
-    public const int Modulus = 929;
+    public const int ByteLatch = 901;
 
     /// <summary>
-    /// The largest number of error correction codewords, at error correction level 8, Table 9.
+    /// The mode latch to Byte Compaction mode for a byte count that is a multiple of six, Table 2.
     /// </summary>
-    public const int MaximumErrorCorrection = 512;
+    public const int ByteLatchSix = 924;
+
+    /// <summary>
+    /// The modulus of the error correction arithmetic, section 5.10.
+    /// </summary>
+    private const int Modulus = 929;
 
     /// <summary>
     /// The mode latch to Text Compaction mode, Table 2.
     /// </summary>
     private const int TextLatch = 900;
-
-    /// <summary>
-    /// The mode latch to Byte Compaction mode for a byte count that is not a multiple of six, Table 2.
-    /// </summary>
-    public const int ByteLatch = 901;
 
     /// <summary>
     /// The mode latch to Numeric Compaction mode, Table 2.
@@ -64,11 +64,6 @@ internal static class Pdf417Codewords
     private const int ByteShift = 913;
 
     /// <summary>
-    /// The mode latch to Byte Compaction mode for a byte count that is a multiple of six, Table 2.
-    /// </summary>
-    public const int ByteLatchSix = 924;
-
-    /// <summary>
     /// The MicroPDF417 codeword that stands for the header [)&gt;RS05GS and the trailer RS EOT of a message in format 05, and that puts the encoder in Numeric
     /// Compaction mode.
     /// </summary>
@@ -79,16 +74,6 @@ internal static class Pdf417Codewords
     /// Compaction mode, Mixed sub-mode.
     /// </summary>
     private const int Macro06 = 917;
-
-    /// <summary>
-    /// The length of the header of a message in format 05 or 06, [)&gt;RS05GS.
-    /// </summary>
-    private const int MacroHeaderLength = 7;
-
-    /// <summary>
-    /// The length of the trailer of a message in format 05 or 06, RS EOT.
-    /// </summary>
-    private const int MacroTrailerLength = 2;
 
     /// <summary>
     /// The number of digits from which a run of digits encodes in Numeric Compaction mode, Annex N step 4.
@@ -274,15 +259,12 @@ internal static class Pdf417Codewords
         Guard.MustBeLessThanOrEqualTo(text.Length, MicroMaximumLength, nameof(text));
 
         int macro = 0;
-        if (text.Length >= MacroHeaderLength + MacroTrailerLength
-            && text.StartsWith("[)>\u001E0")
-            && text[5] is '5' or '6'
-            && text[6] == '\u001D'
-            && text.EndsWith("\u001E\u0004"))
+        int format = MacroMessage.Format(text);
+        if (format != 0)
         {
-            macro = text[5] == '5' ? Macro05 : Macro06;
+            macro = format == 5 ? Macro05 : Macro06;
             codewords.Append(macro);
-            text = text[MacroHeaderLength..^MacroTrailerLength];
+            text = text[MacroMessage.HeaderLength..^MacroMessage.TrailerLength];
         }
 
         EncodeFrom(text, CompactionMode.Byte, macro, ref codewords);
@@ -339,6 +321,39 @@ internal static class Pdf417Codewords
             {
                 value = Modulus - value;
             }
+        }
+    }
+
+    /// <summary>
+    /// Encodes a run of bytes in Byte Compaction mode, section 5.4.3.3: each group of six bytes converts from base 256 to five base 900 codewords as Annex C
+    /// gives, and the bytes after the last full group take one codeword each.
+    /// </summary>
+    /// <param name="bytes">The bytes, each a character U+0000 to U+00FF.</param>
+    /// <param name="codewords">The builder the codewords are written to.</param>
+    public static void EncodeBytes(ReadOnlySpan<char> bytes, ref ValueListBuilder<int> codewords)
+    {
+        int position = 0;
+        for (; position + ByteGroup <= bytes.Length; position += ByteGroup)
+        {
+            // Six bytes are at most 2^48 - 1, which a long holds. The five codewords come out of the division the least significant first and are written the
+            // most significant first.
+            long value = 0;
+            foreach (char b in bytes.Slice(position, ByteGroup))
+            {
+                value = (value << 8) | b;
+            }
+
+            Span<int> group = codewords.AppendSpan(ByteGroupCodewords);
+            for (int i = ByteGroupCodewords - 1; i >= 0; i--)
+            {
+                group[i] = (int)(value % CodewordBase);
+                value /= CodewordBase;
+            }
+        }
+
+        foreach (char b in bytes[position..])
+        {
+            codewords.Append(b);
         }
     }
 
@@ -512,39 +527,6 @@ internal static class Pdf417Codewords
             {
                 codewords.Append(group[i]);
             }
-        }
-    }
-
-    /// <summary>
-    /// Encodes a run of bytes in Byte Compaction mode, section 5.4.3.3: each group of six bytes converts from base 256 to five base 900 codewords as Annex C
-    /// gives, and the bytes after the last full group take one codeword each.
-    /// </summary>
-    /// <param name="bytes">The bytes, each a character U+0000 to U+00FF.</param>
-    /// <param name="codewords">The builder the codewords are written to.</param>
-    public static void EncodeBytes(ReadOnlySpan<char> bytes, ref ValueListBuilder<int> codewords)
-    {
-        int position = 0;
-        for (; position + ByteGroup <= bytes.Length; position += ByteGroup)
-        {
-            // Six bytes are at most 2^48 - 1, which a long holds. The five codewords come out of the division the least significant first and are written the
-            // most significant first.
-            long value = 0;
-            foreach (char b in bytes.Slice(position, ByteGroup))
-            {
-                value = (value << 8) | b;
-            }
-
-            Span<int> group = codewords.AppendSpan(ByteGroupCodewords);
-            for (int i = ByteGroupCodewords - 1; i >= 0; i--)
-            {
-                group[i] = (int)(value % CodewordBase);
-                value /= CodewordBase;
-            }
-        }
-
-        foreach (char b in bytes[position..])
-        {
-            codewords.Append(b);
         }
     }
 

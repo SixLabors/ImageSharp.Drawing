@@ -11,20 +11,25 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal static class CodabarEncoder
 {
     /// <summary>
-    /// The characters the symbology encodes, in pattern order: the sixteen data characters, then the four start and stop characters.
-    /// </summary>
-    public const string Characters = "0123456789-$:/.+ABCD";
-
-    /// <summary>
     /// The largest number of characters a symbol carries. The symbology sets no maximum.
     /// </summary>
     public const int MaximumLength = 500;
 
     /// <summary>
+    /// The value of the first start and stop character. Values below it are data characters.
+    /// </summary>
+    public const int FirstStartStop = 16;
+
+    /// <summary>
+    /// The characters the symbology encodes, in pattern order: the sixteen data characters, then the four start and stop characters.
+    /// </summary>
+    private const string Characters = "0123456789-$:/.+ABCD";
+
+    /// <summary>
     /// The quiet zone in modules on each side when 10X is wider than <see cref="MinimumQuietZoneMillimetres"/>. Section 4.4.1 (d) of BS EN 798: "minimum width
     /// of quiet zone: 10X or 2,54 mm, whichever is greater".
     /// </summary>
-    public const int QuietZone = 10;
+    private const int QuietZone = 10;
 
     /// <summary>
     /// The smallest quiet zone in millimetres, section 4.4.1 (d) of BS EN 798.
@@ -36,11 +41,6 @@ internal static class CodabarEncoder
     /// dimension.
     /// </summary>
     private const double MinimumXDimension = 0.191;
-
-    /// <summary>
-    /// The value of the first start and stop character. Values below it are data characters.
-    /// </summary>
-    public const int FirstStartStop = 16;
 
     /// <summary>
     /// The number of elements in a symbol character, its inter-character gap excluded.
