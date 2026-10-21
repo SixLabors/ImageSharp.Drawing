@@ -69,7 +69,7 @@ public sealed class IsbnSymbology : BarcodeSymbology
                 throw new ArgumentException("An ISBN-13 must start with the 978 or 979 prefix.", nameof(text));
             }
 
-            // The GS1 General Specifications: "Within GS1 Prefix 979 a subset 9790 has been allocated to the International ISMN Agency for notated music."
+            // Footnote 1 of section 2.1.3.4 of the GS1 General Specifications: "Within GS1 Prefix 979 a subset 9790 has been allocated to the International ISMN Agency for notated music."
             if (compact.StartsWith("9790", StringComparison.Ordinal))
             {
                 throw new ArgumentException("The 979-0 prefix belongs to the ISMN, not the ISBN.", nameof(text));

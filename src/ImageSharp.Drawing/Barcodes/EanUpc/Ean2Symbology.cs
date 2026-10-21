@@ -31,7 +31,7 @@ public sealed class Ean2Symbology : BarcodeSymbology
 
         BarcodeSymbology.ValidateDigits(text);
 
-        // GS1 General Specifications: the two-digit value modulo four selects the parity pattern, where 0 = AA, 1 = AB, 2 = BA and 3 = BB. The remainder bits
+        // Table 5-8 of section 5.2.2.5.1 of the GS1 General Specifications: the two-digit value modulo four selects the parity pattern, where 0 = AA, 1 = AB, 2 = BA and 3 = BB. The remainder bits
         // map to the number sets directly: a set bit is B.
         int parity = ((10 * (text[0] - '0')) + (text[1] - '0')) % 4;
         AddOnLayout.Build(text, parity, options, ref symbol);

@@ -444,7 +444,7 @@ internal static class Gs1Data
     }
 
     /// <summary>
-    /// Computes the GS1 check digit for the given data digits using the standard check digit calculation of the GS1 General Specifications: digits are weighted
+    /// Computes the GS1 check digit for the given data digits using the standard check digit calculation of section 7.9.1 of the GS1 General Specifications: digits are weighted
     /// 3 and 1 alternately starting with 3 at the rightmost data digit, and the check digit lifts the sum to the next multiple of ten.
     /// </summary>
     /// <param name="digits">The data digits, excluding the check digit.</param>

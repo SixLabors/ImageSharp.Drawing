@@ -46,7 +46,7 @@ internal static class Code11Encoder
     private const int StartStopCharacters = 2;
 
     /// <summary>
-    /// The width of a wide element in modules: the top of the wide to narrow ratio range of 2.0:1 to 3.0:1.
+    /// The width of a wide element in modules. There is no public specification of Code 11.
     /// </summary>
     private const int WideElement = 3;
 

@@ -31,7 +31,7 @@ public sealed class Ean5Symbology : BarcodeSymbology
 
         BarcodeSymbology.ValidateDigits(text);
 
-        // GS1 General Specifications: V = (3 x (d1 + d3 + d5) + 9 x (d2 + d4)) mod 10 selects the parity pattern.
+        // Section 5.2.2.5.2 of the GS1 General Specifications: V = (3 x (d1 + d3 + d5) + 9 x (d2 + d4)) mod 10 selects the parity pattern.
         int checksum = ((3 * ((text[0] - '0') + (text[2] - '0') + (text[4] - '0'))) + (9 * ((text[1] - '0') + (text[3] - '0')))) % 10;
         AddOnLayout.Build(text, EanUpcEncoder.AddOnFiveParity[checksum], options, ref symbol);
     }
