@@ -1250,11 +1250,22 @@ internal static class QrEncoder
         // A line of n modules has at most n + 1 runs, the light run first, and n is at most 177.
         InlineArray256<int> runStorage = default;
         MaskPenalty penalty = new(layers, n, runStorage);
+
+        // N2 and N4 count the same modules under every mask, so one pass counts them for all eight masks. N1 and N3 read the runs of each mask.
+        InlineArray8<int> blockStorage = default;
+        InlineArray8<int> darkStorage = default;
+        Span<int> blocks = blockStorage;
+        Span<int> dark = darkStorage;
+        penalty.CountBlocksAndDark(blocks, dark);
+
+        // N4: 10 points for each full 5% the proportion of dark modules is away from 50%. The steps are |100 dark / n^2 - 50| / 5, which integers give
+        // exactly as |20 dark - 10 n^2| / n^2.
+        int area = n * n;
         int best = 0;
         int bestScore = int.MaxValue;
         for (int mask = 0; mask < 8; mask++)
         {
-            int score = penalty.Score(mask);
+            int score = penalty.LinePenalties(mask) + (3 * blocks[mask]) + (10 * (Math.Abs((20 * dark[mask]) - (10 * area)) / area));
             if (score < bestScore)
             {
                 bestScore = score;
@@ -2051,13 +2062,12 @@ internal static class QrEncoder
         }
 
         /// <summary>
-        /// Returns the penalty of a data mask pattern over the complete symbol.
+        /// Returns the N1 and N3 penalties of a data mask pattern over every row and every column.
         /// </summary>
         /// <param name="mask">The data mask pattern reference.</param>
         /// <returns>The penalty.</returns>
-        public int Score(int mask)
+        public int LinePenalties(int mask)
         {
-            ReadOnlySpan<byte> layers = this.layers;
             int n = this.n;
             int lines = 0;
             for (int i = 0; i < n; i++)
@@ -2066,35 +2076,68 @@ internal static class QrEncoder
                 lines += LinePenalty(this.runs[..this.RunLengths(i * n, 1, mask)]);
             }
 
-            // N2: 3 points for each 2 x 2 block of one colour, so a larger block counts each block it holds. A block is one colour under the mask where the
-            // mask bit of the exclusive or of its upper left layer with each of its other three layers is clear.
-            int blocks = 0;
+            return lines;
+        }
+
+        /// <summary>
+        /// Counts, for every data mask pattern, the 2 x 2 blocks of one colour of N2 and the dark modules of N4, in one pass over the layers.
+        /// </summary>
+        /// <param name="blocks">The eight block counts to write, one for each pattern. A larger block of one colour counts each 2 x 2 block it holds.</param>
+        /// <param name="dark">The eight dark module counts to write, one for each pattern.</param>
+        public void CountBlocksAndDark(Span<int> blocks, Span<int> dark)
+        {
+            ReadOnlySpan<byte> layers = this.layers;
+            int n = this.n;
+
+            // A block is one colour under a mask where the mask bit of the exclusive or of its upper left layer with each of its other three layers is clear,
+            // so the complement of that or holds the one colour bit of every mask. A row of blocks is at most 176 bytes.
+            InlineArray256<byte> sameStorage = default;
+            Span<byte> same = ((Span<byte>)sameStorage)[..(n - 1)];
+            blocks.Clear();
             for (int r = 0; r < n - 1; r++)
             {
                 ReadOnlySpan<byte> row = layers.Slice(r * n, n);
                 ReadOnlySpan<byte> below = layers.Slice((r + 1) * n, n);
-                for (int c = 0; c < n - 1; c++)
+                for (int c = 0; c < same.Length; c++)
                 {
                     int corner = row[c];
-                    int differs = (corner ^ row[c + 1]) | (corner ^ below[c]) | (corner ^ below[c + 1]);
-                    if (((differs >> mask) & 1) == 0)
-                    {
-                        blocks += 3;
-                    }
+                    same[c] = (byte)~((corner ^ row[c + 1]) | (corner ^ below[c]) | (corner ^ below[c + 1]));
+                }
+
+                CountBits(same, blocks);
+            }
+
+            dark.Clear();
+            CountBits(layers, dark);
+        }
+
+        /// <summary>
+        /// Adds, for each bit position m, the number of bytes of a span whose bit m is set. Bit m of every byte is the module under data mask pattern m. Eight
+        /// bytes read as one 64-bit word, and a population count of the word under the bit m of each byte counts the eight bytes at once. The bytes after the
+        /// last whole word count one by one, with the same result.
+        /// </summary>
+        /// <param name="bytes">The bytes.</param>
+        /// <param name="counts">The eight counts to add to.</param>
+        private static void CountBits(ReadOnlySpan<byte> bytes, Span<int> counts)
+        {
+            const ulong lowBits = 0x0101010101010101UL;
+            int i = 0;
+            for (; i + sizeof(ulong) <= bytes.Length; i += sizeof(ulong))
+            {
+                ulong word = MemoryMarshal.Read<ulong>(bytes[i..]);
+                for (int m = 0; m < 8; m++)
+                {
+                    counts[m] += BitOperations.PopCount(word & (lowBits << m));
                 }
             }
 
-            // N4: 10 points for each full 5% the proportion of dark modules is away from 50%. The steps are |100 dark / n^2 - 50| / 5, which integers give
-            // exactly as |20 dark - 10 n^2| / n^2.
-            int dark = 0;
-            foreach (byte layer in layers)
+            foreach (byte b in bytes[i..])
             {
-                dark += (layer >> mask) & 1;
+                for (int m = 0; m < 8; m++)
+                {
+                    counts[m] += (b >> m) & 1;
+                }
             }
-
-            int area = n * n;
-            int k = Math.Abs((20 * dark) - (10 * area)) / area;
-            return lines + blocks + (10 * k);
         }
 
         /// <summary>
