@@ -19,6 +19,12 @@ public sealed class UpcASymbology : BarcodeSymbology
     private const int QuietZone = 9;
 
     /// <summary>
+    /// The gap in modules between the right guard pattern and the last digit. Section 5.2.5 of the GS1 General Specifications: "The left-hand side of the
+    /// last digit is positioned five module widths to the right of the rightmost guard bar for UPC-A barcodes".
+    /// </summary>
+    private const int LastDigitGap = 5;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="UpcASymbology"/> class.
     /// </summary>
     public UpcASymbology()
@@ -67,11 +73,29 @@ public sealed class UpcASymbology : BarcodeSymbology
         if (options.Font is not null)
         {
             float textLine = barHeight + BarcodeTextPlacement.Clearance;
-            symbol.ReserveText(12, 12);
-            symbol.AddTextWithinSpan(digits[..1], -9F, -5F, BarcodeTextSide.BelowBars, textLine, BarcodeTextAlignment.Right);
-            EanUpcEncoder.AddDigits(digits[1..6], 10F, 7F, BarcodeTextSide.BelowBars, textLine, ref symbol);
-            EanUpcEncoder.AddDigits(digits[6..11], 50F, 7F, BarcodeTextSide.BelowBars, textLine, ref symbol);
-            symbol.AddTextWithinSpan(digits[11..12], 100F, 104F, BarcodeTextSide.BelowBars, textLine, BarcodeTextAlignment.Left);
+            const int firstDigitRight = -EanUpcEncoder.ReducedFirstDigitGap;
+            const int lastDigitLeft = EanUpcEncoder.Ean13Width + LastDigitGap;
+            const int characterWidth = EanUpcEncoder.CharacterWidth;
+            symbol.ReserveText(digits.Length, digits.Length);
+            symbol.AddTextWithinSpan(
+                digits[..1],
+                firstDigitRight - EanUpcEncoder.ReducedDigitWidth,
+                firstDigitRight,
+                BarcodeTextSide.BelowBars,
+                textLine,
+                BarcodeTextAlignment.Right);
+
+            // The first symbol character carries the number system digit, so the printed left half starts at the second character.
+            const int leftDigitsStart = EanUpcEncoder.NormalGuardWidth + characterWidth;
+            EanUpcEncoder.AddDigits(digits[1..6], leftDigitsStart, characterWidth, BarcodeTextSide.BelowBars, textLine, ref symbol);
+            EanUpcEncoder.AddDigits(digits[6..11], EanUpcEncoder.Ean13RightHalfStart, characterWidth, BarcodeTextSide.BelowBars, textLine, ref symbol);
+            symbol.AddTextWithinSpan(
+                digits[11..12],
+                lastDigitLeft,
+                lastDigitLeft + EanUpcEncoder.ReducedDigitWidth,
+                BarcodeTextSide.BelowBars,
+                textLine,
+                BarcodeTextAlignment.Left);
         }
 
         symbol.EndLinear(QuietZone, QuietZone, 0F, EanUpcEncoder.RunUnit, false);

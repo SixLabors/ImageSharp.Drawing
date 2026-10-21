@@ -40,6 +40,12 @@ public sealed class UpcESymbology : BarcodeSymbology
     private const int TrailingQuietZone = 7;
 
     /// <summary>
+    /// The gap in modules between the special right guard pattern and the last digit. Section 5.2.5 of the GS1 General Specifications: the left-hand side of
+    /// the last digit is positioned "three module widths for UPC-E barcodes" to the right of the rightmost guard bar.
+    /// </summary>
+    private const int LastDigitGap = 3;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="UpcESymbology"/> class.
     /// </summary>
     public UpcESymbology()
@@ -95,10 +101,35 @@ public sealed class UpcESymbology : BarcodeSymbology
         if (options.Font is not null)
         {
             float textLine = barHeight + BarcodeTextPlacement.Clearance;
-            symbol.ReserveText(8, 8);
-            symbol.AddTextWithinSpan(text.Slice(0, 1), -9F, -5F, BarcodeTextSide.BelowBars, textLine, BarcodeTextAlignment.Right);
-            EanUpcEncoder.AddDigits(text.Slice(1, 6), 3F, 7F, BarcodeTextSide.BelowBars, textLine, ref symbol);
-            symbol.AddTextWithinSpan([(char)('0' + check)], 54F, 58F, BarcodeTextSide.BelowBars, textLine, BarcodeTextAlignment.Left);
+
+            // The line prints the number system digit, the six digits and the check digit.
+            const int printedDigits = 8;
+            const int firstDigitRight = -EanUpcEncoder.ReducedFirstDigitGap;
+            const int lastDigitLeft = Width + LastDigitGap;
+            symbol.ReserveText(printedDigits, printedDigits);
+            symbol.AddTextWithinSpan(
+                text.Slice(0, 1),
+                firstDigitRight - EanUpcEncoder.ReducedDigitWidth,
+                firstDigitRight,
+                BarcodeTextSide.BelowBars,
+                textLine,
+                BarcodeTextAlignment.Right);
+
+            EanUpcEncoder.AddDigits(
+                text.Slice(1, 6),
+                EanUpcEncoder.NormalGuardWidth,
+                EanUpcEncoder.CharacterWidth,
+                BarcodeTextSide.BelowBars,
+                textLine,
+                ref symbol);
+
+            symbol.AddTextWithinSpan(
+                [(char)('0' + check)],
+                lastDigitLeft,
+                lastDigitLeft + EanUpcEncoder.ReducedDigitWidth,
+                BarcodeTextSide.BelowBars,
+                textLine,
+                BarcodeTextAlignment.Left);
         }
 
         symbol.EndLinear(LeadingQuietZone, TrailingQuietZone, 0F, EanUpcEncoder.RunUnit, false);

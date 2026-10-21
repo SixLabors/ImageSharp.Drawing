@@ -76,12 +76,13 @@ internal static class AddOnLayout
         float barHeight = options.ResolveBarHeight(symbol.XDimension, 0, EanUpcEncoder.NominalAddOnBarHeight, float.PositiveInfinity);
         heights.Fill(barHeight);
 
-        // Section 5.2.5 of the GS1 General Specifications prints the add-on interpretation above the bars. Each digit prints above its own symbol character;
-        // the character cells start after the guard pattern and advance by the seven character modules plus the two delineator modules.
+        // Section 5.2.5 of the GS1 General Specifications prints the add-on interpretation above the bars. Each digit prints above its own symbol character.
+        // The character cells start after the guard pattern and advance by the seven character modules plus the two delineator modules.
         if (options.Font is not null)
         {
+            const int cellAdvance = EanUpcEncoder.CharacterWidth + DelineatorWidth;
             symbol.ReserveText(digits.Length, digits.Length);
-            EanUpcEncoder.AddDigits(digits, 4F, 9F, BarcodeTextSide.AboveBars, -BarcodeTextPlacement.Clearance, ref symbol);
+            EanUpcEncoder.AddDigits(digits, AddOnGuardWidth, cellAdvance, BarcodeTextSide.AboveBars, -BarcodeTextPlacement.Clearance, ref symbol);
         }
 
         symbol.EndLinear(LeadingQuietZone, TrailingQuietZone, 0F, EanUpcEncoder.RunUnit, false);

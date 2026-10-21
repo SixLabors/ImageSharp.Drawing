@@ -79,6 +79,33 @@ internal static class EanUpcEncoder
     public const int NormalGuardWidth = 3;
 
     /// <summary>
+    /// The width of a symbol character in modules.
+    /// </summary>
+    public const int CharacterWidth = 7;
+
+    /// <summary>
+    /// The first module of the right half of an EAN-13 or UPC-A symbol: the normal guard pattern, six symbol characters and the centre guard pattern.
+    /// </summary>
+    public const int Ean13RightHalfStart = NormalGuardWidth + (6 * CharacterWidth) + CentreGuardWidth;
+
+    /// <summary>
+    /// The first module of the right half of an EAN-8 symbol: the normal guard pattern, four symbol characters and the centre guard pattern.
+    /// </summary>
+    public const int Ean8RightHalfStart = NormalGuardWidth + (4 * CharacterWidth) + CentreGuardWidth;
+
+    /// <summary>
+    /// The width in modules of the first and last digits of a UPC-A or UPC-E symbol. Section 5.2.5 of the GS1 General Specifications: "the size of the first
+    /// and last digits should be reduced to a maximum width equivalent to four modules".
+    /// </summary>
+    public const int ReducedDigitWidth = 4;
+
+    /// <summary>
+    /// The gap in modules between the first digit of a UPC-A or UPC-E symbol and the left guard pattern. Section 5.2.5 of the GS1 General Specifications:
+    /// "The right-hand side of the first digit is positioned five module widths to the left of the leftmost guard bar."
+    /// </summary>
+    public const int ReducedFirstDigitGap = 5;
+
+    /// <summary>
     /// The number of modules a guard pattern extends below the digit bars. Section 5.2.3.2 of the GS1 General Specifications: "the bars (dark bars) forming
     /// the left, centre and right guard bar patterns SHALL be extended downward by 5x".
     /// </summary>
@@ -90,9 +117,10 @@ internal static class EanUpcEncoder
     private const double MinimumEan8BarHeight = 14.58;
 
     /// <summary>
-    /// The width of a symbol character in modules.
+    /// The gap in modules between the leftmost digit of an EAN-13 symbol and the start guard pattern. Section 5.2.5 of the GS1 General Specifications prints
+    /// this digit "to the left of the start guard pattern" and gives no distance.
     /// </summary>
-    private const int CharacterWidth = 7;
+    private const int Ean13LeadingDigitGap = 2;
 
     /// <summary>
     /// The number of run units in a module. Section 5.2.3.1 of the GS1 General Specifications: for the characters 1, 2, 7 and 8 "the bars (dark bars) and
@@ -425,10 +453,10 @@ internal static class EanUpcEncoder
         // "Normally the minimum is one module" between the digits and the bars. Digits flow past the extended guard bars.
         if (options.Font is not null)
         {
-            symbol.ReserveText(8, 8);
+            symbol.ReserveText(digits.Length, digits.Length);
             float textEdge = barHeight + BarcodeTextPlacement.Clearance;
-            AddDigits(digits[..4], 3F, 7F, BarcodeTextSide.BelowBars, textEdge, ref symbol);
-            AddDigits(digits[4..], 36F, 7F, BarcodeTextSide.BelowBars, textEdge, ref symbol);
+            AddDigits(digits[..4], NormalGuardWidth, CharacterWidth, BarcodeTextSide.BelowBars, textEdge, ref symbol);
+            AddDigits(digits[4..], Ean8RightHalfStart, CharacterWidth, BarcodeTextSide.BelowBars, textEdge, ref symbol);
         }
 
         symbol.EndLinear(QuietZone, QuietZone, 0F, RunUnit, false);
@@ -527,11 +555,11 @@ internal static class EanUpcEncoder
         if (options.Font is not null)
         {
             int captionLength = captionPrefix.Length + captionBody.Length + captionSuffix.Length;
-            symbol.ReserveText(hasCaption ? 14 : 13, 13 + captionLength);
+            symbol.ReserveText(digits.Length + (hasCaption ? 1 : 0), digits.Length + captionLength);
             float textEdge = barHeight + BarcodeTextPlacement.Clearance;
-            symbol.AddText(digits[..1], -9F, -2F, BarcodeTextSide.BelowBars, textEdge);
-            AddDigits(digits[1..7], 3F, 7F, BarcodeTextSide.BelowBars, textEdge, ref symbol);
-            AddDigits(digits[7..13], 50F, 7F, BarcodeTextSide.BelowBars, textEdge, ref symbol);
+            symbol.AddText(digits[..1], -Ean13LeadingDigitGap - CharacterWidth, -Ean13LeadingDigitGap, BarcodeTextSide.BelowBars, textEdge);
+            AddDigits(digits[1..7], NormalGuardWidth, CharacterWidth, BarcodeTextSide.BelowBars, textEdge, ref symbol);
+            AddDigits(digits[7..13], Ean13RightHalfStart, CharacterWidth, BarcodeTextSide.BelowBars, textEdge, ref symbol);
             if (hasCaption)
             {
                 symbol.AddText(

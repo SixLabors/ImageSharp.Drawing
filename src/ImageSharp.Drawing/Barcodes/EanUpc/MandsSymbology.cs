@@ -76,11 +76,15 @@ public sealed class MandsSymbology : BarcodeSymbology
             // stays empty. The full eight digit form prints as-is.
             float textLine = digitHeight + BarcodeTextPlacement.Clearance;
             ReadOnlySpan<char> shown = padded ? digits[1..] : digits;
+
+            // The M fills one character cell at the outer edge of the leading quiet zone. The S fills one character cell, two modules after the symbol.
+            const int characterWidth = EanUpcEncoder.CharacterWidth;
+            const int sLeft = EanUpcEncoder.Ean8Width + 2;
             symbol.ReserveText(shown.Length + 2, shown.Length + 2);
-            EanUpcEncoder.AddDigits(shown[..4], 3F, 7F, BarcodeTextSide.BelowBars, textLine, ref symbol);
-            EanUpcEncoder.AddDigits(shown[4..], 36F, 7F, BarcodeTextSide.BelowBars, textLine, ref symbol);
-            symbol.AddText("M", -12F, -5F, BarcodeTextSide.BelowBars, textLine);
-            symbol.AddText("S", 69F, 76F, BarcodeTextSide.BelowBars, textLine);
+            EanUpcEncoder.AddDigits(shown[..4], EanUpcEncoder.NormalGuardWidth, characterWidth, BarcodeTextSide.BelowBars, textLine, ref symbol);
+            EanUpcEncoder.AddDigits(shown[4..], EanUpcEncoder.Ean8RightHalfStart, characterWidth, BarcodeTextSide.BelowBars, textLine, ref symbol);
+            symbol.AddText("M", -QuietZone, -QuietZone + characterWidth, BarcodeTextSide.BelowBars, textLine);
+            symbol.AddText("S", sLeft, sLeft + characterWidth, BarcodeTextSide.BelowBars, textLine);
         }
 
         symbol.EndLinear(QuietZone, QuietZone, 0F, EanUpcEncoder.RunUnit, false);
