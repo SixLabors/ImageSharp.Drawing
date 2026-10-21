@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Numerics;
 using System.Runtime.InteropServices;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
@@ -36,12 +37,12 @@ internal static class Pdf417Codewords
     /// <summary>
     /// The mode latch to Byte Compaction mode for a byte count that is not a multiple of six, Table 2.
     /// </summary>
-    public const int ByteLatch = 901;
+    private const int ByteLatch = 901;
 
     /// <summary>
     /// The mode latch to Byte Compaction mode for a byte count that is a multiple of six, Table 2.
     /// </summary>
-    public const int ByteLatchSix = 924;
+    private const int ByteLatchSix = 924;
 
     /// <summary>
     /// The modulus of the error correction arithmetic, section 5.10.
@@ -325,12 +326,35 @@ internal static class Pdf417Codewords
     }
 
     /// <summary>
+    /// Returns the mode latch to Byte Compaction mode for a run of bytes, Table 2: 924 when the byte count is a multiple of six, and 901 otherwise.
+    /// </summary>
+    /// <param name="byteCount">The number of bytes of the run.</param>
+    /// <returns>The latch codeword.</returns>
+    public static int ByteLatchFor(int byteCount) => byteCount % ByteGroup == 0 ? ByteLatchSix : ByteLatch;
+
+    /// <summary>
+    /// Returns the number of codewords Byte Compaction mode takes for a number of bytes: five per group of six, and one per byte after the last group.
+    /// </summary>
+    /// <param name="bytes">The number of bytes.</param>
+    /// <returns>The number of codewords, the latch excluded.</returns>
+    public static int ByteCodewords(int bytes) => (ByteGroupCodewords * (bytes / ByteGroup)) + (bytes % ByteGroup);
+
+    /// <summary>
+    /// Returns the number of bytes Byte Compaction mode carries in a number of codewords: six per group of five, and one per codeword after the last group.
+    /// </summary>
+    /// <param name="codewords">The number of codewords, the latch excluded.</param>
+    /// <returns>The number of bytes.</returns>
+    public static int ByteCapacity(int codewords) => (ByteGroup * (codewords / ByteGroupCodewords)) + (codewords % ByteGroupCodewords);
+
+    /// <summary>
     /// Encodes a run of bytes in Byte Compaction mode, section 5.4.3.3: each group of six bytes converts from base 256 to five base 900 codewords as Annex C
     /// gives, and the bytes after the last full group take one codeword each.
     /// </summary>
-    /// <param name="bytes">The bytes, each a character U+0000 to U+00FF.</param>
+    /// <typeparam name="T">The type of the bytes: a byte, or a character U+0000 to U+00FF.</typeparam>
+    /// <param name="bytes">The bytes.</param>
     /// <param name="codewords">The builder the codewords are written to.</param>
-    public static void EncodeBytes(ReadOnlySpan<char> bytes, ref ValueListBuilder<int> codewords)
+    public static void EncodeBytes<T>(ReadOnlySpan<T> bytes, ref ValueListBuilder<int> codewords)
+        where T : unmanaged, IBinaryInteger<T>
     {
         int position = 0;
         for (; position + ByteGroup <= bytes.Length; position += ByteGroup)
@@ -338,9 +362,9 @@ internal static class Pdf417Codewords
             // Six bytes are at most 2^48 - 1, which a long holds. The five codewords come out of the division the least significant first and are written the
             // most significant first.
             long value = 0;
-            foreach (char b in bytes.Slice(position, ByteGroup))
+            foreach (T b in bytes.Slice(position, ByteGroup))
             {
-                value = (value << 8) | b;
+                value = (value << 8) | long.CreateTruncating(b);
             }
 
             Span<int> group = codewords.AppendSpan(ByteGroupCodewords);
@@ -351,9 +375,9 @@ internal static class Pdf417Codewords
             }
         }
 
-        foreach (char b in bytes[position..])
+        foreach (T b in bytes[position..])
         {
-            codewords.Append(b);
+            codewords.Append(int.CreateTruncating(b));
         }
     }
 
@@ -468,7 +492,7 @@ internal static class Pdf417Codewords
                     continue;
                 }
 
-                codewords.Append(byteRun % ByteGroup == 0 ? ByteLatchSix : ByteLatch);
+                codewords.Append(ByteLatchFor(byteRun));
                 EncodeBytes(text.Slice(position, byteRun), ref codewords);
                 mode = CompactionMode.Byte;
                 position += byteRun;

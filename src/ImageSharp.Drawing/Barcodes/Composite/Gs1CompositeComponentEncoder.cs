@@ -84,16 +84,6 @@ internal static class Gs1CompositeComponentEncoder
     private const int CompositeCodeword = 920;
 
     /// <summary>
-    /// The number of bytes PDF417 Byte Compaction mode carries in one group of five codewords.
-    /// </summary>
-    private const int ByteGroup = 6;
-
-    /// <summary>
-    /// The number of codewords of a group of <see cref="ByteGroup"/> bytes.
-    /// </summary>
-    private const int ByteGroupCodewords = 5;
-
-    /// <summary>
     /// The modes of the general purpose field. The class of a character is the mode with the fewest bits that carries it.
     /// </summary>
     private enum FieldMode : byte
@@ -720,7 +710,7 @@ internal static class Gs1CompositeComponentEncoder
                 continue;
             }
 
-            int capacity = 8 * ByteCapacity(MicroPdf417Encoder.DataCodewords(columns, sizes[offset + 1]) - 2);
+            int capacity = 8 * Pdf417Codewords.ByteCapacity(MicroPdf417Encoder.DataCodewords(columns, sizes[offset + 1]) - 2);
             if (capacity >= used)
             {
                 rows = sizes[offset + 1];
@@ -747,7 +737,7 @@ internal static class Gs1CompositeComponentEncoder
         // The data codewords are the codeword 920, the byte latch and the codewords of the bytes. With the Symbol Length Descriptor and the error correction
         // codewords they fill the matrix.
         int bytes = (used + 7) / 8;
-        int data = 2 + (ByteGroupCodewords * (bytes / ByteGroup)) + (bytes % ByteGroup);
+        int data = 2 + Pdf417Codewords.ByteCodewords(bytes);
         int largest = MaximumCcCColumns * MaximumCcCRows;
         level = Pdf417Encoder.RecommendedErrorCorrectionLevel(data);
         while (level > 0 && data + 1 + (2 << level) > largest)
@@ -775,16 +765,8 @@ internal static class Gs1CompositeComponentEncoder
             rows = Math.Max(MinimumCcCRows, (total + columns - 1) / columns);
         }
 
-        return 8 * ByteCapacity((columns * rows) - (2 << level) - 3);
+        return 8 * Pdf417Codewords.ByteCapacity((columns * rows) - (2 << level) - 3);
     }
-
-    /// <summary>
-    /// Returns the number of bytes Byte Compaction mode carries in a number of codewords: six per group of five and one per codeword after the last group.
-    /// </summary>
-    /// <param name="codewords">The number of codewords.</param>
-    /// <returns>The number of bytes.</returns>
-    private static int ByteCapacity(int codewords)
-        => (ByteGroup * (codewords / ByteGroupCodewords)) + (codewords % ByteGroupCodewords);
 
     /// <summary>
     /// Converts the padded bit stream into codewords and builds the symbol of the chosen size.
@@ -850,19 +832,12 @@ internal static class Gs1CompositeComponentEncoder
         // Clauses 9 and 10: the codeword 920, the latch to Byte Compaction mode, and the bytes of the bit stream. Byte Compaction mode takes the latch 924 for
         // a byte count that is a multiple of six and 901 otherwise.
         int byteCount = bits.Position / 8;
-        PooledBuffer<char> bytes = new(byteCount);
         ValueListBuilder<int> data = new(byteCount + 2);
         try
         {
-            Span<char> characters = bytes.Span;
-            for (int i = 0; i < byteCount; i++)
-            {
-                characters[i] = (char)bits.Byte(i);
-            }
-
             data.Append(CompositeCodeword);
-            data.Append(byteCount % ByteGroup == 0 ? Pdf417Codewords.ByteLatchSix : Pdf417Codewords.ByteLatch);
-            Pdf417Codewords.EncodeBytes(characters, ref data);
+            data.Append(Pdf417Codewords.ByteLatchFor(byteCount));
+            Pdf417Codewords.EncodeBytes(bits.Bytes[..byteCount], ref data);
 
             if (component == Gs1CompositeComponent.CcB)
             {
@@ -875,7 +850,6 @@ internal static class Gs1CompositeComponentEncoder
         }
         finally
         {
-            bytes.Dispose();
             data.Dispose();
         }
     }
@@ -989,6 +963,11 @@ internal static class Gs1CompositeComponentEncoder
         public int Position { get; private set; }
 
         /// <summary>
+        /// Gets the bytes of the stream, the first bit in the most significant bit of the first byte.
+        /// </summary>
+        public readonly ReadOnlySpan<byte> Bytes => this.bytes;
+
+        /// <summary>
         /// Appends a value as a number of bits, the most significant first.
         /// </summary>
         /// <param name="value">The value.</param>
@@ -1018,12 +997,5 @@ internal static class Gs1CompositeComponentEncoder
         /// <param name="position">The index of the bit.</param>
         /// <returns>The bit, 0 or 1.</returns>
         public readonly int Bit(int position) => (this.bytes[position >> 3] >> (7 - (position & 7))) & 1;
-
-        /// <summary>
-        /// Returns one byte of the stream.
-        /// </summary>
-        /// <param name="index">The index of the byte.</param>
-        /// <returns>The byte.</returns>
-        public readonly int Byte(int index) => this.bytes[index];
     }
 }
