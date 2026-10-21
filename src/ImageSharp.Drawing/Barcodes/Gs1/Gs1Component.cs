@@ -11,12 +11,12 @@ internal readonly struct Gs1Component
     /// <summary>
     /// Initializes a new instance of the <see cref="Gs1Component"/> struct.
     /// </summary>
-    /// <param name="characterSet">The character set: 'N' digits, 'X' character set 82, 'Y' character set 39 or 'Z' character set 64.</param>
+    /// <param name="characterSet">The character set.</param>
     /// <param name="minimum">The shortest length.</param>
     /// <param name="maximum">The longest length.</param>
     /// <param name="optional">Whether the component can be left out.</param>
     /// <param name="linters">The checks the content takes, in order.</param>
-    public Gs1Component(char characterSet, int minimum, int maximum, bool optional, Gs1Linter[] linters)
+    public Gs1Component(Gs1CharacterSet characterSet, int minimum, int maximum, bool optional, Gs1Linter[] linters)
     {
         this.CharacterSet = characterSet;
         this.Minimum = minimum;
@@ -26,9 +26,9 @@ internal readonly struct Gs1Component
     }
 
     /// <summary>
-    /// Gets the character set: 'N' digits, 'X' character set 82, 'Y' character set 39 or 'Z' character set 64.
+    /// Gets the character set.
     /// </summary>
-    public char CharacterSet { get; }
+    public Gs1CharacterSet CharacterSet { get; }
 
     /// <summary>
     /// Gets the shortest length.

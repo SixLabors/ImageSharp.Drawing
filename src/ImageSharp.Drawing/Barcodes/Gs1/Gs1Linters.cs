@@ -160,17 +160,17 @@ internal static class Gs1Linters
     ];
 
     /// <summary>
-    /// Checks the characters of a component against its character set: N the digits, X GS1 AI encodable character set 82 of Table 7-20, Y character set 39 of
-    /// Table 7-21 and Z character set 64 of Table 7-22.
+    /// Checks the characters of a component against its character set: the digits, GS1 AI encodable character set 82 of Table 7-20, character set 39 of
+    /// Table 7-21 or character set 64 of Table 7-22.
     /// </summary>
-    /// <param name="characterSet">The character set, 'N', 'X', 'Y' or 'Z'.</param>
+    /// <param name="characterSet">The character set.</param>
     /// <param name="identifier">The Application Identifier, for the error message.</param>
     /// <param name="data">The component.</param>
     /// <exception cref="ArgumentException">A character is not in the set.</exception>
-    public static void CheckCharacterSet(char characterSet, ReadOnlySpan<char> identifier, ReadOnlySpan<char> data)
+    public static void CheckCharacterSet(Gs1CharacterSet characterSet, ReadOnlySpan<char> identifier, ReadOnlySpan<char> data)
     {
         // Character set 64 is base64 with the pad character, which can only end the data, padding it to a multiple of three characters with one or two pads.
-        if (characterSet == 'Z')
+        if (characterSet == Gs1CharacterSet.Set64)
         {
             int pads = data.Length - data.TrimEnd('=').Length;
             if (pads > 2 || (pads > 0 && data.Length % 3 != 0))
@@ -184,9 +184,9 @@ internal static class Gs1Linters
         // One vectorized search finds the first character outside the set, or -1.
         int bad = characterSet switch
         {
-            'N' => data.IndexOfAnyExceptInRange('0', '9'),
-            'X' => data.IndexOfAnyExcept(CharacterSet82),
-            'Y' => data.IndexOfAnyExcept(CharacterSet39),
+            Gs1CharacterSet.Digits => data.IndexOfAnyExceptInRange('0', '9'),
+            Gs1CharacterSet.Set82 => data.IndexOfAnyExcept(CharacterSet82),
+            Gs1CharacterSet.Set39 => data.IndexOfAnyExcept(CharacterSet39),
             _ => data.IndexOfAnyExcept(CharacterSet64),
         };
 
@@ -194,9 +194,9 @@ internal static class Gs1Linters
         {
             string set = characterSet switch
             {
-                'N' => "digits",
-                'X' => "GS1 AI encodable character set 82",
-                'Y' => "GS1 AI encodable character set 39",
+                Gs1CharacterSet.Digits => "digits",
+                Gs1CharacterSet.Set82 => "GS1 AI encodable character set 82",
+                Gs1CharacterSet.Set39 => "GS1 AI encodable character set 39",
                 _ => "GS1 AI encodable character set 64",
             };
 

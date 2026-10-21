@@ -179,7 +179,17 @@ public class Gs1SyntaxDictionaryTests
             ? [.. token[(lintersStart + 1)..].Split(',').Select(name => LinterNames[name])]
             : [];
 
-        return new Gs1Component(specification[0], minimum, maximum, optional, linters);
+        // The dictionary names the character sets N, X, Y and Z.
+        Gs1CharacterSet characterSet = specification[0] switch
+        {
+            'N' => Gs1CharacterSet.Digits,
+            'X' => Gs1CharacterSet.Set82,
+            'Y' => Gs1CharacterSet.Set39,
+            'Z' => Gs1CharacterSet.Set64,
+            _ => throw new FormatException($"Unknown character set '{specification[0]}'."),
+        };
+
+        return new Gs1Component(characterSet, minimum, maximum, optional, linters);
     }
 
     /// <summary>
