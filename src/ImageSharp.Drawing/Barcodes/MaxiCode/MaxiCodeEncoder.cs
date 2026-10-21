@@ -63,9 +63,10 @@ internal static class MaxiCodeEncoder
     private const int EnhancedSecondaryCheckCodewords = 28;
 
     /// <summary>
-    /// The length of a code set the search has not reached at a character.
+    /// The length of a code set the search has not reached at a character. A message is at most <see cref="CodewordCount"/> codewords, so this value is larger
+    /// than every real length, and a length plus one latch and one operation stays far below the int range.
     /// </summary>
-    private const int Unreached = int.MaxValue;
+    private const int Unreached = 1 << 20;
 
     /// <summary>
     /// The number of code sets, A to E.
@@ -81,6 +82,11 @@ internal static class MaxiCodeEncoder
     /// The codeword that latches from code set C, D or E to code set A.
     /// </summary>
     private const int LatchA = 58;
+
+    /// <summary>
+    /// The codeword that latches to code set B from A, C, D or E, and to code set A from B.
+    /// </summary>
+    private const int LatchBCodeword = 63;
 
     /// <summary>
     /// The codeword of the numeric shift, NS, which carries nine digits in the five codewords after it.
@@ -276,19 +282,6 @@ internal static class MaxiCodeEncoder
         /// </summary>
         ShiftE,
     }
-
-    /// <summary>
-    /// Gets the codewords of the latch into each code set, row, from each code set, column, written in the code set it latches from: a latch A or B is one
-    /// codeword, and a lock into C, D or E is the shift into that code set followed by the lock. 0 marks no codeword.
-    /// </summary>
-    private static ReadOnlySpan<byte> LatchCodes =>
-    [
-        0, 0, 63, 0, 58, 0, 58, 0, 58, 0,
-        63, 0, 0, 0, 63, 0, 63, 0, 63, 0,
-        60, 60, 60, 60, 0, 0, 60, 60, 60, 60,
-        61, 61, 61, 61, 61, 61, 0, 0, 61, 61,
-        62, 62, 62, 62, 62, 62, 62, 62, 0, 0,
-    ];
 
     /// <summary>
     /// Gets the pad codeword of each code set, 0 where the code set has none.
@@ -759,10 +752,10 @@ internal static class MaxiCodeEncoder
 
                     int m = (n - Intake(op)) & (RingLength - 1);
                     CodeSet origin = bestOrigin[(m * CodeSetCount) + (int)state];
-                    long length = (long)bestLength[(m * CodeSetCount) + (int)origin] + LatchLength(state, origin) + Output(op);
+                    int length = bestLength[(m * CodeSetCount) + (int)origin] + LatchLength(state, origin) + Output(op);
                     if (best > length)
                     {
-                        best = (int)length;
+                        best = length;
                         path[n][(int)state] = new Step(op, origin);
                     }
                 }
@@ -772,11 +765,11 @@ internal static class MaxiCodeEncoder
 
             foreach (CodeSet state in priority)
             {
-                long originLength = (long)lengthRow[(int)CodeSet.A] + LatchLength(state, CodeSet.A);
+                int originLength = lengthRow[(int)CodeSet.A] + LatchLength(state, CodeSet.A);
                 CodeSet origin = CodeSet.A;
                 foreach (CodeSet candidate in priority[1..])
                 {
-                    long length = (long)lengthRow[(int)candidate] + LatchLength(state, candidate);
+                    int length = lengthRow[(int)candidate] + LatchLength(state, candidate);
                     if (length < originLength)
                     {
                         originLength = length;
@@ -819,10 +812,11 @@ internal static class MaxiCodeEncoder
             int count = Encode(step.Operation, data, index, output);
             int latchCount = LatchLength(current, step.Prior);
             position -= latchCount + count;
-            ReadOnlySpan<byte> latch = LatchCodes.Slice((((int)current * CodeSetCount) + (int)step.Prior) * 2, latchCount);
-            for (int i = 0; i < latch.Length; i++)
+
+            // A latch into A or B is one codeword. A lock into C, D or E is the shift into that code set and then the lock, which has the same value.
+            if (latchCount != 0)
             {
-                message[position + i] = latch[i];
+                message[position..(position + latchCount)].Fill(LatchCodeword(current, step.Prior));
             }
 
             output[..count].CopyTo(message[(position + latchCount)..]);
@@ -1009,6 +1003,22 @@ internal static class MaxiCodeEncoder
     /// <param name="from">The code set latched from.</param>
     /// <returns>The number of codewords: 0 within a code set, 1 into A or B, 2 into C, D or E.</returns>
     private static int LatchLength(CodeSet to, CodeSet from) => to == from ? 0 : to <= CodeSet.B ? 1 : 2;
+
+    /// <summary>
+    /// Returns the codeword of the latch into a code set from another, in the code set it latches from. The latch takes <see cref="LatchLength"/> codewords of
+    /// this value. Into C, D or E, these are the shift into that code set and then the lock, which has the same value.
+    /// </summary>
+    /// <param name="to">The code set latched into.</param>
+    /// <param name="from">The code set latched from, not <paramref name="to"/>.</param>
+    /// <returns>The codeword.</returns>
+    private static int LatchCodeword(CodeSet to, CodeSet from) => to switch
+    {
+        CodeSet.A => from == CodeSet.B ? LatchBCodeword : LatchA,
+        CodeSet.B => LatchBCodeword,
+        CodeSet.C => ShiftCCodeword,
+        CodeSet.D => ShiftDCodeword,
+        _ => ShiftECodeword,
+    };
 
     /// <summary>
     /// Returns whether a code set holds a byte.
