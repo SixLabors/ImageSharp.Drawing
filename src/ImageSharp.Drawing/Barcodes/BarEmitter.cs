@@ -524,7 +524,7 @@ internal static class BarEmitter
 
             // A symbol whose bars are one width at one pitch, the postal symbologies, draws every run at a whole number of pixels of its own, so every bar
             // keeps that width and that pitch: Table 11 of the Mailmark barcode definition document requires that "they must be equally spaced", and page 12
-            // of the Japan Post manual gives one bar width, "バー幅 0.6×a/10". Edges rounded from the accumulated exact position alternate between two widths.
+            // of the Japan Post manual gives one bar width, 0.6×a/10. Edges rounded from the accumulated exact position alternate between two widths.
             // The text spans stretch with the bar block so they still cover it.
             this.wholePixelRuns = symbol.UniformBars;
             this.runWidthInPixels = symbol.RunUnit * moduleWidth;

@@ -51,10 +51,10 @@ internal static class JapanPostEncoder
     /// <summary>
     /// The dimensions of page 12 of the Japan Post zip code and barcode manual at the 10 point size: a bar width of 0.6 mm, a bar pitch of 1.2 mm, so a space
     /// of 0.6 mm, a timing bar of 1.2 mm and a long bar of 3.6 mm, so an extender of 1.2 mm above or below the timing bar. Every size is "×a/10" for a size of
-    /// a points, 8 to 11.5, so the bars stay proportional to the bar width. Page 13: "2mm以上の空白", a clear space of at least 2 mm above, below, left and right
-    /// of the barcode. The bar width sets the size a. Thus the code clamps the bar width to 0.6×a/10 mm at the permitted sizes "8≦ａ≦11.5": 0.48 to
-    /// 0.69 mm. The code clamps the long bar to its range "3.40×a/10～3.60×a/10", which is 3.40 / 0.6 to 3.60 / 0.6 modules. The timing bar then stays
-    /// inside its own range "1.05×a/10～1.35×a/10".
+    /// a points, 8 to 11.5, so the bars stay proportional to the bar width. Page 13 gives a blank space of 2 mm or more above, below, left and right of the
+    /// barcode. The bar width sets the size a. Thus the code clamps the bar width to 0.6×a/10 mm at the permitted sizes, a from 8 to 11.5: 0.48 to 0.69 mm.
+    /// The code clamps the long bar to its range of 3.40×a/10 to 3.60×a/10, which is 3.40 / 0.6 to 3.60 / 0.6 modules. The timing bar then stays inside its
+    /// own range of 1.05×a/10 to 1.35×a/10.
     /// </summary>
     public static readonly FourStateMetrics Metrics = new(
         0.6,
