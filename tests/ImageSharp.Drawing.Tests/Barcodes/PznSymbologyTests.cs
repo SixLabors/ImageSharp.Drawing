@@ -95,7 +95,6 @@ public class PznSymbologyTests
             SymbolEncoder.Read(new Pzn8Symbology(), "03752864", new BarcodeOptions(), static (ref symbol) => symbol.XDimension),
             1e-12);
 
-
         Assert.Equal(0.25, XDimensionAt(null), 1e-9);
         Assert.Equal(0.4, XDimensionAt(0.4), 1e-9);
         Assert.Equal(0.187, XDimensionAt(0.15), 1e-9);
