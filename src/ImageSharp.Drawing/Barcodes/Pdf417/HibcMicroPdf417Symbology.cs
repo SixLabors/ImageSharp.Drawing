@@ -67,7 +67,7 @@ public sealed class HibcMicroPdf417Symbology : BarcodeSymbology
             MicroPdf417Encoder.BuildSymbol(encoded.AsSpan(), this.Columns, options, ref symbol);
             if (options.Font is not null)
             {
-                HibcData.AddStackedReadable(encoded.AsSpan(), ref symbol);
+                HibcData.AddTwoDimensionalReadable(encoded.AsSpan(), true, ref symbol);
             }
         }
         finally

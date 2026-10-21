@@ -186,52 +186,34 @@ internal static class HibcData
     }
 
     /// <summary>
-    /// Adds the human readable interpretation of encoded data below a built matrix symbol, as <see cref="WriteMatrixReadable"/> writes it, centered on the
-    /// symbol as the figures of sections 4.3.1 and 4.3.3 print it.
+    /// Adds the human readable interpretation of encoded data below a built matrix or stacked symbol, as <see cref="WriteMatrixReadable"/> writes it, centered
+    /// on the symbol as the figures of sections 4.3.1 and 4.3.3 print it. Section 3.0: "The data structure and human-readable interpretation is identical
+    /// regardless of symbology used."
     /// </summary>
     /// <param name="encoded">The encoded data, as <see cref="Prepare"/> wrote it.</param>
+    /// <param name="stacked">Whether the symbol is a stacked symbol, which places its text below its rows, rather than a matrix symbol.</param>
     /// <param name="symbol">The built symbol.</param>
-    public static void AddMatrixReadable(ReadOnlySpan<char> encoded, ref BarcodeSymbol symbol)
+    public static void AddTwoDimensionalReadable(ReadOnlySpan<char> encoded, bool stacked, ref BarcodeSymbol symbol)
     {
         InlineArray64<char> readableStorage = default;
-        PooledBuffer<char> rented = default;
         int capacity = ReadableCapacity(encoded.Length);
-        Span<char> readable = capacity <= InlineBufferLength
-            ? ((Span<char>)readableStorage)[..capacity]
-            : (rented = new PooledBuffer<char>(capacity)).Span;
+        ValueStringBuilder readable = capacity <= InlineBufferLength ? new(readableStorage) : new(capacity);
         try
         {
-            int written = WriteMatrixReadable(encoded, readable);
-            symbol.AddMatrixText(readable[..written], BarcodeTextAlignment.Centered, 1F);
+            Span<char> buffer = readable.AppendSpan(capacity);
+            int written = WriteMatrixReadable(encoded, buffer);
+            if (stacked)
+            {
+                symbol.AddStackedText(buffer[..written], BarcodeTextAlignment.Centered, 1F);
+            }
+            else
+            {
+                symbol.AddMatrixText(buffer[..written], BarcodeTextAlignment.Centered, 1F);
+            }
         }
         finally
         {
-            rented.Dispose();
-        }
-    }
-
-    /// <summary>
-    /// Adds the human readable interpretation of encoded data below a built stacked symbol, as <see cref="WriteMatrixReadable"/> writes it, centered on the
-    /// symbol. Section 3.0: "The data structure and human-readable interpretation is identical regardless of symbology used."
-    /// </summary>
-    /// <param name="encoded">The encoded data, as <see cref="Prepare"/> wrote it.</param>
-    /// <param name="symbol">The built symbol.</param>
-    public static void AddStackedReadable(ReadOnlySpan<char> encoded, ref BarcodeSymbol symbol)
-    {
-        InlineArray64<char> readableStorage = default;
-        PooledBuffer<char> rented = default;
-        int capacity = ReadableCapacity(encoded.Length);
-        Span<char> readable = capacity <= InlineBufferLength
-            ? ((Span<char>)readableStorage)[..capacity]
-            : (rented = new PooledBuffer<char>(capacity)).Span;
-        try
-        {
-            int written = WriteMatrixReadable(encoded, readable);
-            symbol.AddStackedText(readable[..written], BarcodeTextAlignment.Centered, 1F);
-        }
-        finally
-        {
-            rented.Dispose();
+            readable.Dispose();
         }
     }
 

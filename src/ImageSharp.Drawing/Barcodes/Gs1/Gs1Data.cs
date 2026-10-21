@@ -143,20 +143,17 @@ internal static class Gs1Data
     {
         // The text is bounded by the capacity of the symbology, so the buffer is too, and longer text rents it once.
         InlineArray64<char> readableStorage = default;
-        PooledBuffer<char> rented = default;
         int capacity = ReadableCapacity(text.Length);
-        Span<char> readable = capacity <= InlineBufferLength
-            ? ((Span<char>)readableStorage)[..capacity]
-            : (rented = new PooledBuffer<char>(capacity)).Span;
-
+        ValueStringBuilder readable = capacity <= InlineBufferLength ? new(readableStorage) : new(capacity);
         try
         {
-            int written = WriteReadable(text, true, readable);
-            symbol.AddMatrixText(readable[..written], BarcodeTextAlignment.Left, TextScale(font));
+            Span<char> buffer = readable.AppendSpan(capacity);
+            int written = WriteReadable(text, true, buffer);
+            symbol.AddMatrixText(buffer[..written], BarcodeTextAlignment.Left, TextScale(font));
         }
         finally
         {
-            rented.Dispose();
+            readable.Dispose();
         }
     }
 

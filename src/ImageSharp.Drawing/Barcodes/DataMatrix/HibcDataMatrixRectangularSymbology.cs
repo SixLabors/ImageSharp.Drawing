@@ -59,7 +59,7 @@ public sealed class HibcDataMatrixRectangularSymbology : BarcodeSymbology
 
             if (options.Font is not null)
             {
-                HibcData.AddMatrixReadable(encoded.AsSpan(), ref symbol);
+                HibcData.AddTwoDimensionalReadable(encoded.AsSpan(), false, ref symbol);
             }
         }
         finally
