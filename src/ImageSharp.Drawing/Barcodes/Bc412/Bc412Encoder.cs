@@ -93,20 +93,18 @@ internal static class Bc412Encoder
     private const double MaximumBarHeight = 2.000 + 0.025;
 
     /// <summary>
-    /// Gets the run widths of every character, eight per character in bar and space order, in the order of <see cref="Characters"/>. Every bar is one module,
-    /// and the widths add to twelve.
+    /// Gets the space widths of every character, four per character, in the order of <see cref="Characters"/>. Each space follows a bar of one module, and
+    /// the four bars and four spaces add to twelve modules.
     /// </summary>
-    private static ReadOnlySpan<byte> Patterns =>
+    private static ReadOnlySpan<byte> Spaces =>
     [
-        1, 1, 1, 1, 1, 1, 1, 5, 1, 3, 1, 1, 1, 2, 1, 2, 1, 1, 1, 3, 1, 1, 1, 3, 1, 2, 1, 1, 1, 2, 1, 3,
-        1, 2, 1, 2, 1, 3, 1, 1, 1, 3, 1, 3, 1, 1, 1, 1, 1, 2, 1, 1, 1, 3, 1, 2, 1, 1, 1, 3, 1, 2, 1, 2,
-        1, 1, 1, 2, 1, 4, 1, 1, 1, 1, 1, 5, 1, 1, 1, 1, 1, 5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 5, 1, 1,
-        1, 2, 1, 3, 1, 2, 1, 1, 1, 3, 1, 2, 1, 1, 1, 2, 1, 3, 1, 1, 1, 3, 1, 1, 1, 1, 1, 1, 1, 2, 1, 4,
-        1, 2, 1, 2, 1, 1, 1, 3, 1, 1, 1, 1, 1, 3, 1, 3, 1, 3, 1, 1, 1, 1, 1, 3, 1, 1, 1, 2, 1, 2, 1, 3,
-        1, 1, 1, 4, 1, 1, 1, 2, 1, 1, 1, 2, 1, 3, 1, 2, 1, 1, 1, 4, 1, 2, 1, 1, 1, 4, 1, 2, 1, 1, 1, 1,
-        1, 2, 1, 2, 1, 2, 1, 2, 1, 1, 1, 3, 1, 3, 1, 1, 1, 3, 1, 2, 1, 2, 1, 1, 1, 2, 1, 1, 1, 4, 1, 1,
-        1, 4, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 4, 1, 2, 1, 2, 1, 1, 1, 1, 1, 4, 1, 4, 1, 1, 1, 1, 1, 2,
-        1, 2, 1, 4, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 4, 1, 2, 1, 3, 1, 1, 1, 2,
+        1, 1, 1, 5, 3, 1, 2, 2, 1, 3, 1, 3, 2, 1, 2, 3, 2, 2, 3, 1,
+        3, 3, 1, 1, 2, 1, 3, 2, 1, 3, 2, 2, 1, 2, 4, 1, 1, 5, 1, 1,
+        5, 1, 1, 1, 1, 1, 5, 1, 2, 3, 2, 1, 3, 2, 1, 2, 3, 1, 3, 1,
+        1, 1, 2, 4, 2, 2, 1, 3, 1, 1, 3, 3, 3, 1, 1, 3, 1, 2, 2, 3,
+        1, 4, 1, 2, 1, 2, 3, 2, 1, 4, 2, 1, 4, 2, 1, 1, 2, 2, 2, 2,
+        1, 3, 3, 1, 3, 2, 2, 1, 2, 1, 4, 1, 4, 1, 2, 1, 1, 1, 4, 2,
+        2, 1, 1, 4, 4, 1, 1, 2, 2, 4, 1, 1, 1, 2, 1, 4, 2, 3, 1, 2,
     ];
 
     /// <summary>
@@ -172,11 +170,13 @@ internal static class Bc412Encoder
         int written = 0;
         runs[written++] = 1;
         runs[written++] = 2;
+        const int spacesPerCharacter = RunsPerCharacter / 2;
         foreach (char c in carried)
         {
-            foreach (byte width in Patterns.Slice(Value(c) * RunsPerCharacter, RunsPerCharacter))
+            foreach (byte space in Spaces.Slice(Value(c) * spacesPerCharacter, spacesPerCharacter))
             {
-                runs[written++] = width;
+                runs[written++] = 1;
+                runs[written++] = space;
             }
         }
 
