@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.Fonts;
+
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
@@ -115,4 +117,33 @@ internal readonly struct BarcodeTextPlacement
     /// for a line aligned on an edge, and its renderable bounds for a centred line.
     /// </summary>
     public bool WithinSpan { get; }
+
+    /// <summary>
+    /// Returns the x origin of the line in a span. A centred line straddles the middle of the span. A left aligned line puts the left edge of its ink on the
+    /// left edge of the span, and a right aligned line puts the right edge of its ink on the right edge of the span.
+    /// </summary>
+    /// <param name="spanLeft">The left edge of the span in pixels.</param>
+    /// <param name="spanRight">The right edge of the span in pixels.</param>
+    /// <param name="bounds">The ink of the measured line, from <see cref="TextMetrics.Bounds"/>.</param>
+    /// <param name="renderableWidth">The width of the measured line, from <see cref="TextMetrics.RenderableBounds"/>.</param>
+    /// <returns>The x origin in pixels.</returns>
+    public float Origin(float spanLeft, float spanRight, FontRectangle bounds, float renderableWidth) => this.Alignment switch
+    {
+        BarcodeTextAlignment.Left => spanLeft - bounds.Left,
+        BarcodeTextAlignment.Right => spanRight - bounds.Right,
+        _ => ((spanLeft + spanRight) * 0.5F) - (renderableWidth * 0.5F),
+    };
+
+    /// <summary>
+    /// Returns the x origin of the line on the drawn symbol. The span stands on the cell edges where the modules draw, rounded onto the pixel grid, not on the
+    /// exact fractional position, so a digit stays over its own symbol character. With unrounded edges, the text and the modules can disagree by up to half a
+    /// module.
+    /// </summary>
+    /// <param name="bounds">The ink of the measured line, from <see cref="TextMetrics.Bounds"/>.</param>
+    /// <param name="renderableWidth">The width of the measured line, from <see cref="TextMetrics.RenderableBounds"/>.</param>
+    /// <param name="symbolLeft">The x of the first module, in pixels.</param>
+    /// <param name="moduleWidth">The module width in pixels.</param>
+    /// <returns>The x origin in pixels.</returns>
+    public float GridOrigin(FontRectangle bounds, float renderableWidth, float symbolLeft, float moduleWidth)
+        => this.Origin(MathF.Round(symbolLeft + (this.Left * moduleWidth)), MathF.Round(symbolLeft + (this.Right * moduleWidth)), bounds, renderableWidth);
 }

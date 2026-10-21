@@ -166,30 +166,6 @@ internal static class BarEmitter
     }
 
     /// <summary>
-    /// Returns the x origin of a line. The line stands on the cell edges where the bars draw, not on the exact fractional position, so a digit stays over its
-    /// own symbol character. With unrounded edges, the text and the bars can disagree by up to half a module. A centred line straddles the middle of
-    /// its span, a left aligned line puts the left edge of its ink on the left edge of its span, and a right aligned line puts the right edge of its ink on the
-    /// right edge of its span.
-    /// </summary>
-    /// <param name="placement">The placement.</param>
-    /// <param name="bounds">The ink of the measured line, from <see cref="TextMetrics.Bounds"/>.</param>
-    /// <param name="renderableWidth">The width of the measured line, from <see cref="TextMetrics.RenderableBounds"/>.</param>
-    /// <param name="symbolLeft">The x of the first bar, in pixels.</param>
-    /// <param name="moduleWidth">The module width in pixels, stretched to the drawn bar block.</param>
-    /// <returns>The x origin in pixels.</returns>
-    public static float TextOrigin(BarcodeTextPlacement placement, FontRectangle bounds, float renderableWidth, float symbolLeft, float moduleWidth)
-    {
-        float left = MathF.Round(symbolLeft + (placement.Left * moduleWidth));
-        float right = MathF.Round(symbolLeft + (placement.Right * moduleWidth));
-        return placement.Alignment switch
-        {
-            BarcodeTextAlignment.Left => left - bounds.Left,
-            BarcodeTextAlignment.Right => right - bounds.Right,
-            _ => ((left + right) * 0.5F) - (renderableWidth * 0.5F),
-        };
-    }
-
-    /// <summary>
     /// Returns whether the symbology limits the size of its digit lines: it states a size in points or the printed height of its characters, or a line must
     /// stay within its span.
     /// </summary>
@@ -610,13 +586,7 @@ internal static class BarEmitter
                 MeasuredLine line = lines[i];
                 float cellLeft = leadingOffset + (placement.Left * textModuleWidth);
                 float cellRight = leadingOffset + (placement.Right * textModuleWidth);
-                float x = placement.Alignment switch
-                {
-                    BarcodeTextAlignment.Left => cellLeft - line.Bounds.Left,
-                    BarcodeTextAlignment.Right => cellRight - line.Bounds.Right,
-                    _ => ((cellLeft + cellRight) * 0.5F) - (line.RenderableBounds.Width * 0.5F),
-                };
-
+                float x = placement.Origin(cellLeft, cellRight, line.Bounds, line.RenderableBounds.Width);
                 float edge = (topZone + placement.TextEdge) * moduleWidth;
                 float y = placement.Side == BarcodeTextSide.AboveBars ? edge - aboveInk : edge - belowInk + belowBaseline - line.Baseline;
                 layoutLeft = MathF.Min(layoutLeft, x + line.Advance.Left);
@@ -665,7 +635,7 @@ internal static class BarEmitter
                 BarcodeTextPlacement placement = text[i];
                 ref MeasuredLine line = ref lines[i];
                 float textEdge = MathF.Round(symbolOrigin.Y + ((topZone + placement.TextEdge) * moduleWidth));
-                float x = TextOrigin(placement, line.Bounds, line.RenderableBounds.Width, symbolLeft, textModuleWidth);
+                float x = placement.GridOrigin(line.Bounds, line.RenderableBounds.Width, symbolLeft, textModuleWidth);
                 float y = placement.Side == BarcodeTextSide.AboveBars
                     ? textEdge - aboveInk
                     : textEdge - belowInk + belowBaseline - line.Baseline;

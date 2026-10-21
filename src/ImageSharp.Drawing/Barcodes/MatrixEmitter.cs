@@ -545,13 +545,7 @@ internal static class MatrixEmitter
                 MeasuredLine line = lines[t];
                 float cellLeft = leadingOffset + (placement.Left * moduleWidth);
                 float cellRight = leadingOffset + (placement.Right * moduleWidth);
-                float x = placement.Alignment switch
-                {
-                    BarcodeTextAlignment.Left => cellLeft - line.Bounds.Left,
-                    BarcodeTextAlignment.Right => cellRight - line.Bounds.Right,
-                    _ => ((cellLeft + cellRight) * 0.5F) - (line.RenderableBounds.Width * 0.5F),
-                };
-
+                float x = placement.Origin(cellLeft, cellRight, line.Bounds, line.RenderableBounds.Width);
                 float y = topOffset + (placement.TextEdge * moduleWidth) - line.Bounds.Top;
                 layoutLeft = MathF.Min(layoutLeft, x + line.Advance.Left);
                 layoutTop = MathF.Min(layoutTop, y + line.Advance.Top);
@@ -616,7 +610,7 @@ internal static class MatrixEmitter
             {
                 BarcodeTextPlacement placement = text[t];
                 ref MeasuredLine line = ref lines[t];
-                float x = BarEmitter.TextOrigin(placement, line.Bounds, line.RenderableBounds.Width, (float)symbolLeft, moduleWidth);
+                float x = placement.GridOrigin(line.Bounds, line.RenderableBounds.Width, (float)symbolLeft, moduleWidth);
                 float y = (float)Math.Round(symbolTop + ((double)placement.TextEdge * moduleWidth)) - line.Bounds.Top;
                 line.Origin = new Vector2(x, y);
                 bounds = RectangleF.Union(bounds, new RectangleF(x + line.Bounds.X, y + line.Bounds.Y, line.Bounds.Width, line.Bounds.Height));
