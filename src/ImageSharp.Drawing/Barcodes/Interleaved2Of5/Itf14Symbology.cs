@@ -66,6 +66,13 @@ public sealed class Itf14Symbology : BarcodeSymbology
     /// </summary>
     private const int WideElement = 5;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Itf14Symbology"/> class.
+    /// </summary>
+    public Itf14Symbology()
+    {
+    }
+
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {

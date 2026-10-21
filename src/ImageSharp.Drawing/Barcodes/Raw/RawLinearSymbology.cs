@@ -22,6 +22,13 @@ public sealed class RawLinearSymbology : BarcodeSymbology
     /// </summary>
     private const float NominalBarHeightFraction = 0.15F;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RawLinearSymbology"/> class.
+    /// </summary>
+    public RawLinearSymbology()
+    {
+    }
+
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {

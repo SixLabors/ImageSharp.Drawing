@@ -76,6 +76,13 @@ public sealed class PharmacodeSymbology : BarcodeSymbology
     /// </summary>
     private const double NominalBarHeight = 8.0;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PharmacodeSymbology"/> class.
+    /// </summary>
+    public PharmacodeSymbology()
+    {
+    }
+
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {

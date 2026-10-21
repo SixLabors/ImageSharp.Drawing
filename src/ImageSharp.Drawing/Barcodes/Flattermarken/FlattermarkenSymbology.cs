@@ -55,6 +55,13 @@ public sealed class FlattermarkenSymbology : BarcodeSymbology
     /// </summary>
     private const double MaximumBarHeight = 10;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FlattermarkenSymbology"/> class.
+    /// </summary>
+    public FlattermarkenSymbology()
+    {
+    }
+
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {

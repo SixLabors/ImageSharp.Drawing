@@ -13,6 +13,13 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// </summary>
 public sealed class TelepenNumericSymbology : BarcodeSymbology
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TelepenNumericSymbology"/> class.
+    /// </summary>
+    public TelepenNumericSymbology()
+    {
+    }
+
     /// <inheritdoc/>
     internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {

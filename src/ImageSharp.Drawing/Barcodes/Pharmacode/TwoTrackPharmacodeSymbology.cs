@@ -65,6 +65,13 @@ public sealed class TwoTrackPharmacodeSymbology : BarcodeSymbology
     private const int Radix = 3;
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="TwoTrackPharmacodeSymbology"/> class.
+    /// </summary>
+    public TwoTrackPharmacodeSymbology()
+    {
+    }
+
+    /// <summary>
     /// The kinds of bar, each valued at the weight the table of section 4.5 gives it in the lowest position.
     /// </summary>
     private enum TrackBar

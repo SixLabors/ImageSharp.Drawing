@@ -52,6 +52,13 @@ public sealed class FacingIdentificationMarkSymbology : BarcodeSymbology
     private const double MaximumBarHeight = 25.4 * ((5.0 / 8) + (1.0 / 8));
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="FacingIdentificationMarkSymbology"/> class.
+    /// </summary>
+    public FacingIdentificationMarkSymbology()
+    {
+    }
+
+    /// <summary>
     /// Gets the patterns A to E, each as nine bits, most significant first, in which a set bit is a bar.
     /// </summary>
     private static ReadOnlySpan<ushort> Patterns => [0b110010011, 0b101101101, 0b110101011, 0b111010111, 0b101000101];
