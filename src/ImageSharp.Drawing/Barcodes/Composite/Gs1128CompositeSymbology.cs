@@ -45,6 +45,11 @@ public sealed class Gs1128CompositeSymbology : CompositeBarcodeSymbology
     private const int CcCOffset = -7;
 
     /// <summary>
+    /// The width in modules of a 4-column CC-A or CC-B. A CC-C of c columns is 17c + 69 modules wide, which is never this width.
+    /// </summary>
+    private const int CcAOrCcBWidth = 99;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="Gs1128CompositeSymbology"/> class with a CC-A 2D component, which grows to CC-B and to CC-C as the data
     /// needs.
     /// </summary>
@@ -105,7 +110,7 @@ public sealed class Gs1128CompositeSymbology : CompositeBarcodeSymbology
 
             if (used != Gs1CompositeComponent.CcC)
             {
-                _ = Gs1CompositeLayout.Gs1128Offset((int)parts[0].WidthInModules, (int)parts[1].WidthInModules);
+                Gs1CompositeLayout.ValidateGs1128Length((int)parts[0].WidthInModules);
             }
 
             BarcodeSymbol linear = parts[0];
@@ -129,9 +134,9 @@ public sealed class Gs1128CompositeSymbology : CompositeBarcodeSymbology
     /// <inheritdoc/>
     internal override PointF Place(int index, ReadOnlySpan<BarcodeSymbol> parts, ReadOnlySpan<PointF> symbolOrigins, BarcodeOptions options)
     {
-        // A 4-column CC-A or CC-B is 99 modules wide, and a CC-C of c columns 17c + 69, which is never 99.
+        // The width of the 2D component tells CC-A or CC-B from CC-C.
         int componentWidth = (int)parts[1].WidthInModules;
-        int offset = componentWidth == 99 ? Gs1CompositeLayout.Gs1128Offset((int)parts[0].WidthInModules, componentWidth) : CcCOffset;
+        int offset = componentWidth == CcAOrCcBWidth ? Gs1CompositeLayout.Gs1128Offset((int)parts[0].WidthInModules, componentWidth) : CcCOffset;
         return Gs1CompositeLayout.PlaceAbove(parts, symbolOrigins[0], offset, options);
     }
 

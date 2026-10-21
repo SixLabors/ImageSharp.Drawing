@@ -36,6 +36,16 @@ internal static class Code128Encoder
     public const int MaximumLength = 500;
 
     /// <summary>
+    /// The width of a symbol character in modules, section 5.4.7.2.
+    /// </summary>
+    public const int ModulesPerCharacter = 11;
+
+    /// <summary>
+    /// The width of the stop character in modules, section 5.4.7.2.
+    /// </summary>
+    public const int StopModules = 13;
+
+    /// <summary>
     /// The symbol character value of the Function 1 character. Section 5.4.2 places it directly after the start character to mark a GS1-128 symbol, and section
     /// 5.4.7.4 transmits it "in the third or subsequent character position" as the control character GS, the separator of section 7.8.6.2.
     /// </summary>
@@ -124,16 +134,6 @@ internal static class Code128Encoder
     /// The element count of the stop character, section 5.4.1: four bars and three spaces.
     /// </summary>
     private const int StopElements = 7;
-
-    /// <summary>
-    /// The width of a symbol character in modules, section 5.4.7.2.
-    /// </summary>
-    private const int ModulesPerCharacter = 11;
-
-    /// <summary>
-    /// The width of the stop character in modules, section 5.4.7.2.
-    /// </summary>
-    private const int StopModules = 13;
 
     /// <summary>
     /// The character count that the inline buffers hold. The buffers hold 128 values and 256 look-ahead bytes. ASCII text takes two values for each character.

@@ -245,22 +245,30 @@ internal static class Gs1CompositeLayout
     /// module of the symbol character at position (n - 9) div 2, the positions numbered from the right with the stop character at 0, where n is the number of
     /// symbol characters.
     /// </summary>
-    /// <param name="linearWidth">The width of the GS1-128 symbol in modules.</param>
+    /// <param name="linearWidth">The width of the GS1-128 symbol in modules, validated by <see cref="ValidateGs1128Length"/>.</param>
     /// <param name="componentWidth">The width of the 2D component in modules.</param>
     /// <returns>The offset of the 2D component from the first module of the linear component, in modules.</returns>
-    /// <exception cref="ArgumentException">The GS1-128 symbol has fewer than nine symbol characters.</exception>
     public static int Gs1128Offset(int linearWidth, int componentWidth)
     {
-        // A symbol character is 11 modules and the stop character 13, and the last space module of either is its eleventh module.
-        int characters = (linearWidth - 2) / 11;
+        // The last space module of a symbol character or the stop character is the last module of its first eleven.
+        int characters = Gs1128Characters(linearWidth);
+        int position = (characters - MinimumGs1128Characters) / 2;
+        return ((characters - 1 - position) * Code128Encoder.ModulesPerCharacter) + (Code128Encoder.ModulesPerCharacter - 1) - componentWidth;
+    }
+
+    /// <summary>
+    /// Validates that a GS1-128 symbol has the symbol characters that clause 12 g) needs to place a CC-A or CC-B over it.
+    /// </summary>
+    /// <param name="linearWidth">The width of the GS1-128 symbol in modules.</param>
+    /// <exception cref="ArgumentException">The GS1-128 symbol has fewer than nine symbol characters.</exception>
+    public static void ValidateGs1128Length(int linearWidth)
+    {
+        int characters = Gs1128Characters(linearWidth);
         if (characters < MinimumGs1128Characters)
         {
             throw new ArgumentException(
                 $"A GS1-128 Composite symbol with a CC-A or CC-B has at least {MinimumGs1128Characters} symbol characters; the linear component has {characters}.");
         }
-
-        int position = (characters - MinimumGs1128Characters) / 2;
-        return ((characters - 1 - position) * 11) + 10 - componentWidth;
     }
 
     /// <summary>
@@ -276,6 +284,15 @@ internal static class Gs1CompositeLayout
         int pixels = options.ModulePixels(parts[0].XDimension);
         return new PointF(linearOrigin.X + (offset * pixels), linearOrigin.Y - (parts[1].HeightInModules * pixels));
     }
+
+    /// <summary>
+    /// Returns the number of symbol characters of a GS1-128 symbol, from the start character to the stop character. The stop character is two modules wider
+    /// than a symbol character.
+    /// </summary>
+    /// <param name="linearWidth">The width of the GS1-128 symbol in modules.</param>
+    /// <returns>The number of symbol characters.</returns>
+    private static int Gs1128Characters(int linearWidth)
+        => (linearWidth - (Code128Encoder.StopModules - Code128Encoder.ModulesPerCharacter)) / Code128Encoder.ModulesPerCharacter;
 
     /// <summary>
     /// Adds the 6X separator pattern of an EAN/UPC Composite symbol, section 11.4, below the rows of the 2D component: a light space with two 1X bars that
