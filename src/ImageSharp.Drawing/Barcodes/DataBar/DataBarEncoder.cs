@@ -106,6 +106,62 @@ internal static class DataBarEncoder
     private const int CheckModulus = 79;
 
     /// <summary>
+    /// The number of digits that the symbol encodes: the GTIN without its check digit.
+    /// </summary>
+    private const int DataDigits = 13;
+
+    /// <summary>
+    /// The number of symbol characters of a symbol.
+    /// </summary>
+    private const int CharacterCount = 4;
+
+    /// <summary>
+    /// The number of elements of a symbol character, an odd set of 4 and an even set of 4.
+    /// </summary>
+    private const int CharacterElements = 8;
+
+    /// <summary>
+    /// The number of modules of an outside symbol character, the first or the third.
+    /// </summary>
+    private const int OutsideModules = 16;
+
+    /// <summary>
+    /// The number of modules of an inside symbol character, the second or the fourth.
+    /// </summary>
+    private const int InsideModules = 15;
+
+    /// <summary>
+    /// The first group of the inside symbol characters in <see cref="GroupSum"/>. The groups before it are the groups of the outside symbol characters.
+    /// </summary>
+    private const int FirstInsideGroup = 5;
+
+    /// <summary>
+    /// The number of elements of a finder pattern.
+    /// </summary>
+    private const int FinderElements = 5;
+
+    /// <summary>
+    /// The number of finder patterns in <see cref="FinderPatterns"/>.
+    /// </summary>
+    private const int FinderValues = 9;
+
+    /// <summary>
+    /// The number of modules of the first three elements of a finder pattern, as the left finder reads them. The last two elements are one module each.
+    /// </summary>
+    private const int FinderLeadModules = 13;
+
+    /// <summary>
+    /// The number of elements of the guard pattern at each end, a narrow space and a narrow bar. Each element is one module, so the guard pattern is also
+    /// this many modules wide.
+    /// </summary>
+    private const int GuardElements = 2;
+
+    /// <summary>
+    /// The number of light modules at each end of a separator row.
+    /// </summary>
+    private const int SeparatorLightModules = 4;
+
+    /// <summary>
     /// Gets the first symbol character value of each group: groups 0 to 4 are the outside characters and groups 5 to 8 the inside characters.
     /// </summary>
     private static ReadOnlySpan<int> GroupSum => [0, 161, 961, 2015, 2715, 0, 336, 1036, 1516];
@@ -210,14 +266,14 @@ internal static class DataBarEncoder
 
         // Each separator module is light where the rows above and below are dark. Where they differ, it takes the opposite of the module to its left, so a
         // light run under or over an edge breaks into narrow elements. The four modules at each end stay light.
-        for (int i = 1; i < StackedWidth - 4; i++)
+        for (int i = 1; i < StackedWidth - SeparatorLightModules; i++)
         {
             separator[i] = upper[i] == lower[i]
                 ? (byte)(1 - upper[i])
                 : (byte)(1 - separator[i - 1]);
         }
 
-        separator[1..4].Clear();
+        separator[1..SeparatorLightModules].Clear();
 
         double xDimension = options.ResolveXDimension(MinimumXDimension, NominalXDimension, MaximumXDimension);
 
@@ -266,23 +322,27 @@ internal static class DataBarEncoder
         // modules break into alternating narrow elements instead, so the separator does not read as part of the finder.
         Invert(upper, upperSeparator);
         Invert(lower, lowerSeparator);
-        AlternateOverFinder(upper, upperSeparator, 18);
 
-        // The upper finder starts at module 18, after the guard pair and the 16 modules of the first character. The lower finder starts at module 17, and its
-        // two narrow leading elements stay inverted. Over finder value 3 the lower separator carries a single dark module over the start of the three module
-        // finder bar.
+        // The upper finder starts after the guard pattern and the first character, an outside character. The lower row starts with a narrow bar and a narrow
+        // space, then the fourth character, an inside character. The lower finder follows it, and its two narrow leading elements stay inverted.
+        const int upperFinderStart = GuardElements + OutsideModules;
+        const int lowerFinderLeadStart = GuardElements + InsideModules + 2;
+        AlternateOverFinder(upper, upperSeparator, upperFinderStart);
+
+        // Finder value 3 reads 9, 1 and 3 modules in the lower row. Over it the lower separator carries a single dark module over the start of the three
+        // module finder bar.
         if (rightFinder == 3)
         {
-            lowerSeparator.Slice(19, 13).Clear();
-            lowerSeparator[29] = 1;
+            lowerSeparator.Slice(lowerFinderLeadStart, FinderLeadModules).Clear();
+            lowerSeparator[lowerFinderLeadStart + 9 + 1] = 1;
         }
         else
         {
-            AlternateOverFinder(lower, lowerSeparator, 19);
+            AlternateOverFinder(lower, lowerSeparator, lowerFinderLeadStart);
         }
 
         // The middle separator row alternates narrow dark and light modules between the four light modules at each end.
-        for (int i = 5; i < StackedWidth - 4; i += 2)
+        for (int i = SeparatorLightModules + 1; i < StackedWidth - SeparatorLightModules; i += 2)
         {
             middleSeparator[i] = 1;
         }
@@ -349,7 +409,7 @@ internal static class DataBarEncoder
         // The check digit is not encoded: the 13 digits before it are the data value. The linkage flag stands before them as a fourteenth digit, so a linked
         // symbol adds 10^13.
         long value = linked ? 1 : 0;
-        for (int i = 0; i < 13; i++)
+        for (int i = 0; i < DataDigits; i++)
         {
             value = (value * 10) + (gtin[i] - '0');
         }
@@ -360,21 +420,22 @@ internal static class DataBarEncoder
         // The first and third characters are outside characters and the second and fourth inside ones. An outside value splits into its odd value by the even
         // combinations and an inside value into its even value by the odd combinations, so the quotient and the remainder swap roles. The buffer holds the 32
         // widths of the four characters, then the odd and the even set of the character being calculated.
+        const int setElements = CharacterElements / 2;
         InlineArray64<int> bufferStorage = default;
-        Span<int> buffer = ((Span<int>)bufferStorage)[..40];
-        Span<int> characterWidths = buffer[..32];
-        Span<int> odd = buffer.Slice(32, 4);
-        Span<int> even = buffer.Slice(36, 4);
+        Span<int> buffer = ((Span<int>)bufferStorage)[..((CharacterCount * CharacterElements) + CharacterElements)];
+        Span<int> characterWidths = buffer[..(CharacterCount * CharacterElements)];
+        Span<int> odd = buffer.Slice(CharacterCount * CharacterElements, setElements);
+        Span<int> even = buffer.Slice((CharacterCount * CharacterElements) + setElements, setElements);
         int check = 0;
-        for (int c = 0; c < 4; c++)
+        for (int c = 0; c < CharacterCount; c++)
         {
             bool outside = (c & 1) == 0;
 
             // The first two characters are the outside and inside characters of the left pair, and the last two those of the right pair.
             int pair = c < 2 ? leftPair : rightPair;
             int character = outside ? pair / CharacterModulus : pair % CharacterModulus;
-            int group = outside ? 0 : 5;
-            int last = outside ? 4 : 8;
+            int group = outside ? 0 : FirstInsideGroup;
+            int last = outside ? FirstInsideGroup - 1 : GroupSum.Length - 1;
             while (group < last && character >= GroupSum[group + 1])
             {
                 group++;
@@ -383,58 +444,67 @@ internal static class DataBarEncoder
             int withinGroup = character - GroupSum[group];
             int quotient = withinGroup / Combinations[group];
             int remainder = withinGroup % Combinations[group];
-            int totalModules = outside ? 16 : 15;
+            int totalModules = outside ? OutsideModules : InsideModules;
 
             // An outside character excludes odd sets without a narrow element in its even set, and an inside character in its odd set.
             DataBarWidths.Calculate(odd, outside ? quotient : remainder, OddModules[group], OddWidest[group], !outside);
             DataBarWidths.Calculate(even, outside ? remainder : quotient, totalModules - OddModules[group], 9 - OddWidest[group], outside);
 
-            Span<int> elements = characterWidths.Slice(c * 8, 8);
-            for (int k = 0; k < 4; k++)
+            Span<int> elements = characterWidths.Slice(c * CharacterElements, CharacterElements);
+            for (int k = 0; k < setElements; k++)
             {
                 elements[k * 2] = odd[k];
                 elements[(k * 2) + 1] = even[k];
             }
 
-            for (int k = 0; k < 8; k++)
+            ReadOnlySpan<byte> weights = CheckWeights.Slice(c * CharacterElements, CharacterElements);
+            for (int k = 0; k < CharacterElements; k++)
             {
-                check += CheckWeights[(c * 8) + k] * elements[k];
+                check += weights[k] * elements[k];
             }
         }
 
-        // The check value skips 8 and 72, so it maps onto the 9 x 9 finder pairs less those two.
+        // The check value skips the finder pairs (0, 8) and (8, 0), so it maps onto the 9 x 9 finder pairs less those two.
         check %= CheckModulus;
-        if (check >= 8)
+        if (check >= FinderValues - 1)
         {
             check++;
         }
 
-        if (check >= 72)
+        if (check >= (FinderValues - 1) * FinderValues)
         {
             check++;
         }
 
-        int leftFinder = check / 9;
-        int rightFinder = check % 9;
+        int leftFinder = check / FinderValues;
+        int rightFinder = check % FinderValues;
 
-        widths[0] = 1;
-        widths[1] = 1;
-        widths[44] = 1;
-        widths[45] = 1;
-        for (int k = 0; k < 8; k++)
-        {
-            widths[2 + k] = characterWidths[k];
-            widths[15 + k] = characterWidths[8 + 7 - k];
-            widths[23 + k] = characterWidths[24 + k];
-            widths[36 + k] = characterWidths[16 + 7 - k];
-        }
+        // The symbol reads the guard pattern, the first character, the left finder, the second character reversed, the fourth character, the right finder
+        // reversed, the third character reversed and the guard pattern.
+        const int leftFinderStart = GuardElements + CharacterElements;
+        const int secondStart = leftFinderStart + FinderElements;
+        const int fourthStart = secondStart + CharacterElements;
+        const int rightFinderStart = fourthStart + CharacterElements;
+        const int thirdStart = rightFinderStart + FinderElements;
+        widths[..GuardElements].Fill(1);
+        widths[^GuardElements..].Fill(1);
+        characterWidths[..CharacterElements].CopyTo(widths[GuardElements..]);
+        characterWidths.Slice(3 * CharacterElements, CharacterElements).CopyTo(widths[fourthStart..]);
 
-        ReadOnlySpan<byte> left = FinderPatterns.Slice(leftFinder * 5, 5);
-        ReadOnlySpan<byte> right = FinderPatterns.Slice(rightFinder * 5, 5);
-        for (int k = 0; k < 5; k++)
+        Span<int> second = widths.Slice(secondStart, CharacterElements);
+        characterWidths.Slice(CharacterElements, CharacterElements).CopyTo(second);
+        second.Reverse();
+
+        Span<int> third = widths.Slice(thirdStart, CharacterElements);
+        characterWidths.Slice(2 * CharacterElements, CharacterElements).CopyTo(third);
+        third.Reverse();
+
+        ReadOnlySpan<byte> left = FinderPatterns.Slice(leftFinder * FinderElements, FinderElements);
+        ReadOnlySpan<byte> right = FinderPatterns.Slice(rightFinder * FinderElements, FinderElements);
+        for (int k = 0; k < FinderElements; k++)
         {
-            widths[10 + k] = left[k];
-            widths[31 + k] = right[4 - k];
+            widths[leftFinderStart + k] = left[k];
+            widths[rightFinderStart + k] = right[FinderElements - 1 - k];
         }
 
         return rightFinder;
@@ -486,23 +556,23 @@ internal static class DataBarEncoder
     /// <param name="separator">The separator row.</param>
     private static void Invert(ReadOnlySpan<byte> row, Span<byte> separator)
     {
-        for (int i = 4; i < row.Length - 4; i++)
+        for (int i = SeparatorLightModules; i < row.Length - SeparatorLightModules; i++)
         {
             separator[i] = (byte)(1 - row[i]);
         }
     }
 
     /// <summary>
-    /// Rewrites the 13 separator modules over a finder pattern. Under a dark module the separator is light. Under a light run it alternates dark and light,
-    /// starting dark, so it breaks into narrow elements.
+    /// Rewrites the separator modules over the first three elements of a finder pattern, as the left finder reads them. Under a dark module the separator is
+    /// light. Under a light run it alternates dark and light, starting dark, so it breaks into narrow elements.
     /// </summary>
     /// <param name="row">The row the separator touches.</param>
     /// <param name="separator">The separator row.</param>
-    /// <param name="start">The first module of the 13.</param>
+    /// <param name="start">The first module of the <see cref="FinderLeadModules"/> modules.</param>
     private static void AlternateOverFinder(ReadOnlySpan<byte> row, Span<byte> separator, int start)
     {
         byte next = 1;
-        for (int i = start; i < start + 13; i++)
+        for (int i = start; i < start + FinderLeadModules; i++)
         {
             if (row[i] == 0)
             {

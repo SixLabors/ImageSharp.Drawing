@@ -78,9 +78,45 @@ internal static class DataBarExpandedEncoder
     private const int FinderModules = 15;
 
     /// <summary>
-    /// The width in modules of the widest row: two guard pairs, 20 symbol characters and 10 finder patterns.
+    /// The number of elements of a symbol character, an odd set of 4 and an even set of 4.
     /// </summary>
-    private const int MaximumRowWidth = 4 + (MaximumStackedSegments * CharacterModules) + (MaximumStackedSegments / 2 * FinderModules);
+    private const int CharacterElements = 8;
+
+    /// <summary>
+    /// The number of elements of a finder pattern.
+    /// </summary>
+    private const int FinderElements = 5;
+
+    /// <summary>
+    /// The number of elements of the guard pattern at each end, a narrow space and a narrow bar. Each element is one module, so the guard pattern is also
+    /// this many modules wide.
+    /// </summary>
+    private const int GuardElements = 2;
+
+    /// <summary>
+    /// The fewest symbol characters a symbol carries. Section 5.5.2.3.1: "from 4 to 22 symbol characters".
+    /// </summary>
+    private const int MinimumSymbolCharacters = 4;
+
+    /// <summary>
+    /// The first module of the first finder pattern of a row, after the guard pattern and the first symbol character.
+    /// </summary>
+    private const int FirstFinderStart = GuardElements + CharacterModules;
+
+    /// <summary>
+    /// The distance in modules from one finder pattern of a row to the next: the finder pattern and two symbol characters.
+    /// </summary>
+    private const int FinderPitch = FinderModules + (2 * CharacterModules);
+
+    /// <summary>
+    /// The number of light modules at each end of a separator row.
+    /// </summary>
+    private const int SeparatorLightModules = 4;
+
+    /// <summary>
+    /// The width in modules of the widest row: two guard patterns, 20 symbol characters and 10 finder patterns.
+    /// </summary>
+    private const int MaximumRowWidth = (2 * GuardElements) + (MaximumStackedSegments * CharacterModules) + (MaximumStackedSegments / 2 * FinderModules);
 
     /// <summary>
     /// The modulus of the check value.
@@ -276,13 +312,13 @@ internal static class DataBarExpandedEncoder
     public static void BuildLinear(ReadOnlySpan<char> text, ReadOnlySpan<char> caption, bool linked, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         InlineArray256<int> characterStorage = default;
-        Span<int> characters = ((Span<int>)characterStorage)[..(MaximumSymbolCharacters * 8)];
+        Span<int> characters = ((Span<int>)characterStorage)[..(MaximumSymbolCharacters * CharacterElements)];
         int symbolCharacters = EncodeCharacters(text, MaximumSymbolCharacters, linked, characters);
         ReadOnlySpan<byte> finders = Finders(symbolCharacters);
 
         // A zero width bar, the guard space and bar, the characters with a finder after every second one, and the guard space and bar. The symbol ends on a bar
         // or a space, so a zero width bar closes the runs when it ends on a space. The zero width bars are the zeros the symbol storage starts with.
-        int elements = 3 + (symbolCharacters * 8) + (finders.Length * 5) + 2;
+        int elements = 1 + GuardElements + (symbolCharacters * CharacterElements) + (finders.Length * FinderElements) + GuardElements;
         double xDimension = options.ResolveXDimension(DataBarEncoder.MinimumXDimension, NominalXDimension, DataBarEncoder.MaximumXDimension);
         Span<int> runs = symbol.BeginLinear(elements + ((elements & 1) == 0 ? 1 : 0), xDimension, out Span<float> heights, out _);
         runs[1] = 1;
@@ -290,11 +326,11 @@ internal static class DataBarExpandedEncoder
         int position = 3;
         for (int c = 0; c < symbolCharacters; c++)
         {
-            characters.Slice(c * 8, 8).CopyTo(runs[position..]);
-            position += 8;
+            characters.Slice(c * CharacterElements, CharacterElements).CopyTo(runs[position..]);
+            position += CharacterElements;
             if ((c & 1) == 0)
             {
-                foreach (byte width in FinderWidths.Slice(finders[c / 2] * 5, 5))
+                foreach (byte width in FinderWidths.Slice(finders[c / 2] * FinderElements, FinderElements))
                 {
                     runs[position++] = width;
                 }
@@ -310,8 +346,8 @@ internal static class DataBarExpandedEncoder
 
         if (options.Font is not null)
         {
-            // The two guard pairs and the fixed module counts of the characters and the finders give the width.
-            int width = 4 + (symbolCharacters * CharacterModules) + (finders.Length * FinderModules);
+            // The two guard patterns and the fixed module counts of the characters and the finders give the width.
+            int width = (2 * GuardElements) + (symbolCharacters * CharacterModules) + (finders.Length * FinderModules);
             symbol.ReserveText(1, caption.Length);
             symbol.AddText(caption, 0F, width, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);
 
@@ -355,7 +391,7 @@ internal static class DataBarExpandedEncoder
         ref BarcodeSymbol symbol)
     {
         InlineArray256<int> characterStorage = default;
-        Span<int> characters = ((Span<int>)characterStorage)[..(MaximumSymbolCharacters * 8)];
+        Span<int> characters = ((Span<int>)characterStorage)[..(MaximumSymbolCharacters * CharacterElements)];
         int symbolCharacters = EncodeCharacters(text, segments, linked, characters);
         double xDimension = options.ResolveXDimension(minimumXDimension, NominalXDimension, maximumXDimension);
         float rowHeight = options.ResolveBarHeight(xDimension, RowHeight, RowHeight, maximumRowHeight);
@@ -450,19 +486,22 @@ internal static class DataBarExpandedEncoder
         for (int d = 0; d < dataCharacters; d++)
         {
             // A data character to the right of a finder, the first of each pair, reads in reverse.
-            Span<int> widths = characters.Slice((d + 1) * 8, 8);
+            Span<int> widths = characters.Slice((d + 1) * CharacterElements, CharacterElements);
             CharacterWidths(values[d], sets, widths, (d & 1) == 0);
 
-            // Data character d is the right character of finder (d + 1) / 2, or the left one when d is odd.
+            // Data character d is the right character of finder (d + 1) / 2, or the left one when d is odd. Each finder has the weights of its left character
+            // and then the weights of its right character.
             int finder = finders[(d + 1) / 2];
-            ReadOnlySpan<byte> weights = CheckWeights.Slice((finder * 16) + ((d & 1) == 0 ? 8 : 0), 8);
-            for (int k = 0; k < 8; k++)
+            int side = (d & 1) == 0 ? CharacterElements : 0;
+            ReadOnlySpan<byte> weights = CheckWeights.Slice((finder * 2 * CharacterElements) + side, CharacterElements);
+            for (int k = 0; k < CharacterElements; k++)
             {
                 check += widths[k] * weights[k];
             }
         }
 
-        CharacterWidths((CheckModulus * (dataCharacters - 3)) + (check % CheckModulus), sets, characters[..8], false);
+        // The value of the check character is 211 times the number of symbol characters over the minimum, plus the check value.
+        CharacterWidths((CheckModulus * (symbolCharacters - MinimumSymbolCharacters)) + (check % CheckModulus), sets, characters[..CharacterElements], false);
         return symbolCharacters;
     }
 
@@ -880,7 +919,7 @@ internal static class DataBarExpandedEncoder
     /// <param name="start">The first module of the finder pattern.</param>
     private static void AlternateOverFinder(ReadOnlySpan<byte> row, Span<byte> separator, int start)
     {
-        for (int i = start; i <= start + 14; i++)
+        for (int i = start; i < start + FinderModules; i++)
         {
             separator[i] = row[i] == 1
                 ? (byte)0
@@ -899,8 +938,8 @@ internal static class DataBarExpandedEncoder
             middle[i] = (byte)(i & 1);
         }
 
-        middle[..4].Clear();
-        middle[^4..].Clear();
+        middle[..SeparatorLightModules].Clear();
+        middle[^SeparatorLightModules..].Clear();
     }
 
     /// <summary>
@@ -1200,14 +1239,14 @@ internal static class DataBarExpandedEncoder
             int finderCount = 0;
             for (int c = first; c < last; c++)
             {
-                foreach (int width in this.characters.Slice(c * 8, 8))
+                foreach (int width in this.characters.Slice(c * CharacterElements, CharacterElements))
                 {
                     this.AppendElement(width);
                 }
 
                 if ((c & 1) == 0)
                 {
-                    foreach (byte width in FinderWidths.Slice(this.finders[c / 2] * 5, 5))
+                    foreach (byte width in FinderWidths.Slice(this.finders[c / 2] * FinderElements, FinderElements))
                     {
                         this.AppendElement(width);
                     }
@@ -1220,8 +1259,8 @@ internal static class DataBarExpandedEncoder
             this.AppendElement(1);
 
             // The separator is the inverse of the row, inside four light modules at each end. Over the 15 modules of a finder pattern the light modules break
-            // into narrow elements instead, so the separator does not read as part of the finder. The first finder starts at module 19, after the 2 guard
-            // modules and the 17 modules of the first character. Each next finder starts 49 modules later, after the 15 finder modules and two characters.
+            // into narrow elements instead, so the separator does not read as part of the finder. The first finder starts after the guard pattern and the
+            // first character. Each next finder starts one finder and two characters later.
             int rowLength = this.length;
             Span<byte> rowModules = this.row[..rowLength];
             Span<byte> separatorModules = this.separator[..rowLength];
@@ -1230,13 +1269,13 @@ internal static class DataBarExpandedEncoder
                 separatorModules[i] = (byte)(1 - rowModules[i]);
             }
 
-            for (int start = 19; start <= rowLength - 13; start += 49)
+            for (int start = FirstFinderStart; start + FinderModules <= rowLength; start += FinderPitch)
             {
                 AlternateOverFinder(rowModules, separatorModules, start);
             }
 
-            separatorModules[..4].Clear();
-            separatorModules[^4..].Clear();
+            separatorModules[..SeparatorLightModules].Clear();
+            separatorModules[^SeparatorLightModules..].Clear();
 
             // With a whole number of segment pairs on both sides every second row reads right to left. A partial last row with an odd number of finders keeps
             // its direction and moves one module right.

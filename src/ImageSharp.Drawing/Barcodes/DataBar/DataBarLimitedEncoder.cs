@@ -52,6 +52,52 @@ internal static class DataBarLimitedEncoder
     private const int CheckModulus = 89;
 
     /// <summary>
+    /// The number of digits that the symbol encodes: the GTIN without its check digit.
+    /// </summary>
+    private const int DataDigits = 13;
+
+    /// <summary>
+    /// The number of elements of a symbol character or the check character.
+    /// </summary>
+    private const int CharacterElements = 14;
+
+    /// <summary>
+    /// The number of modules of a symbol character.
+    /// </summary>
+    private const int CharacterModules = 26;
+
+    /// <summary>
+    /// The number of elements of the leading guard pattern, a narrow space and a narrow bar.
+    /// </summary>
+    private const int GuardElements = 2;
+
+    /// <summary>
+    /// The number of elements of each of the two sets of the check character before its narrow space and bar.
+    /// </summary>
+    private const int CheckSetElements = 6;
+
+    /// <summary>
+    /// The number of modules of each of the two sets of the check character.
+    /// </summary>
+    private const int CheckSetModules = 8;
+
+    /// <summary>
+    /// The widest element of a set of the check character, in modules.
+    /// </summary>
+    private const int CheckSetWidest = 3;
+
+    /// <summary>
+    /// The number of patterns of one set of the check character, <see cref="CheckSetElements"/> elements over <see cref="CheckSetModules"/> modules with no
+    /// element wider than <see cref="CheckSetWidest"/>.
+    /// </summary>
+    private const int CheckSetPatterns = 21;
+
+    /// <summary>
+    /// The width in modules of the space that closes the symbol. Section 5.5.2.2: "ending with a 5X space".
+    /// </summary>
+    private const int TrailingSpaceModules = 5;
+
+    /// <summary>
     /// Gets the first character value of each group.
     /// </summary>
     private static ReadOnlySpan<int> GroupSum => [0, 183064, 820064, 1000776, 1491021, 1979845, 1996939];
@@ -114,7 +160,7 @@ internal static class DataBarLimitedEncoder
         // The check digit is not encoded: the 13 digits before it are the data value, and a linked symbol adds LinkedOffset to it.
         long value = linked ? LinkedOffset : 0;
         long digits = 0;
-        for (int i = 0; i < 13; i++)
+        for (int i = 0; i < DataDigits; i++)
         {
             digits = (digits * 10) + (gtin[i] - '0');
         }
@@ -124,17 +170,20 @@ internal static class DataBarLimitedEncoder
         double xDimension = options.ResolveXDimension(DataBarEncoder.MinimumXDimension, NominalXDimension, DataBarEncoder.MaximumXDimension);
 
         // The element widths start with the guard space, so a zero width bar leads the runs, and the symbol ends on the five module space, so a zero width bar
-        // closes them. Both zero width bars are the zeros the symbol storage starts with.
+        // closes them. Both zero width bars are the zeros the symbol storage starts with. The left character follows the guard pattern, then the check
+        // character and the right character follow.
+        const int checkStart = GuardElements + CharacterElements;
+        const int rightStart = checkStart + CharacterElements;
         Span<int> runs = symbol.BeginLinear(ElementCount + 2, xDimension, out Span<float> heights, out _);
         Span<int> widths = runs.Slice(1, ElementCount);
-        widths[0] = 1;
-        widths[1] = 1;
+        widths[..GuardElements].Fill(1);
 
         // The buffer holds the odd and the even set of the character being calculated.
+        const int setElements = CharacterElements / 2;
         InlineArray14<int> setStorage = default;
         Span<int> sets = setStorage;
-        Span<int> odd = sets[..7];
-        Span<int> even = sets[7..];
+        Span<int> odd = sets[..setElements];
+        Span<int> even = sets[setElements..];
         int check = 0;
         for (int c = 0; c < 2; c++)
         {
@@ -149,37 +198,37 @@ internal static class DataBarLimitedEncoder
 
             // Only the even set excludes the combinations without a one module element.
             DataBarWidths.Calculate(odd, withinGroup / EvenCombinations[group], OddModules[group], OddWidest[group], false);
-            DataBarWidths.Calculate(even, withinGroup % EvenCombinations[group], 26 - OddModules[group], 9 - OddWidest[group], true);
+            DataBarWidths.Calculate(even, withinGroup % EvenCombinations[group], CharacterModules - OddModules[group], 9 - OddWidest[group], true);
 
-            // The left character follows the guard pair and the right character follows the check character.
-            Span<int> elements = widths.Slice(c == 0 ? 2 : 30, 14);
-            for (int k = 0; k < 7; k++)
+            Span<int> elements = widths.Slice(c == 0 ? GuardElements : rightStart, CharacterElements);
+            ReadOnlySpan<byte> weights = CheckWeights.Slice(c * CharacterElements, CharacterElements);
+            for (int k = 0; k < setElements; k++)
             {
                 elements[k * 2] = odd[k];
                 elements[(k * 2) + 1] = even[k];
-                check += (CheckWeights[(c * 14) + (k * 2)] * odd[k]) + (CheckWeights[(c * 14) + (k * 2) + 1] * even[k]);
+                check += (weights[k * 2] * odd[k]) + (weights[(k * 2) + 1] * even[k]);
             }
         }
 
         // The check character is two sets of six elements over eight modules, interleaved, and a narrow space and bar.
         int sequence = CheckSequence[check % CheckModulus];
-        Span<int> first = sets[..6];
-        Span<int> second = sets.Slice(6, 6);
-        DataBarWidths.Calculate(first, sequence / 21, 8, 3, false);
-        DataBarWidths.Calculate(second, sequence % 21, 8, 3, false);
-        Span<int> checkElements = widths.Slice(16, 14);
-        for (int k = 0; k < 6; k++)
+        Span<int> first = sets[..CheckSetElements];
+        Span<int> second = sets.Slice(CheckSetElements, CheckSetElements);
+        DataBarWidths.Calculate(first, sequence / CheckSetPatterns, CheckSetModules, CheckSetWidest, false);
+        DataBarWidths.Calculate(second, sequence % CheckSetPatterns, CheckSetModules, CheckSetWidest, false);
+        Span<int> checkElements = widths.Slice(checkStart, CharacterElements);
+        for (int k = 0; k < CheckSetElements; k++)
         {
             checkElements[k * 2] = first[k];
             checkElements[(k * 2) + 1] = second[k];
         }
 
-        checkElements[12] = 1;
-        checkElements[13] = 1;
+        checkElements[^2..].Fill(1);
 
-        widths[44] = 1;
-        widths[45] = 1;
-        widths[46] = 5;
+        // A narrow space, a narrow bar and the five module space close the symbol.
+        widths[^3] = 1;
+        widths[^2] = 1;
+        widths[^1] = TrailingSpaceModules;
 
         // Section 5.5.2.2 gives a minimum height and no maximum.
         float barHeight = options.ResolveBarHeight(xDimension, Height, Height, float.PositiveInfinity);
