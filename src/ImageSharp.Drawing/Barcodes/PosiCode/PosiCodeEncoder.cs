@@ -164,7 +164,8 @@ internal static class PosiCodeEncoder
     ];
 
     /// <summary>
-    /// Gets the run widths of the 46 data codewords of version A, six per codeword in bar and space order.
+    /// Gets the run widths of the 46 data codewords of version A, six per codeword in bar and space order. The bar centres of version B are one module further
+    /// apart, so version B adds one module to every space.
     /// </summary>
     private static ReadOnlySpan<byte> CharactersA =>
     [
@@ -181,24 +182,8 @@ internal static class PosiCodeEncoder
     ];
 
     /// <summary>
-    /// Gets the run widths of the 46 data codewords of version B, in the layout of <see cref="CharactersA"/>.
-    /// </summary>
-    private static ReadOnlySpan<byte> CharactersB =>
-    [
-        1, 5, 1, 2, 1, 3, 1, 4, 1, 3, 1, 3, 1, 3, 1, 4, 1, 3, 1, 2, 1, 5, 1, 3, 1, 4, 1, 2, 1, 4,
-        1, 3, 1, 3, 1, 4, 1, 2, 1, 4, 1, 4, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 5, 1, 2, 1, 2, 1, 6,
-        1, 9, 1, 2, 1, 2, 1, 8, 1, 3, 1, 2, 1, 7, 1, 4, 1, 2, 1, 6, 1, 5, 1, 2, 1, 5, 1, 6, 1, 2,
-        1, 4, 1, 7, 1, 2, 1, 3, 1, 8, 1, 2, 1, 2, 1, 9, 1, 2, 1, 8, 1, 2, 1, 3, 1, 7, 1, 3, 1, 3,
-        1, 6, 1, 4, 1, 3, 1, 5, 1, 5, 1, 3, 1, 4, 1, 6, 1, 3, 1, 3, 1, 7, 1, 3, 1, 2, 1, 8, 1, 3,
-        1, 7, 1, 2, 1, 4, 1, 6, 1, 3, 1, 4, 1, 5, 1, 4, 1, 4, 1, 4, 1, 5, 1, 4, 1, 3, 1, 6, 1, 4,
-        1, 2, 1, 7, 1, 4, 1, 6, 1, 2, 1, 5, 1, 5, 1, 3, 1, 5, 1, 4, 1, 4, 1, 5, 1, 3, 1, 5, 1, 5,
-        1, 2, 1, 6, 1, 5, 1, 5, 1, 2, 1, 6, 1, 4, 1, 3, 1, 6, 1, 3, 1, 4, 1, 6, 1, 2, 1, 5, 1, 6,
-        1, 4, 1, 2, 1, 7, 1, 3, 1, 3, 1, 7, 1, 2, 1, 4, 1, 7, 1, 3, 1, 2, 1, 8, 1, 2, 1, 3, 1, 8,
-        1, 2, 1, 2, 1, 9,
-    ];
-
-    /// <summary>
-    /// Gets the run widths of the 38 data codewords of Limited version A, in the layout of <see cref="CharactersA"/>.
+    /// Gets the run widths of the 38 data codewords of Limited version A, in the layout of <see cref="CharactersA"/>. Limited version B adds one module to
+    /// every space.
     /// </summary>
     private static ReadOnlySpan<byte> CharactersLimitedA =>
     [
@@ -210,21 +195,6 @@ internal static class PosiCodeEncoder
         1, 3, 1, 3, 1, 3, 1, 2, 1, 4, 1, 3, 1, 1, 1, 5, 1, 3, 1, 4, 1, 1, 1, 4, 1, 3, 1, 2, 1, 4,
         1, 2, 1, 3, 1, 4, 1, 1, 1, 4, 1, 4, 1, 3, 1, 1, 1, 5, 1, 2, 1, 2, 1, 5, 1, 1, 1, 3, 1, 5,
         1, 2, 1, 1, 1, 6, 1, 1, 1, 2, 1, 6, 1, 1, 1, 1, 1, 7,
-    ];
-
-    /// <summary>
-    /// Gets the run widths of the 38 data codewords of Limited version B, in the layout of <see cref="CharactersA"/>.
-    /// </summary>
-    private static ReadOnlySpan<byte> CharactersLimitedB =>
-    [
-        1, 2, 1, 5, 1, 2, 1, 2, 1, 4, 1, 3, 1, 2, 1, 3, 1, 4, 1, 2, 1, 2, 1, 5, 1, 3, 1, 4, 1, 2,
-        1, 3, 1, 3, 1, 3, 1, 3, 1, 2, 1, 4, 1, 5, 1, 2, 1, 2, 1, 4, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3,
-        1, 8, 1, 2, 1, 2, 1, 7, 1, 3, 1, 2, 1, 6, 1, 4, 1, 2, 1, 5, 1, 5, 1, 2, 1, 4, 1, 6, 1, 2,
-        1, 3, 1, 7, 1, 2, 1, 2, 1, 8, 1, 2, 1, 7, 1, 2, 1, 3, 1, 6, 1, 3, 1, 3, 1, 5, 1, 4, 1, 3,
-        1, 4, 1, 5, 1, 3, 1, 3, 1, 6, 1, 3, 1, 2, 1, 7, 1, 3, 1, 6, 1, 2, 1, 4, 1, 5, 1, 3, 1, 4,
-        1, 4, 1, 4, 1, 4, 1, 3, 1, 5, 1, 4, 1, 2, 1, 6, 1, 4, 1, 5, 1, 2, 1, 5, 1, 4, 1, 3, 1, 5,
-        1, 3, 1, 4, 1, 5, 1, 2, 1, 5, 1, 5, 1, 4, 1, 2, 1, 6, 1, 3, 1, 3, 1, 6, 1, 2, 1, 4, 1, 6,
-        1, 3, 1, 2, 1, 7, 1, 2, 1, 3, 1, 7, 1, 2, 1, 2, 1, 8,
     ];
 
     /// <summary>
@@ -264,7 +234,8 @@ internal static class PosiCodeEncoder
 
     /// <summary>
     /// Gets the table that maps a check value to six bar distances. Row r holds the number of ways the remaining distances can be arranged when distance r
-    /// grows by one more, and the mapping walks the rows until the running sum reaches the check value.
+    /// grows by one more, and the mapping walks the rows until the running sum reaches the check value. The entry at row r and column c is the binomial
+    /// coefficient C(12 - r - c, 4 - r).
     /// </summary>
     private static ReadOnlySpan<int> CheckWeights =>
     [
@@ -420,9 +391,9 @@ internal static class PosiCodeEncoder
         VersionPatterns patterns = version switch
         {
             PosiCodeVersion.A => new(CharactersA, StartA, StopA),
-            PosiCodeVersion.B => new(CharactersB, StartB, StopB),
+            PosiCodeVersion.B => new(CharactersA, StartB, StopB),
             PosiCodeVersion.LimitedA => new(CharactersLimitedA, StartLimitedA, StopLimited),
-            _ => new(CharactersLimitedB, StartLimitedB, StopLimited),
+            _ => new(CharactersLimitedA, StartLimitedB, StopLimited),
         };
 
         double xDimension = options.ResolveXDimension(0, BarcodeSymbology.DefaultXDimension, double.PositiveInfinity);
@@ -430,9 +401,16 @@ internal static class PosiCodeEncoder
         Span<int> runs = symbol.BeginLinear(runCount, xDimension, out Span<float> heights, out _);
         int written = 0;
         AppendRuns(patterns.Start, runs, ref written);
+
+        // A character starts with a bar, so its odd runs are its spaces.
+        int spaceOffset = SpaceOffset(version);
         foreach (int codeword in codewords)
         {
-            AppendRuns(patterns.Characters.Slice(codeword * RunsPerCharacter, RunsPerCharacter), runs, ref written);
+            ReadOnlySpan<byte> widths = patterns.Characters.Slice(codeword * RunsPerCharacter, RunsPerCharacter);
+            for (int i = 0; i < widths.Length; i++)
+            {
+                runs[written++] = widths[i] + ((i & 1) * spaceOffset);
+            }
         }
 
         AppendCheck(codewords, version, runs.Slice(written, CheckRuns));
@@ -460,6 +438,14 @@ internal static class PosiCodeEncoder
     /// <param name="version">The version.</param>
     /// <returns>The quiet zone in modules.</returns>
     private static int QuietZone(PosiCodeVersion version) => version == PosiCodeVersion.LimitedB ? 13 : 12;
+
+    /// <summary>
+    /// Returns the modules that a version adds to every space of a data character and to every check distance. The bar centres are 2G to 9G apart in
+    /// version A and 3G to 10G apart in version B.
+    /// </summary>
+    /// <param name="version">The version.</param>
+    /// <returns>1 for version B and Limited version B, otherwise 0.</returns>
+    private static int SpaceOffset(PosiCodeVersion version) => version is PosiCodeVersion.B or PosiCodeVersion.LimitedB ? 1 : 0;
 
     /// <summary>
     /// Writes run widths from a pattern table to the runs of the symbol.
@@ -531,15 +517,13 @@ internal static class PosiCodeEncoder
                 distances[row] = width + 2;
                 sum = total;
             }
-
-            if (total > value)
+            else if (total > value)
             {
                 distances[row] = width + 2;
                 row++;
                 width = 0;
             }
-
-            if (total < value)
+            else
             {
                 column++;
                 width++;
@@ -548,7 +532,7 @@ internal static class PosiCodeEncoder
         }
 
         distances[CheckDistances - 1] = CheckDistanceSum - distances[0] - distances[1] - distances[2] - distances[3] - distances[4];
-        int offset = version is PosiCodeVersion.B or PosiCodeVersion.LimitedB ? 1 : 0;
+        int offset = SpaceOffset(version);
         for (int i = 0; i < CheckDistances; i++)
         {
             runs[i * 2] = 1;
