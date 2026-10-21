@@ -301,6 +301,21 @@ internal static class DataBarExpandedEncoder
     }
 
     /// <summary>
+    /// Validates the number of segments in a full row of a stacked symbol: an even number from <see cref="MinimumSegments"/> to
+    /// <see cref="MaximumStackedSegments"/>.
+    /// </summary>
+    /// <param name="segments">The number of segments.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="segments"/> is outside the range or odd.</exception>
+    public static void ValidateSegments(int segments)
+    {
+        Guard.MustBeBetweenOrEqualTo(segments, MinimumSegments, MaximumStackedSegments, nameof(segments));
+        if ((segments & 1) == 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(segments), segments, "The number of segments in a row is even.");
+        }
+    }
+
+    /// <summary>
     /// Builds GS1 DataBar Expanded, a single row.
     /// </summary>
     /// <param name="text">The prepared element strings, with a separator after every variable length element string but the last.</param>

@@ -51,12 +51,7 @@ public sealed class Gs1NorthAmericanCouponSymbology : BarcodeSymbology
     /// <param name="segments">The number of segments in a full row, an even number from 2 to 20. A segment is one symbol character.</param>
     public Gs1NorthAmericanCouponSymbology(int segments)
     {
-        Guard.MustBeBetweenOrEqualTo(segments, DataBarExpandedEncoder.MinimumSegments, DataBarExpandedEncoder.MaximumStackedSegments, nameof(segments));
-        if ((segments & 1) == 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(segments), segments, "The number of segments in a row is even.");
-        }
-
+        DataBarExpandedEncoder.ValidateSegments(segments);
         this.Segments = segments;
     }
 
