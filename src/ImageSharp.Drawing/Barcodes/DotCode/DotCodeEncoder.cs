@@ -64,6 +64,16 @@ internal static class DotCodeEncoder
     private const int MinimumCheckCodewords = 3;
 
     /// <summary>
+    /// The radix in which binary mode reads the bytes it packs.
+    /// </summary>
+    private const int BinaryByteRadix = 259;
+
+    /// <summary>
+    /// The radix of the codewords that binary mode writes.
+    /// </summary>
+    private const int BinaryCodewordRadix = 103;
+
+    /// <summary>
     /// The width to height ratio of a symbol whose size is not given.
     /// </summary>
     private const double DefaultRatio = 3D / 2D;
@@ -1473,44 +1483,23 @@ internal static class DotCodeEncoder
                 return;
             }
 
-            // The bytes align right in five base 259 digits, so the value is high x 259^3 + low, where high is the top two digits and low the bottom three.
-            // Both convert to base 103 on their own, h0 to h2 and l0 to l3, least significant first. 259^3 is 15 x 103^3 + 92 x 103^2 + 68 x 103 + 42, so each
-            // base 103 digit of the value is the low digit of its column plus the products of the high digits with those four constants, plus the carry from
-            // the column below. Each column fits an int.
-            Span<int> bytes = this.pending;
-            int b0 = n >= 5 ? bytes[n - 5] : 0;
-            int b1 = n >= 4 ? bytes[n - 4] : 0;
-            int b2 = n >= 3 ? bytes[n - 3] : 0;
-            int b3 = n >= 2 ? bytes[n - 2] : 0;
-            int b4 = bytes[n - 1];
-
-            int high = (b0 * 259) + b1;
-            int h0 = high % 103;
-            int h1 = (high / 103) % 103;
-            int h2 = high / (103 * 103);
-
-            int low = (b2 * 67081) + (b3 * 259) + b4;
-            int l0 = low % 103;
-            int l1 = (low / 103) % 103;
-            int l2 = (low / (103 * 103)) % 103;
-            int l3 = low / (103 * 103 * 103);
+            // Five bytes are at most 259^5 - 1, under 2^41, so a long holds the value. 259^n is under 103^(n + 1), so n + 1 base 103 digits hold it. The
+            // division gives the digits the least significant first, so they fill the output from the end.
+            long value = 0;
+            foreach (int b in this.pending[..n])
+            {
+                value = (value * BinaryByteRadix) + b;
+            }
 
             InlineArray6<int> outputStorage = default;
-            Span<int> output = outputStorage;
-            int t = l0 + (h0 * 42);
-            output[5] = t % 103;
-            t = (t / 103) + l1 + (h0 * 68) + (h1 * 42);
-            output[4] = t % 103;
-            t = (t / 103) + l2 + (h0 * 92) + (h1 * 68) + (h2 * 42);
-            output[3] = t % 103;
-            t = (t / 103) + l3 + (h0 * 15) + (h1 * 92) + (h2 * 68);
-            output[2] = t % 103;
-            t = (t / 103) + (h1 * 15) + (h2 * 92);
-            output[1] = t % 103;
-            t = (t / 103) + (h2 * 15);
-            output[0] = t % 103;
+            Span<int> output = ((Span<int>)outputStorage)[..(n + 1)];
+            for (int i = n; i >= 0; i--)
+            {
+                output[i] = (int)(value % BinaryCodewordRadix);
+                value /= BinaryCodewordRadix;
+            }
 
-            foreach (int codeword in output[(5 - n)..])
+            foreach (int codeword in output)
             {
                 this.Add(codeword);
             }
