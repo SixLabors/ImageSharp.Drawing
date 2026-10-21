@@ -185,16 +185,14 @@ internal static class DataMatrixEncoder
             MaximumLength,
             nameof(text));
 
-        // Clause 5.2.2 of ISO/IEC 16022: the default character set is ISO/IEC 8859-1, so each character must be one byte value. The check runs by code point so
-        // a surrogate pair reports as one character.
-        SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
-        while (codePoints.MoveNext())
+        // Clause 5.2.2 of ISO/IEC 16022: the default character set is ISO/IEC 8859-1, so each character must be one byte value. One vectorized search finds the
+        // first character above U+00FF, and the message reports a surrogate pair as one character.
+        int wide = text.IndexOfAnyExceptInRange('\0', (char)byte.MaxValue);
+        if (wide >= 0)
         {
-            CodePoint current = codePoints.Current;
-            if (current.Value > byte.MaxValue)
-            {
-                throw new ArgumentException($"Data Matrix carries only the characters U+0000 to U+00FF; got {current.ToDisplayString()}.", nameof(text));
-            }
+            throw new ArgumentException(
+                $"Data Matrix carries only the characters U+0000 to U+00FF; got {text.CodePointAt(wide).ToDisplayString()}.",
+                nameof(text));
         }
 
         // The message is the data as int values, so the function characters can take negative values that no byte has. It holds every character and at most one
