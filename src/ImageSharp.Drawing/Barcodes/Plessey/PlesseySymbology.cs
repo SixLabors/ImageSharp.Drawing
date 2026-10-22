@@ -1,0 +1,92 @@
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
+
+using SixLabors.Fonts.Unicode;
+using SixLabors.ImageSharp.Drawing.Helpers;
+
+namespace SixLabors.ImageSharp.Drawing.Barcodes;
+
+/// <summary>
+/// The Plessey Code symbology. It carries the hexadecimal digits 0 to 9 and A to F between a start code and a termination bar with the reversed start code,
+/// which the printed line does not show.
+/// <para>
+/// Every symbol carries two check characters, which hold the eight bit remainder of the data divided by the generator polynomial x^8 + x^7 + x^6 + x^5 + x^3 +
+/// 1. The encoder calculates them, or validates the two the input ends with, and by default the printed line shows the data only.
+/// </para>
+/// </summary>
+public sealed class PlesseySymbology : BarcodeSymbology
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PlesseySymbology"/> class.
+    /// </summary>
+    public PlesseySymbology()
+        : this(false, false)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PlesseySymbology"/> class.
+    /// </summary>
+    /// <param name="validateCheckCharacters">Whether the input ends with the two check characters, which the encoder validates, rather than with data, for
+    /// which the encoder calculates them.</param>
+    public PlesseySymbology(bool validateCheckCharacters)
+        : this(validateCheckCharacters, false)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PlesseySymbology"/> class.
+    /// </summary>
+    /// <param name="validateCheckCharacters">Whether the input ends with the two check characters, which the encoder validates, rather than with data, for
+    /// which the encoder calculates them.</param>
+    /// <param name="printCheckCharacters">Whether the two check characters are part of the human readable interpretation.</param>
+    public PlesseySymbology(bool validateCheckCharacters, bool printCheckCharacters)
+    {
+        this.ValidateCheckCharacters = validateCheckCharacters;
+        this.PrintCheckCharacters = printCheckCharacters;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether the input ends with the two check characters, which the encoder validates, rather than with data, for which the encoder
+    /// calculates them.
+    /// </summary>
+    public bool ValidateCheckCharacters { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the two check characters are part of the human readable interpretation.
+    /// </summary>
+    public bool PrintCheckCharacters { get; }
+
+    /// <inheritdoc/>
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    {
+        Guard.MustBeLessThanOrEqualTo(text.Length, PlesseyEncoder.MaximumLength, nameof(text));
+
+        int minimum = this.ValidateCheckCharacters ? PlesseyEncoder.CheckCharacterCount + 1 : 1;
+        Guard.MustBeGreaterThanOrEqualTo(text.Length, minimum, nameof(text));
+
+        SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
+        while (codePoints.MoveNext())
+        {
+            CodePoint current = codePoints.Current;
+            if (PlesseyEncoder.Value(current.Value) < 0)
+            {
+                throw new ArgumentException($"Plessey carries only the digits 0 to 9 and the letters A to F; got {current.ToDisplayString()}.", nameof(text));
+            }
+        }
+
+        ReadOnlySpan<char> data = this.ValidateCheckCharacters ? text.Slice(0, text.Length - PlesseyEncoder.CheckCharacterCount) : text;
+        InlineArray2<char> checkStorage = default;
+        Span<char> checks = checkStorage;
+        PlesseyEncoder.CheckCharacters(data, checks);
+        if (this.ValidateCheckCharacters && !text.Slice(data.Length).SequenceEqual(checks))
+        {
+            throw new ArgumentException($"Incorrect check characters: expected {checks}, got {text.Slice(data.Length)}.", nameof(text));
+        }
+
+        // The symbol carries the data and the two check characters, which a validated text already ends with. The interpretation prints the check characters
+        // when the caller asks for them.
+        ReadOnlySpan<char> printedChecks = this.PrintCheckCharacters ? checks : [];
+        PlesseyEncoder.BuildSymbol(data, checks, printedChecks, options, ref symbol);
+    }
+}

@@ -167,12 +167,14 @@ internal sealed class WebGPUNativeSurface : NativeSurface
         if (requiredFeature != default &&
             !WebGPURuntime.GetOrCreateDeviceState(api, deviceHandle).HasFeature(requiredFeature))
         {
-            throw new NotSupportedException($"The WebGPU device does not support required feature '{requiredFeature}' for texture format '{targetDescriptor.Format}'.");
+            throw new NotSupportedException(
+                $"The WebGPU device does not support required feature '{requiredFeature}' for texture format '{targetDescriptor.Format}'.");
         }
 
         WGPUTextureDescriptor textureDescriptor = new()
         {
-            usage = (ulong)(TextureUsage.RenderAttachment | TextureUsage.CopySrc | TextureUsage.CopyDst | TextureUsage.TextureBinding | TextureUsage.StorageBinding),
+            usage = (ulong)(TextureUsage.RenderAttachment | TextureUsage.CopySrc | TextureUsage.CopyDst |
+                TextureUsage.TextureBinding | TextureUsage.StorageBinding),
             dimension = WGPUTextureDimension._2D,
             size = new WGPUExtent3D((uint)width, (uint)height, 1),
             format = textureFormat,

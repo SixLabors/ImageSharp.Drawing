@@ -1439,7 +1439,9 @@ internal static partial class DefaultRasterizer
                 // Column coordinates are band-local and need at most 13 bits in 24.8 form.
                 // The complete packed crossing therefore fits in one word, unlike row crossings
                 // whose X coordinate spans the full destination width.
-                this.columnCrossings[(column * ColumnCrossingCapacity) + count] = ((uint)y << CrossingShift) | (direction > 0 ? (uint)CrossingDirectionBit : 0U) | xProfileId;
+                this.columnCrossings[(column * ColumnCrossingCapacity) + count] =
+                    ((uint)y << CrossingShift) | (direction > 0 ? (uint)CrossingDirectionBit : 0U) | xProfileId;
+
                 this.columnCrossingCounts[column] = count + 1;
             }
         }

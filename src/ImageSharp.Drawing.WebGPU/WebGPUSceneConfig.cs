@@ -18,7 +18,11 @@ internal readonly struct WebGPUSceneConfig
     /// <param name="bufferSizes">The planned GPU buffer sizes for this flush.</param>
     /// <param name="bumpSizes">The current dynamic scratch capacities to expose to the shaders.</param>
     /// <param name="chunkWindow">The tile-row window rendered by this staged-scene attempt.</param>
-    public WebGPUSceneConfig(WebGPUSceneWorkgroupCounts workgroupCounts, WebGPUSceneBufferSizes bufferSizes, WebGPUSceneBumpSizes bumpSizes, WebGPUSceneChunkWindow chunkWindow)
+    public WebGPUSceneConfig(
+        WebGPUSceneWorkgroupCounts workgroupCounts,
+        WebGPUSceneBufferSizes bufferSizes,
+        WebGPUSceneBumpSizes bumpSizes,
+        WebGPUSceneChunkWindow chunkWindow)
     {
         this.WorkgroupCounts = workgroupCounts;
         this.BufferSizes = bufferSizes;
@@ -913,7 +917,11 @@ internal readonly struct WebGPUSceneBufferSizes
     /// <param name="bumpSizes">The current dynamic scratch capacities for the staged pipeline.</param>
     /// <param name="chunkWindow">The tile-row window rendered by this staged-scene attempt.</param>
     /// <returns>The planned GPU buffer sizes for this encoded range and chunk window.</returns>
-    public static WebGPUSceneBufferSizes Create(WebGPUEncodedScene scene, WebGPUSceneRange range, WebGPUSceneBumpSizes bumpSizes, WebGPUSceneChunkWindow chunkWindow)
+    public static WebGPUSceneBufferSizes Create(
+        WebGPUEncodedScene scene,
+        WebGPUSceneRange range,
+        WebGPUSceneBumpSizes bumpSizes,
+        WebGPUSceneChunkWindow chunkWindow)
     {
         WebGPUSceneWorkgroupCounts workgroupCounts = WebGPUSceneWorkgroupCounts.Create(range, chunkWindow);
         uint pathTagWgs = workgroupCounts.PathReduceX;

@@ -158,7 +158,14 @@ internal static unsafe class WebGPUSceneResources
             return false;
         }
 
-        if (!TryCreateImageAtlasTexture<TPixel>(flushContext, scene, range, flushContext.TextureFormat, externalTextureView, out WGPUTextureViewImpl* imageAtlasTextureView, out error))
+        if (!TryCreateImageAtlasTexture<TPixel>(
+            flushContext,
+            scene,
+            range,
+            flushContext.TextureFormat,
+            externalTextureView,
+            out WGPUTextureViewImpl* imageAtlasTextureView,
+            out error))
         {
             return false;
         }
@@ -166,7 +173,11 @@ internal static unsafe class WebGPUSceneResources
         // Compute byte lengths for the two variable-size data buffers. The combined
         // info/bin-data buffer is laid out as [info | brush data | bin data | bin headers],
         // matching config.bin_data_start and config.brush_data_base in Shared/config.wgsl.
-        nuint infoBinDataByteLength = checked(GetBindingByteLength<uint>(infoWordCount + scene.PathGradientDataWordCount) + config.BufferSizes.BinData.ByteLength + config.BufferSizes.BinHeaders.ByteLength);
+        nuint infoBinDataByteLength = checked(
+            GetBindingByteLength<uint>(infoWordCount + scene.PathGradientDataWordCount) +
+            config.BufferSizes.BinData.ByteLength +
+            config.BufferSizes.BinHeaders.ByteLength);
+
         nuint sceneByteLength = GetBindingByteLength<uint>(scene.SceneWordCount);
 
         // Reuse arena buffers if all capacities fit this scene.

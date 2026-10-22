@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Barcodes;
+
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <content>
@@ -224,4 +226,140 @@ public abstract partial class DrawingCanvas
 
         this.Draw(pen, pathBuilder.Build());
     }
+
+    /// <summary>
+    /// Draws a barcode. The symbology validates and encodes the text, then the symbol renders through the
+    /// regular fill and text commands of this canvas.
+    /// </summary>
+    /// <param name="symbology">The barcode symbology to encode with.</param>
+    /// <param name="options">The sizing and painting options.</param>
+    /// <param name="origin">The top left corner of the barcode, in pixels.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <exception cref="ArgumentException">
+    /// The text is not valid for the symbology, or the options break a requirement of the standard of the symbology. Examples are an X
+    /// dimension for a symbol whose size the standard fixes, and a text line that does not fit its span at the smallest printed height.
+    /// </exception>
+    public void DrawBarcode(BarcodeSymbology symbology, BarcodeOptions options, PointF origin, ReadOnlySpan<char> text)
+    {
+        Guard.NotNull(symbology, nameof(symbology));
+        Guard.NotNull(options, nameof(options));
+
+        // The symbol lives on this stack frame and in any arrays it rents, which it returns once the emitter
+        // has turned it into canvas commands.
+        BarcodeSymbol symbol = default;
+        try
+        {
+            symbology.Encode(text, options, ref symbol);
+            BarcodeEmitter.Draw(this, ref symbol, options, origin, options.Background);
+        }
+        finally
+        {
+            symbol.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Draws a composite barcode of two parts. Each symbology of the composite validates and encodes its own text, the composite joins the parts into one
+    /// symbol, then the symbol renders through the regular fill and text commands of this canvas.
+    /// </summary>
+    /// <param name="symbology">The composite barcode symbology to encode with.</param>
+    /// <param name="options">The sizing and painting options.</param>
+    /// <param name="origin">The top left corner of the barcode, in pixels.</param>
+    /// <param name="first">The text of the first symbology of the composite.</param>
+    /// <param name="second">The text of the second symbology of the composite.</param>
+    /// <exception cref="ArgumentException">
+    /// The composite does not have two parts, a text is not valid, the parts do not join, or the options break a requirement of the standard of the
+    /// symbology. Examples are an X dimension for a symbol whose size the standard fixes, and a text line that does not fit its span.
+    /// </exception>
+    public void DrawBarcode(CompositeBarcodeSymbology symbology, BarcodeOptions options, PointF origin, ReadOnlySpan<char> first, ReadOnlySpan<char> second)
+    {
+        Guard.NotNull(symbology, nameof(symbology));
+        Guard.NotNull(options, nameof(options));
+
+        symbology.Draw(this, options, origin, first, second);
+    }
+
+    /// <summary>
+    /// Draws a composite barcode of three parts. Each symbology of the composite validates and encodes its own text, the composite joins the parts into one
+    /// symbol, then the symbol renders through the regular fill and text commands of this canvas.
+    /// </summary>
+    /// <param name="symbology">The composite barcode symbology to encode with.</param>
+    /// <param name="options">The sizing and painting options.</param>
+    /// <param name="origin">The top left corner of the barcode, in pixels.</param>
+    /// <param name="first">The text of the first symbology of the composite.</param>
+    /// <param name="second">The text of the second symbology of the composite.</param>
+    /// <param name="third">The text of the third symbology of the composite.</param>
+    /// <exception cref="ArgumentException">
+    /// The composite does not have three parts, a text is not valid, the parts do not join, or the options break a requirement of the standard of the
+    /// symbology. Examples are an X dimension for a symbol whose size the standard fixes, and a text line that does not fit its span.
+    /// </exception>
+    public void DrawBarcode(
+        CompositeBarcodeSymbology symbology,
+        BarcodeOptions options,
+        PointF origin,
+        ReadOnlySpan<char> first,
+        ReadOnlySpan<char> second,
+        ReadOnlySpan<char> third)
+    {
+        Guard.NotNull(symbology, nameof(symbology));
+        Guard.NotNull(options, nameof(options));
+
+        symbology.Draw(this, options, origin, first, second, third);
+    }
+
+    /// <summary>
+    /// Measures the layout of a barcode in pixel units.
+    /// </summary>
+    /// <param name="symbology">The barcode symbology to encode with.</param>
+    /// <param name="options">The sizing and painting options.</param>
+    /// <param name="origin">The top left corner of the barcode, in pixels.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The advance, the bounds and the renderable bounds of the barcode.</returns>
+    /// <exception cref="ArgumentException">
+    /// The text is not valid for the symbology, or the options break a requirement of the standard of the symbology. Examples are an X
+    /// dimension for a symbol whose size the standard fixes, and a text line that does not fit its span at the smallest printed height.
+    /// </exception>
+    public abstract BarcodeMetrics MeasureBarcode(BarcodeSymbology symbology, BarcodeOptions options, PointF origin, ReadOnlySpan<char> text);
+
+    /// <summary>
+    /// Measures the layout of a composite barcode of two parts in pixel units.
+    /// </summary>
+    /// <param name="symbology">The composite barcode symbology to encode with.</param>
+    /// <param name="options">The sizing and painting options.</param>
+    /// <param name="origin">The top left corner of the barcode, in pixels.</param>
+    /// <param name="first">The text of the first symbology of the composite.</param>
+    /// <param name="second">The text of the second symbology of the composite.</param>
+    /// <returns>The advance, the bounds and the renderable bounds of the barcode.</returns>
+    /// <exception cref="ArgumentException">
+    /// The composite does not have two parts, a text is not valid, the parts do not join, or the options break a requirement of the standard of the
+    /// symbology. Examples are an X dimension for a symbol whose size the standard fixes, and a text line that does not fit its span.
+    /// </exception>
+    public abstract BarcodeMetrics MeasureBarcode(
+        CompositeBarcodeSymbology symbology,
+        BarcodeOptions options,
+        PointF origin,
+        ReadOnlySpan<char> first,
+        ReadOnlySpan<char> second);
+
+    /// <summary>
+    /// Measures the layout of a composite barcode of three parts in pixel units.
+    /// </summary>
+    /// <param name="symbology">The composite barcode symbology to encode with.</param>
+    /// <param name="options">The sizing and painting options.</param>
+    /// <param name="origin">The top left corner of the barcode, in pixels.</param>
+    /// <param name="first">The text of the first symbology of the composite.</param>
+    /// <param name="second">The text of the second symbology of the composite.</param>
+    /// <param name="third">The text of the third symbology of the composite.</param>
+    /// <returns>The advance, the bounds and the renderable bounds of the barcode.</returns>
+    /// <exception cref="ArgumentException">
+    /// The composite does not have three parts, a text is not valid, the parts do not join, or the options break a requirement of the standard of the
+    /// symbology. Examples are an X dimension for a symbol whose size the standard fixes, and a text line that does not fit its span.
+    /// </exception>
+    public abstract BarcodeMetrics MeasureBarcode(
+        CompositeBarcodeSymbology symbology,
+        BarcodeOptions options,
+        PointF origin,
+        ReadOnlySpan<char> first,
+        ReadOnlySpan<char> second,
+        ReadOnlySpan<char> third);
 }

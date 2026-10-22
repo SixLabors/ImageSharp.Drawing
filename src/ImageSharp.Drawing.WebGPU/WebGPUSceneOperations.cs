@@ -450,7 +450,12 @@ internal sealed class WebGPUShaderEffectSceneItem
     /// <param name="outputRect">The bounds within which the working texture is written back.</param>
     /// <param name="readOffset">The offset subtracted from <paramref name="inputRect"/> when reading source pixels.</param>
     /// <param name="drawRange">The encoded working-texture write-back range.</param>
-    public WebGPUShaderEffectSceneItem(IWebGPUShaderEffectSource effect, Rectangle inputRect, Rectangle outputRect, Point readOffset, WebGPUSceneRange drawRange)
+    public WebGPUShaderEffectSceneItem(
+        IWebGPUShaderEffectSource effect,
+        Rectangle inputRect,
+        Rectangle outputRect,
+        Point readOffset,
+        WebGPUSceneRange drawRange)
     {
         this.Effect = effect;
         this.InputRect = inputRect;

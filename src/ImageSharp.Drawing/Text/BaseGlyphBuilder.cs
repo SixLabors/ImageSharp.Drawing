@@ -4,6 +4,7 @@
 using System.Buffers;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using SixLabors.Fonts;
 using SixLabors.Fonts.Rendering;
 using SixLabors.ImageSharp.Drawing.Processing;
@@ -876,7 +877,14 @@ internal class BaseGlyphBuilder : IGlyphRenderer, IDisposable
     /// transform: the window emits a glyph's segments after the shared builder has already been
     /// retargeted to the next glyph, which rotates per glyph when text follows a path.
     /// </summary>
-    private void EmitDecorationSegment(TextDecorations textDecorations, Vector2 start, Vector2 end, float thickness, bool rotated, TextRun? run, Matrix4x4 transform)
+    private void EmitDecorationSegment(
+        TextDecorations textDecorations,
+        Vector2 start,
+        Vector2 end,
+        float thickness,
+        bool rotated,
+        TextRun? run,
+        Matrix4x4 transform)
     {
         // Clamp the thickness to whole pixels.
         thickness = MathF.Max(1F, (float)Math.Round(thickness));
@@ -1159,10 +1167,10 @@ internal class BaseGlyphBuilder : IGlyphRenderer, IDisposable
         public static readonly PendingDecoration None;
 
         /// <summary>
-        /// The pooled buffer holding the ink, owned by this instance and handed back by
-        /// <see cref="Dispose"/>. Null when the glyph has no ink.
+        /// The pooled buffer holding the ink as bytes from the shared <see cref="byte"/> pool, owned by this
+        /// instance and handed back by <see cref="Dispose"/>. Null when the glyph has no ink.
         /// </summary>
-        private readonly float[]? rented;
+        private readonly byte[]? rented;
 
         /// <summary>
         /// The number of valid entries in <see cref="rented"/>.
@@ -1180,7 +1188,14 @@ internal class BaseGlyphBuilder : IGlyphRenderer, IDisposable
         /// <param name="run">The text run styling the glyph, captured while it was live.</param>
         /// <param name="rotated">Whether the glyph uses vertical layout.</param>
         /// <param name="transform">The composed builder transform of the owning glyph, captured while it was live.</param>
-        public PendingDecoration(Vector2 start, Vector2 end, float thickness, ReadOnlyMemory<float> intersections, TextRun? run, bool rotated, Matrix4x4 transform)
+        public PendingDecoration(
+            Vector2 start,
+            Vector2 end,
+            float thickness,
+            ReadOnlyMemory<float> intersections,
+            TextRun? run,
+            bool rotated,
+            Matrix4x4 transform)
         {
             this.HasValue = true;
             this.Start = start;
@@ -1199,8 +1214,8 @@ internal class BaseGlyphBuilder : IGlyphRenderer, IDisposable
             {
                 // Favor ArrayPool over MemoryAllocator here, as it's faster and the buffers are small and short-lived.
                 // The font engine reuses its own buffer per glyph, so we must take a copy to survive until the glyph is carved.
-                this.rented = ArrayPool<float>.Shared.Rent(intersections.Length);
-                intersections.Span.CopyTo(this.rented);
+                this.rented = ArrayPool<byte>.Shared.Rent(intersections.Length * sizeof(float));
+                intersections.Span.CopyTo(MemoryMarshal.Cast<byte, float>(this.rented.AsSpan()));
                 this.count = intersections.Length;
             }
         }
@@ -1229,7 +1244,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer, IDisposable
         /// <summary>
         /// Gets the along-line ink intervals for this glyph, as <c>[start, end]</c> pairs.
         /// </summary>
-        public ReadOnlySpan<float> Ink => new(this.rented, 0, this.count);
+        public ReadOnlySpan<float> Ink => MemoryMarshal.Cast<byte, float>(this.rented.AsSpan(0, this.count * sizeof(float)));
 
         /// <summary>
         /// Gets the text run styling this glyph, captured while it was live so the pen can still be
@@ -1256,7 +1271,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer, IDisposable
         {
             if (this.rented != null)
             {
-                ArrayPool<float>.Shared.Return(this.rented);
+                ArrayPool<byte>.Shared.Return(this.rented);
             }
         }
     }

@@ -1,0 +1,46 @@
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
+
+namespace SixLabors.ImageSharp.Drawing.Barcodes;
+
+/// <summary>
+/// The Royal Mail 4-state Mailmark barcode, which the Royal Mail Mailmark barcode C and barcode L encoding and decoding instructions define. The text is the
+/// application string: a 22-character string gives barcode C of 66 bars and a 26-character string barcode L of 78 bars. The fields are the format, the version
+/// ID, the class, the supply chain ID of 2 or 6 digits, the item ID of 8 digits and the destination post code plus delivery point suffix of 9 characters. The
+/// bars are the 0.54 mm bars of Table 11 of the Mailmark barcode definition document. An X dimension outside the acceptable 0.38 to 0.63 mm of that
+/// table draws at the nearest limit. The symbol prints no text line, because the Mailmark documents define none.
+/// </summary>
+public sealed class FourStateMailmarkSymbology : BarcodeSymbology
+{
+    /// <summary>
+    /// The dimensions of Table 11. The code clamps the bar width to the acceptable sizes of the same table, "Bar width (all) 0.54 0.38 - 0.63". The code
+    /// clamps the bars per inch to "Bar pitch ... 20 - 24 bars per inch (25.4mm)". The bar heights scale together. The ascender and descender bars of
+    /// "1.60 - 2.16" mm have the narrowest range relative to their recommended 1.90 mm. Thus the code clamps the full bar to 5.10 mm scaled by 1.60 / 1.90
+    /// and by 2.16 / 1.90. The tracker bar and the full bar then stay inside their own acceptable sizes.
+    /// </summary>
+    private static readonly FourStateMetrics Metrics = FourStateEncoder.RoyalMail with
+    {
+        MinimumXDimension = 0.38,
+        MaximumXDimension = 0.63,
+        MinimumBarsPerInch = 20,
+        MaximumBarsPerInch = 24,
+        MinimumFullBar = (float)(5.10 * 1.60 / 1.90 / 0.54),
+        MaximumFullBar = (float)(5.10 * 2.16 / 1.90 / 0.54),
+    };
+
+    /// <inheritdoc/>
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    {
+        int barCount = FourStateMailmarkEncoder.BarCount(text.Length);
+        if (barCount == 0)
+        {
+            throw new ArgumentException($"A Mailmark application string is 22 characters for barcode C or 26 for barcode L; got {text.Length}.", nameof(text));
+        }
+
+        // Barcode L, the larger, has 78 bars.
+        InlineArray128<FourState> stateStorage = default;
+        Span<FourState> states = ((Span<FourState>)stateStorage)[..barCount];
+        FourStateMailmarkEncoder.Encode(text, states);
+        FourStateEncoder.BuildSymbol(states, Metrics, [], options, ref symbol);
+    }
+}

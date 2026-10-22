@@ -14,7 +14,6 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <IsAotCompatible>false</IsAotCompatible>
     <EnableAotAnalyzer>false</EnableAotAnalyzer>
-    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <NoWarn>$(NoWarn);RS1036;SA1513;SA1600;SA1633</NoWarn>
     <EnforceExtendedAnalyzerRules>false</EnforceExtendedAnalyzerRules>
   </PropertyGroup>

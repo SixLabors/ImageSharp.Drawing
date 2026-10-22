@@ -146,7 +146,12 @@ public sealed class WgslSourceGenerator : IIncrementalGenerator
                 _ = builder.AppendLine("        0,");
                 _ = builder.AppendLine("    ];");
                 _ = builder.AppendLine();
-                _ = builder.Append("    public static ReadOnlySpan<byte> ").Append(propertyName).Append("Code => ").Append(propertyName).AppendLine("CodeBytes;");
+                _ = builder.Append("    public static ReadOnlySpan<byte> ")
+                    .Append(propertyName)
+                    .Append("Code => ")
+                    .Append(propertyName)
+                    .AppendLine("CodeBytes;");
+
                 _ = builder.AppendLine();
             }
         }
