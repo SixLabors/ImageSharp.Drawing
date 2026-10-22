@@ -1,0 +1,334 @@
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
+
+using System.Numerics;
+using SixLabors.ImageSharp.Drawing.Helpers;
+
+namespace SixLabors.ImageSharp.Drawing.Barcodes;
+
+/// <summary>
+/// Builds PDF417 and Compact PDF417 symbols, ISO/IEC 15438: the symbol matrix of section 5.9, the row indicators of section 5.11.3 and the rows of section
+/// 5.2.2.
+/// </summary>
+internal static class Pdf417Encoder
+{
+    /// <summary>
+    /// The fewest data columns of a symbol, section 5.2.1.
+    /// </summary>
+    public const int MinimumColumns = 1;
+
+    /// <summary>
+    /// The most data columns of a symbol, section 5.2.1.
+    /// </summary>
+    public const int MaximumColumns = 30;
+
+    /// <summary>
+    /// The highest error correction level, Table 9.
+    /// </summary>
+    public const int MaximumErrorCorrectionLevel = 8;
+
+    /// <summary>
+    /// The fewest rows of a symbol, section 5.2.1.
+    /// </summary>
+    private const int MinimumRows = 3;
+
+    /// <summary>
+    /// The most rows of a symbol, section 5.2.1.
+    /// </summary>
+    private const int MaximumRows = 90;
+
+    /// <summary>
+    /// The most codewords a symbol holds, Annex O parameter 9: c x r &lt; 929.
+    /// </summary>
+    private const int MaximumCodewords = 928;
+
+    /// <summary>
+    /// The nominal row height in modules, the minimum of section 5.8.2: Y &gt;= 3X.
+    /// </summary>
+    private const float NominalRowHeight = 3F;
+
+    /// <summary>
+    /// The quiet zone on each of the four sides in modules, the minimum of section 5.8.3.
+    /// </summary>
+    private const int QuietZone = 2;
+
+    /// <summary>
+    /// The number of rows over which the row indicators repeat their information, section 5.11.3.
+    /// </summary>
+    private const int IndicatorCycle = 3;
+
+    /// <summary>
+    /// The step of the row indicator values from one cycle of three rows to the next, section 5.11.3.
+    /// </summary>
+    private const int IndicatorStep = 30;
+
+    /// <summary>
+    /// Gets the element widths of the start character, Table 1.
+    /// </summary>
+    private static ReadOnlySpan<int> Start => [8, 1, 1, 1, 1, 1, 1, 3];
+
+    /// <summary>
+    /// Gets the element widths of the stop character, Table 1.
+    /// </summary>
+    private static ReadOnlySpan<int> Stop => [7, 1, 1, 3, 1, 1, 1, 2, 1];
+
+    /// <summary>
+    /// Returns the recommended minimum error correction level of Table E.1 of ISO/IEC 15438 for a number of data codewords.
+    /// </summary>
+    /// <param name="dataCodewords">The number of data codewords.</param>
+    /// <returns>The error correction level, 2 to 5.</returns>
+    public static int RecommendedErrorCorrectionLevel(int dataCodewords)
+        => dataCodewords <= 40 ? 2 : dataCodewords <= 160 ? 3 : dataCodewords <= 320 ? 4 : 5;
+
+    /// <summary>
+    /// Encodes the text into a symbol.
+    /// </summary>
+    /// <param name="text">The data, the characters U+0000 to U+00FF.</param>
+    /// <param name="columns">The number of data columns, 1 to 30, or <see langword="null"/> to choose them from the data.</param>
+    /// <param name="errorCorrectionLevel">The error correction level, 0 to 8, or <see langword="null"/> to choose it from the data.</param>
+    /// <param name="compact">Whether the symbol is Compact PDF417, Annex G.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    /// <exception cref="ArgumentException">The data is not valid or does not fit the symbol.</exception>
+    public static void BuildSymbol(
+        ReadOnlySpan<char> text,
+        int? columns,
+        int? errorCorrectionLevel,
+        bool compact,
+        BarcodeOptions options,
+        ref BarcodeSymbol symbol)
+    {
+        // A character takes at most two data codewords. A numeric or text run costs less than two for each character with its latch. A single byte shifted
+        // out of Text Compaction mode costs two. A byte run costs one latch and at most one codeword for each byte. The text is bounded, so the builder never
+        // grows. Short data works inline, and longer data rents once.
+        Guard.MustBeLessThanOrEqualTo(text.Length, Pdf417Codewords.MaximumLength, nameof(text));
+        InlineArray64<int> dataStorage = default;
+        int capacity = (2 * text.Length) + 1;
+        ValueListBuilder<int> data = capacity <= Pdf417Codewords.InlineBufferLength ? new(dataStorage) : new(capacity);
+        try
+        {
+            Pdf417Codewords.Encode(text, ref data);
+            BuildSymbol(data.AsSpan(), columns, errorCorrectionLevel, compact, options, ref symbol);
+        }
+        finally
+        {
+            data.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Builds the symbol from its data codewords.
+    /// </summary>
+    /// <param name="data">The data codewords, without the Symbol Length Descriptor.</param>
+    /// <param name="columns">The number of data columns, 1 to 30, or <see langword="null"/> to choose them from the data.</param>
+    /// <param name="errorCorrectionLevel">The error correction level, 0 to 8, or <see langword="null"/> to choose it from the data.</param>
+    /// <param name="compact">Whether the symbol is Compact PDF417, Annex G.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    /// <exception cref="ArgumentException">The data does not fit the symbol.</exception>
+    private static void BuildSymbol(
+        ReadOnlySpan<int> data,
+        int? columns,
+        int? errorCorrectionLevel,
+        bool compact,
+        BarcodeOptions options,
+        ref BarcodeSymbol symbol)
+    {
+        // The data codewords, the Symbol Length Descriptor and at least the two error correction codewords of level 0 must fit in the largest matrix.
+        int m = data.Length;
+        if (m + 1 + 2 > MaximumCodewords)
+        {
+            throw new ArgumentException($"The data takes {m} codewords; a PDF417 symbol holds at most {MaximumCodewords - 3}.");
+        }
+
+        // Without a chosen level the symbol takes the recommended minimum of Table E.1, lowered where the data leaves too little room for its error correction
+        // codewords: 2^(s + 1) codewords fit when s + 1 <= log2(927 - m).
+        int level;
+        if (errorCorrectionLevel.HasValue)
+        {
+            level = errorCorrectionLevel.Value;
+        }
+        else
+        {
+            level = RecommendedErrorCorrectionLevel(m);
+            level = Math.Min(level, BitOperations.Log2((uint)(MaximumCodewords - 1 - m)) - 1);
+        }
+
+        // Without chosen columns the matrix is close to three rows per column, the nearest whole number of columns to the square root of a third of the
+        // codewords.
+        int k = 2 << level;
+        int c = columns ?? (int)Math.Floor(Math.Sqrt((m + k) / 3D) + 0.5D);
+        int r = Math.Max(MinimumRows, (m + 1 + k + c - 1) / c);
+
+        // Section 5.1.1 gives a symbol 925 data codewords. Near that capacity the rows of the chosen column count can hold more than the 928 codewords of
+        // section 5.2.3, or more than 90 rows, so without chosen columns the matrix widens until it fits.
+        if (!columns.HasValue)
+        {
+            while ((r > MaximumRows || c * r > MaximumCodewords) && c < MaximumColumns)
+            {
+                c++;
+                r = Math.Max(MinimumRows, (m + 1 + k + c - 1) / c);
+            }
+        }
+
+        if (r > MaximumRows || c * r > MaximumCodewords)
+        {
+            throw new ArgumentException($"The data takes {m} codewords and does not fit in a PDF417 symbol of {c} columns.");
+        }
+
+        // Without a chosen level the error correction grows into the room the rows leave, up to level 8, rather than filling it with pad codewords.
+        if (!errorCorrectionLevel.HasValue)
+        {
+            int roomLevel = Math.Min(BitOperations.Log2((uint)((c * r) - 1 - m)) - 1, MaximumErrorCorrectionLevel);
+            level = Math.Max(level, roomLevel);
+        }
+
+        // Section 5.8.1: the X dimension "should be defined by the application specification", so this standard gives no limit.
+        double xDimension = options.ResolveXDimension(0, BarcodeSymbology.DefaultXDimension, double.PositiveInfinity);
+
+        // Section 5.8.2: the row height is "Y >= 3X", and "the row height may be increased". It gives no maximum.
+        float rowHeight = options.ResolveBarHeight(xDimension, NominalRowHeight, NominalRowHeight, float.PositiveInfinity);
+        BuildMatrix(data, c, r, level, compact, xDimension, rowHeight, QuietZone, ref symbol);
+    }
+
+    /// <summary>
+    /// Builds a symbol of a chosen number of columns and error correction level from its data codewords, in the fewest rows that hold them. Section 10 of
+    /// ISO/IEC 24723 builds the CC-C 2D component of a GS1 Composite symbol this way: its bit stream fills the data region, so the symbol takes no pad codewords,
+    /// and section 11.5 gives it no quiet zone above or below.
+    /// </summary>
+    /// <param name="data">The data codewords, without the Symbol Length Descriptor.</param>
+    /// <param name="columns">The number of data columns, 1 to 30.</param>
+    /// <param name="level">The error correction level, 0 to 8.</param>
+    /// <param name="xDimension">The X dimension in millimetres.</param>
+    /// <param name="verticalQuietZone">The quiet zone above and below the symbol in modules.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildSymbol(ReadOnlySpan<int> data, int columns, int level, double xDimension, float verticalQuietZone, ref BarcodeSymbol symbol)
+    {
+        int k = 2 << level;
+        int r = Math.Max(MinimumRows, (data.Length + 1 + k + columns - 1) / columns);
+        BuildMatrix(data, columns, r, level, false, xDimension, NominalRowHeight, verticalQuietZone, ref symbol);
+    }
+
+    /// <summary>
+    /// Builds the symbol matrix of section 5.9 from the data codewords: the Symbol Length Descriptor, the data, the pad codewords and the error correction
+    /// codewords, then the rows.
+    /// </summary>
+    /// <param name="data">The data codewords, without the Symbol Length Descriptor.</param>
+    /// <param name="c">The number of data columns.</param>
+    /// <param name="r">The number of rows.</param>
+    /// <param name="level">The error correction level.</param>
+    /// <param name="compact">Whether the symbol is Compact PDF417.</param>
+    /// <param name="xDimension">The X dimension in millimetres.</param>
+    /// <param name="rowHeight">The height of a row in modules.</param>
+    /// <param name="verticalQuietZone">The quiet zone above and below the symbol in modules.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    private static void BuildMatrix(
+        ReadOnlySpan<int> data,
+        int c,
+        int r,
+        int level,
+        bool compact,
+        double xDimension,
+        float rowHeight,
+        float verticalQuietZone,
+        ref BarcodeSymbol symbol)
+    {
+        // Section 5.9.2: the Symbol Length Descriptor n = c x r - k counts itself, the data and the pad codewords, which fill the rest of the data region with
+        // 900. One rental holds the codewords and the generator coefficients of the error correction.
+        int m = data.Length;
+        int k = 2 << level;
+        int total = c * r;
+        int n = total - k;
+        PooledBuffer<int> rented = new(total + k + 1);
+        try
+        {
+            Span<int> codewords = rented.Span[..total];
+            codewords[0] = n;
+            data.CopyTo(codewords[1..]);
+            codewords[(m + 1)..n].Fill(Pdf417Codewords.Pad);
+            Pdf417Codewords.AppendErrorCorrection(codewords, k, rented.Span[total..]);
+
+            BuildRows(codewords, c, r, level, compact, xDimension, rowHeight, verticalQuietZone, ref symbol);
+        }
+        finally
+        {
+            rented.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Builds the rows of the symbol: the start character, the left row indicator, the codewords of the row, the right row indicator and the stop character.
+    /// Compact PDF417, Annex G, drops the right row indicator and ends the row with a single module bar.
+    /// </summary>
+    /// <param name="codewords">The codewords in row order, error correction codewords included.</param>
+    /// <param name="c">The number of data columns.</param>
+    /// <param name="r">The number of rows.</param>
+    /// <param name="level">The error correction level.</param>
+    /// <param name="compact">Whether the symbol is Compact PDF417.</param>
+    /// <param name="xDimension">The X dimension in millimetres.</param>
+    /// <param name="rowHeight">The height of a row in modules.</param>
+    /// <param name="verticalQuietZone">The quiet zone above and below the symbol in modules.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    private static void BuildRows(
+        ReadOnlySpan<int> codewords,
+        int c,
+        int r,
+        int level,
+        bool compact,
+        double xDimension,
+        float rowHeight,
+        float verticalQuietZone,
+        ref BarcodeSymbol symbol)
+    {
+        // A row of a full symbol is the start character, c + 2 symbol characters and the stop character; a compact row is the start character, c + 1 symbol
+        // characters and one bar.
+        int runCount = compact
+            ? Start.Length + ((c + 1) * Pdf417Patterns.ElementCount) + 1
+            : Start.Length + ((c + 2) * Pdf417Patterns.ElementCount) + Stop.Length;
+
+        ReadOnlySpan<int> patterns = Pdf417Patterns.Modules;
+        symbol.BeginStacked(r, r * runCount, r * ((runCount + 1) >> 1), xDimension);
+        for (int row = 0; row < r; row++)
+        {
+            // Section 5.11.1: row 1 uses cluster 0, row 2 cluster 3 and row 3 cluster 6, repeating. The cluster index here is 0, 1 or 2, and the pattern table
+            // holds the clusters in that order.
+            int cluster = row % IndicatorCycle;
+            ReadOnlySpan<int> clusterPatterns = patterns.Slice(cluster * Pdf417Patterns.CodewordCount, Pdf417Patterns.CodewordCount);
+
+            // Section 5.11.3: each indicator carries the row number F = row + 1 as 30 x ((F - 1) div 3), and one of three values in turn: (r - 1) div 3, the
+            // error correction level and (r - 1) mod 3 as s x 3 + (r - 1) mod 3, and c - 1.
+            int cycle = IndicatorStep * (row / IndicatorCycle);
+            int rowValue = cycle + ((r - 1) / IndicatorCycle);
+            int levelValue = cycle + (level * 3) + ((r - 1) % IndicatorCycle);
+            int columnValue = cycle + c - 1;
+            (int left, int right) = cluster switch
+            {
+                0 => (rowValue, columnValue),
+                1 => (levelValue, rowValue),
+                _ => (columnValue, levelValue),
+            };
+
+            Span<int> runs = symbol.AddRow(runCount, out Span<float> heights, out _);
+            heights.Fill(rowHeight);
+            Start.CopyTo(runs);
+            int index = Start.Length;
+            Pdf417Patterns.AppendCharacter(runs, ref index, clusterPatterns[left]);
+            for (int column = 0; column < c; column++)
+            {
+                Pdf417Patterns.AppendCharacter(runs, ref index, clusterPatterns[codewords[(row * c) + column]]);
+            }
+
+            if (compact)
+            {
+                runs[index] = 1;
+            }
+            else
+            {
+                Pdf417Patterns.AppendCharacter(runs, ref index, clusterPatterns[right]);
+                Stop.CopyTo(runs[index..]);
+            }
+        }
+
+        symbol.EndStacked(0F, QuietZone, QuietZone, verticalQuietZone, verticalQuietZone);
+    }
+}

@@ -1,0 +1,67 @@
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
+
+using SixLabors.Fonts.Unicode;
+using SixLabors.ImageSharp.Drawing.Helpers;
+
+namespace SixLabors.ImageSharp.Drawing.Barcodes;
+
+/// <summary>
+/// A custom height modulated symbology whose input is the bar states themselves: D for a descender, A for an ascender, F for a full bar and T for a tracker.
+/// The bars have the dimensions of Table 11 of the Royal Mail Mailmark barcode definition document. The symbol has no quiet zone and prints no line.
+/// </summary>
+public sealed class DaftSymbology : BarcodeSymbology
+{
+    /// <summary>
+    /// The largest number of bars a symbol carries.
+    /// </summary>
+    public const int MaximumLength = 2500;
+
+    /// <summary>
+    /// The dimensions: those of the Royal Mail symbologies, without their clear zone.
+    /// </summary>
+    private static readonly FourStateMetrics Metrics = new(
+        FourStateEncoder.RoyalMail.XDimension,
+        FourStateEncoder.RoyalMail.Space,
+        FourStateEncoder.RoyalMail.Ascender,
+        FourStateEncoder.RoyalMail.Tracker,
+        FourStateEncoder.RoyalMail.Descender,
+        0F);
+
+    /// <inheritdoc/>
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    {
+        Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
+        Guard.MustBeLessThanOrEqualTo(text.Length, MaximumLength, nameof(text));
+
+        // One bar for each letter. The text is at most MaximumLength letters, so a short symbol works inline and a longer one rents its states once.
+        InlineArray128<FourState> stateStorage = default;
+        PooledBuffer<FourState> rented = default;
+        Span<FourState> states = text.Length <= 128
+            ? ((Span<FourState>)stateStorage)[..text.Length]
+            : (rented = new PooledBuffer<FourState>(text.Length)).Span;
+        try
+        {
+            int index = 0;
+            SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
+            while (codePoints.MoveNext())
+            {
+                CodePoint current = codePoints.Current;
+                states[index++] = current.Value switch
+                {
+                    'D' => FourState.Descender,
+                    'A' => FourState.Ascender,
+                    'F' => FourState.Full,
+                    'T' => FourState.Tracker,
+                    _ => throw new ArgumentException($"A DAFT symbol carries only the letters D, A, F and T; got {current.ToDisplayString()}.", nameof(text)),
+                };
+            }
+
+            FourStateEncoder.BuildSymbol(states, Metrics, [], options, ref symbol);
+        }
+        finally
+        {
+            rented.Dispose();
+        }
+    }
+}

@@ -81,7 +81,7 @@ jobs:
             sdk-preview: true
             runtime: -x64
             codecov: false
-          - os: ubuntu-22.04-arm
+          - os: ubuntu-24.04-arm
             framework: net11.0
             sdk: 11.0.x
             sdk-preview: true
@@ -103,7 +103,7 @@ jobs:
             sdk: 10.0.x
             runtime: -x64
             codecov: false
-          - os: ubuntu-22.04-arm
+          - os: ubuntu-24.04-arm
             framework: net10.0
             sdk: 10.0.x
             runtime: -x64

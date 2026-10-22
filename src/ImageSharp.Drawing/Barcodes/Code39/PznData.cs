@@ -1,0 +1,146 @@
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
+
+using SixLabors.ImageSharp.Drawing.Helpers;
+
+namespace SixLabors.ImageSharp.Drawing.Barcodes;
+
+/// <summary>
+/// The data layer the Pharmazentralnummer symbologies share. IFA gives the data structure as a minus sign followed by the number: "The minus sign is
+/// internationally standardized as an identifier for the PZN in ISO/IEC 15418 and serves to identify the PZN", and "the last digit of the PZN is the check
+/// digit".
+/// </summary>
+internal static class PznData
+{
+    /// <summary>
+    /// The identifier ISO/IEC 15418 gives the PZN, which opens the encoded data.
+    /// </summary>
+    private const char Identifier = '-';
+
+    /// <summary>
+    /// The term the printed line opens with, with the identifier and the spaces IFA adds for readability. Neither the term nor the spaces are encoded.
+    /// </summary>
+    private const string ReadablePrefix = "PZN - ";
+
+    /// <summary>
+    /// The bar height in modules a symbol takes when the caller sets none. IFA gives a nominal code height of 10 mm at the nominal module width of 0.25 mm, and
+    /// says "the code height of nominally 10 mm changes proportionately to the nominal module width".
+    /// </summary>
+    private const float NominalBarHeight = 40F;
+
+    /// <summary>
+    /// The narrow term of the wide to narrow ratio, <see cref="WideElement"/> / <see cref="NarrowElement"/>.
+    /// </summary>
+    private const int NarrowElement = 2;
+
+    /// <summary>
+    /// The wide term of the wide to narrow ratio. IFA: "The nominal ratio (proportion of narrow to wide bar) should be 1:2.5. Permissible is 1:2 to 1:3."
+    /// </summary>
+    private const int WideElement = 5;
+
+    /// <summary>
+    /// The smallest bar height in modules. IFA: "For a normal size of X = 0.25 mm, the code can be between 8 and 20 mm high", and the height "changes
+    /// proportionately to the nominal module width", so 8 mm is 32 modules.
+    /// </summary>
+    private const float MinimumBarHeight = 32F;
+
+    /// <summary>
+    /// The largest bar height in modules, the 20 mm of the same range, 80 modules.
+    /// </summary>
+    private const float MaximumBarHeight = 80F;
+
+    /// <summary>
+    /// The smallest size of the printed line in points. IFA prints the PZN "in a well-readable font size (at least 6 pt. for a small code)".
+    /// </summary>
+    private const float MinimumTextSize = 6F;
+
+    /// <summary>
+    /// The X dimension in millimetres a symbol takes when the caller sets none: the nominal module width of 0.25 mm that IFA gives.
+    /// </summary>
+    private const double NominalXDimension = 0.25;
+
+    /// <summary>
+    /// The smallest X dimension in millimetres. IFA: "The code size may vary within the limits stipulated by the parameter listed below", and "Permissible is
+    /// a minimal width: Module width X = 187 µm".
+    /// </summary>
+    private const double MinimumXDimension = 0.187;
+
+    /// <summary>
+    /// The largest X dimension in millimetres. IFA: "a maximum code size: Module width X = 450 µm".
+    /// </summary>
+    private const double MaximumXDimension = 0.45;
+
+    /// <summary>
+    /// The modulus of the check digit. IFA: "The check digit of the PZN is calculated based on mod 11."
+    /// </summary>
+    private const int CheckModulus = 11;
+
+    /// <summary>
+    /// The weight the final data digit takes, whatever the length. IFA weights the seven digits of a PZN8 from one, so the seventh takes seven, and a PZN7
+    /// carries one digit fewer and starts at two.
+    /// </summary>
+    private const int FinalWeight = 7;
+
+    /// <summary>
+    /// Encodes a Pharmazentralnummer of the given length into a Code 39 symbol.
+    /// </summary>
+    /// <param name="text"> The data digits on their own, in which case the check digit is calculated, or the data digits and the check digit, in which case the
+    /// last is checked against the rest. </param>
+    /// <param name="digits">The number of data digits the length carries, excluding the check digit.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    /// <exception cref="ArgumentException">The text is not a valid Pharmazentralnummer.</exception>
+    public static void BuildSymbol(ReadOnlySpan<char> text, int digits, BarcodeOptions options, ref BarcodeSymbol symbol)
+    {
+        Guard.MustBeBetweenOrEqualTo(text.Length, digits, digits + 1, nameof(text));
+
+        BarcodeSymbology.ValidateDigits(text);
+
+        // IFA: "The sum is formed across the products and divided by 11. The whole number remainder is the check digit."
+        int sum = 0;
+        int weight = FinalWeight - digits + 1;
+        for (int i = 0; i < digits; i++)
+        {
+            sum += (text[i] - '0') * (weight + i);
+        }
+
+        int check = sum % CheckModulus;
+        if (check == 10)
+        {
+            // IFA: "If the remainder is the number 10, this digit sequence is not used as PZN."
+            throw new ArgumentException($"The digits '{text[..digits]}' leave a remainder of 10, which IFA does not issue as a PZN.", nameof(text));
+        }
+
+        if (text.Length > digits && text[digits] - '0' != check)
+        {
+            throw new ArgumentException($"Incorrect PZN check digit: expected {check}, got {text[digits]}.", nameof(text));
+        }
+
+        // The symbol carries the identifier, the digits and the check digit: at most nine characters.
+        InlineArray10<char> encodedStorage = default;
+        Span<char> encoded = ((Span<char>)encodedStorage)[..(digits + 2)];
+        encoded[0] = Identifier;
+        text.Slice(0, digits).CopyTo(encoded[1..]);
+        encoded[^1] = (char)('0' + check);
+
+        double xDimension = options.ResolveXDimension(MinimumXDimension, NominalXDimension, MaximumXDimension);
+
+        // The runs count pixels, so every element draws at a whole number of pixels. A wide element is WideElement / NarrowElement modules, rounded half up
+        // to a whole pixel: at an odd number of pixels a module the ratio of 2.5 becomes 3.0 at one pixel and 2.67 at three, both inside the permitted 1:2 to
+        // 1:3, and every wide element takes the same width.
+        int pixels = options.ModulePixels(xDimension);
+        Code39Layout layout = new()
+        {
+            XDimension = xDimension,
+            NominalBarHeight = NominalBarHeight,
+            MinimumBarHeight = MinimumBarHeight,
+            MaximumBarHeight = MaximumBarHeight,
+            NarrowElement = pixels,
+            WideElement = ((WideElement * pixels) + (NarrowElement / 2)) / NarrowElement,
+        };
+
+        Code39Encoder.BuildSymbol(encoded, null, ReadablePrefix, encoded[1..], [], in layout, options, ref symbol);
+
+        symbol.SetTextSize(MinimumTextSize, 0F);
+    }
+}

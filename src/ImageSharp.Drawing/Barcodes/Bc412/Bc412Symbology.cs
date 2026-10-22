@@ -1,0 +1,78 @@
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
+
+using SixLabors.Fonts.Unicode;
+using SixLabors.ImageSharp.Drawing.Helpers;
+
+namespace SixLabors.ImageSharp.Drawing.Barcodes;
+
+/// <summary>
+/// The BC412 symbology of SEMI T1-95. It carries 7 to 18 characters from the digits and the capital letters without O, for which the digit 0 stands. Every
+/// symbol carries the modulo 35 check character after its first data character, and the printed line shows the data with the check character in that place. The
+/// start and stop characters are not shown.
+/// </summary>
+public sealed class Bc412Symbology : BarcodeSymbology
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Bc412Symbology"/> class.
+    /// </summary>
+    public Bc412Symbology()
+        : this(false)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Bc412Symbology"/> class.
+    /// </summary>
+    /// <param name="validateCheckCharacter"> Whether the second character of the input is the check character, which the encoder validates, rather than data,
+    /// for which the encoder calculates it. </param>
+    public Bc412Symbology(bool validateCheckCharacter)
+        => this.ValidateCheckCharacter = validateCheckCharacter;
+
+    /// <summary>
+    /// Gets a value indicating whether the second character of the input is the check character, which the encoder validates, rather than data, for which the
+    /// encoder calculates it.
+    /// </summary>
+    public bool ValidateCheckCharacter { get; }
+
+    /// <inheritdoc/>
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    {
+        int supplied = this.ValidateCheckCharacter ? 1 : 0;
+        int dataLength = text.Length - supplied;
+        Guard.MustBeBetweenOrEqualTo(dataLength, Bc412Encoder.MinimumLength, Bc412Encoder.MaximumLength, nameof(text));
+
+        SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
+        while (codePoints.MoveNext())
+        {
+            CodePoint current = codePoints.Current;
+            if (Bc412Encoder.Value(current.Value) < 0)
+            {
+                throw new ArgumentException($"BC412 carries only digits and capital letters other than O; got {current.ToDisplayString()}.", nameof(text));
+            }
+        }
+
+        // The data without the check character, then the characters the symbol carries: the first data character, the check character and the remaining data. A
+        // symbol carries at most 18 data characters.
+        InlineArray18<char> dataStorage = default;
+        Span<char> data = dataStorage;
+        data[0] = text[0];
+        text.Slice(1 + supplied).CopyTo(data[1..]);
+        data = data[..dataLength];
+
+        char check = Bc412Encoder.CheckCharacter(data);
+        if (this.ValidateCheckCharacter && text[Bc412Encoder.CheckPosition] != check)
+        {
+            throw new ArgumentException($"Incorrect check character: expected {check}, got {text[Bc412Encoder.CheckPosition]}.", nameof(text));
+        }
+
+        InlineArray19<char> carriedStorage = default;
+        Span<char> carried = carriedStorage;
+        carried[0] = data[0];
+        carried[Bc412Encoder.CheckPosition] = check;
+        data[1..].CopyTo(carried[(Bc412Encoder.CheckPosition + 1)..]);
+        carried = carried[..(dataLength + 1)];
+
+        Bc412Encoder.BuildSymbol(carried, options, ref symbol);
+    }
+}

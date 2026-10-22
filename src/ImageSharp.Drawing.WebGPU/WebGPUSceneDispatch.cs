@@ -208,7 +208,12 @@ internal static class WebGPUSceneDispatch
                 throw new InvalidOperationException(error);
             }
 
-            if (!TryValidateBindingSizes(encodedScene, config, flushContext.ScratchBufferBindingSizeLimit, out BindingLimitFailure bindingLimitFailure, out error))
+            if (!TryValidateBindingSizes(
+                encodedScene,
+                config,
+                flushContext.ScratchBufferBindingSizeLimit,
+                out BindingLimitFailure bindingLimitFailure,
+                out error))
             {
                 if (!IsChunkableBindingFailure(bindingLimitFailure.Buffer))
                 {
@@ -232,7 +237,14 @@ internal static class WebGPUSceneDispatch
                     true);
             }
 
-            if (!WebGPUSceneResources.TryCreate<TPixel>(flushContext, encodedScene, config, baseColor, ref resourceArena, out WebGPUSceneResourceSet resources, out error))
+            if (!WebGPUSceneResources.TryCreate<TPixel>(
+                flushContext,
+                encodedScene,
+                config,
+                baseColor,
+                ref resourceArena,
+                out WebGPUSceneResourceSet resources,
+                out error))
             {
                 throw new InvalidOperationException(error ?? "Failed to create WebGPU scene resources.");
             }
@@ -401,7 +413,8 @@ internal static class WebGPUSceneDispatch
     {
         if (drawTagStart < 0 || drawTagCount < 0 || drawTagStart + drawTagCount > encodedScene.DrawTagCount)
         {
-            error = $"The WebGPU {label} draw-tag range [{drawTagStart}, {drawTagStart + drawTagCount}) is outside the encoded draw-tag stream length {encodedScene.DrawTagCount}.";
+            error = $"The WebGPU {label} draw-tag range [{drawTagStart}, {drawTagStart + drawTagCount}) " +
+                $"is outside the encoded draw-tag stream length {encodedScene.DrawTagCount}.";
             return false;
         }
 
@@ -435,13 +448,15 @@ internal static class WebGPUSceneDispatch
 
             if (sceneOffset + drawMonoid.SceneOffset > expectedDrawDataWordCount)
             {
-                error = $"The WebGPU {label} draw tag {drawTagStart + i} reads draw-data words [{sceneOffset}, {sceneOffset + drawMonoid.SceneOffset}), but the stream declares {expectedDrawDataWordCount} words.";
+                error = $"The WebGPU {label} draw tag {drawTagStart + i} reads draw-data words [{sceneOffset}, {sceneOffset + drawMonoid.SceneOffset}), " +
+                    $"but the stream declares {expectedDrawDataWordCount} words.";
                 return false;
             }
 
             if (infoOffset + drawMonoid.InfoOffset > expectedInfoWordCount)
             {
-                error = $"The WebGPU {label} draw tag {drawTagStart + i} writes info words [{infoOffset}, {infoOffset + drawMonoid.InfoOffset}), but the stream declares {expectedInfoWordCount} words.";
+                error = $"The WebGPU {label} draw tag {drawTagStart + i} writes info words [{infoOffset}, {infoOffset + drawMonoid.InfoOffset}), " +
+                    $"but the stream declares {expectedInfoWordCount} words.";
                 return false;
             }
 
@@ -475,13 +490,15 @@ internal static class WebGPUSceneDispatch
                 long parentDrawIndex = clipDrawStack[depth];
                 if (parentPathIndex < 0 || parentPathIndex >= expectedPathCount)
                 {
-                    error = $"The WebGPU {label} EndClip at draw tag {drawTagStart + i} resolves to path {parentPathIndex}, but the stream declares {expectedPathCount} paths.";
+                    error = $"The WebGPU {label} EndClip at draw tag {drawTagStart + i} resolves to path {parentPathIndex}, " +
+                        $"but the stream declares {expectedPathCount} paths.";
                     return false;
                 }
 
                 if (parentDrawIndex < 0 || parentDrawIndex >= drawTagCount)
                 {
-                    error = $"The WebGPU {label} EndClip at draw tag {drawTagStart + i} resolves to draw tag {parentDrawIndex}, but the stream contains {drawTagCount} draw tags.";
+                    error = $"The WebGPU {label} EndClip at draw tag {drawTagStart + i} resolves to draw tag {parentDrawIndex}, " +
+                        $"but the stream contains {drawTagCount} draw tags.";
                     return false;
                 }
 
@@ -557,32 +574,186 @@ internal static class WebGPUSceneDispatch
     {
         bindingLimitFailure = BindingLimitFailure.None;
         WebGPUSceneBufferSizes bufferSizes = config.BufferSizes;
-        nuint infoBinDataByteLength = checked(config.BufferSizes.Info.ByteLength + config.BufferSizes.BinData.ByteLength + config.BufferSizes.BinHeaders.ByteLength);
-        if (!TryValidateBufferSize(GetBindingByteLength<GpuSceneConfig>(1), "scene config", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
-            !TryValidateBufferSize(GetBindingByteLength<uint>(encodedScene.SceneWordCount), "scene data", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
-            !TryValidateBufferSize(bufferSizes.PathReduced.ByteLength, "path reduced", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
-            !TryValidateBufferSize(bufferSizes.PathReduced2.ByteLength, "path reduced2", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
-            !TryValidateBufferSize(bufferSizes.PathReducedScan.ByteLength, "path reduced scan", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
-            !TryValidateBufferSize(bufferSizes.PathMonoids.ByteLength, "path monoids", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
-            !TryValidateBufferSize(bufferSizes.PathBboxes.ByteLength, "path bboxes", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
-            !TryValidateBufferSize(bufferSizes.DrawReduced.ByteLength, "draw reduced", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
-            !TryValidateBufferSize(bufferSizes.DrawMonoids.ByteLength, "draw monoids", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
-            !TryValidateBufferSize(infoBinDataByteLength, "scene info/bin data", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
-            !TryValidateBufferSize(bufferSizes.ClipInputs.ByteLength, "clip inputs", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
-            !TryValidateBufferSize(bufferSizes.ClipElements.ByteLength, "clip elements", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
-            !TryValidateBufferSize(bufferSizes.ClipBics.ByteLength, "clip bics", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
-            !TryValidateBufferSize(bufferSizes.ClipBboxes.ByteLength, "clip bboxes", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
-            !TryValidateBufferSize(bufferSizes.DrawBboxes.ByteLength, "draw bboxes", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
-            !TryValidateBufferSize(bufferSizes.Paths.ByteLength, "scene paths", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
-            !TryValidateBufferSize(bufferSizes.Lines.ByteLength, "scene lines", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
-            !TryValidateBufferSize(bufferSizes.BinHeaders.ByteLength, "bin headers", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
-            !TryValidateBufferSize(bufferSizes.IndirectCount.ByteLength, "indirect count", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
-            !TryValidateBufferSize(bufferSizes.PathRows.ByteLength, "path rows", BindingLimitBuffer.PathRows, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
-            !TryValidateBufferSize(bufferSizes.PathTiles.ByteLength, "path tiles", BindingLimitBuffer.PathTiles, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
-            !TryValidateBufferSize(bufferSizes.SegCounts.ByteLength, "segment counts", BindingLimitBuffer.SegCounts, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
-            !TryValidateBufferSize(bufferSizes.Segments.ByteLength, "segments", BindingLimitBuffer.Segments, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
-            !TryValidateBufferSize(bufferSizes.BlendSpill.ByteLength, "blend spill", BindingLimitBuffer.BlendSpill, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
-            !TryValidateBufferSize(bufferSizes.Ptcl.ByteLength, "ptcl", BindingLimitBuffer.Ptcl, maxStorageBufferBindingSize, out bindingLimitFailure, out error))
+        nuint infoBinDataByteLength = checked(
+            config.BufferSizes.Info.ByteLength +
+            config.BufferSizes.BinData.ByteLength +
+            config.BufferSizes.BinHeaders.ByteLength);
+
+        if (!TryValidateBufferSize(
+                GetBindingByteLength<GpuSceneConfig>(1),
+                "scene config",
+                BindingLimitBuffer.None,
+                maxStorageBufferBindingSize,
+                out bindingLimitFailure,
+                out error) ||
+            !TryValidateBufferSize(
+                GetBindingByteLength<uint>(encodedScene.SceneWordCount),
+                "scene data",
+                BindingLimitBuffer.None,
+                maxStorageBufferBindingSize,
+                out bindingLimitFailure,
+                out error) ||
+            !TryValidateBufferSize(
+                bufferSizes.PathReduced.ByteLength,
+                "path reduced",
+                BindingLimitBuffer.None,
+                maxStorageBufferBindingSize,
+                out bindingLimitFailure,
+                out error) ||
+            !TryValidateBufferSize(
+                bufferSizes.PathReduced2.ByteLength,
+                "path reduced2",
+                BindingLimitBuffer.None,
+                maxStorageBufferBindingSize,
+                out bindingLimitFailure,
+                out error) ||
+            !TryValidateBufferSize(
+                bufferSizes.PathReducedScan.ByteLength,
+                "path reduced scan",
+                BindingLimitBuffer.None,
+                maxStorageBufferBindingSize,
+                out bindingLimitFailure,
+                out error) ||
+            !TryValidateBufferSize(
+                bufferSizes.PathMonoids.ByteLength,
+                "path monoids",
+                BindingLimitBuffer.None,
+                maxStorageBufferBindingSize,
+                out bindingLimitFailure,
+                out error) ||
+            !TryValidateBufferSize(
+                bufferSizes.PathBboxes.ByteLength,
+                "path bboxes",
+                BindingLimitBuffer.None,
+                maxStorageBufferBindingSize,
+                out bindingLimitFailure,
+                out error) ||
+            !TryValidateBufferSize(
+                bufferSizes.DrawReduced.ByteLength,
+                "draw reduced",
+                BindingLimitBuffer.None,
+                maxStorageBufferBindingSize,
+                out bindingLimitFailure,
+                out error) ||
+            !TryValidateBufferSize(
+                bufferSizes.DrawMonoids.ByteLength,
+                "draw monoids",
+                BindingLimitBuffer.None,
+                maxStorageBufferBindingSize,
+                out bindingLimitFailure,
+                out error) ||
+            !TryValidateBufferSize(
+                infoBinDataByteLength,
+                "scene info/bin data",
+                BindingLimitBuffer.None,
+                maxStorageBufferBindingSize,
+                out bindingLimitFailure,
+                out error) ||
+            !TryValidateBufferSize(
+                bufferSizes.ClipInputs.ByteLength,
+                "clip inputs",
+                BindingLimitBuffer.None,
+                maxStorageBufferBindingSize,
+                out bindingLimitFailure,
+                out error) ||
+            !TryValidateBufferSize(
+                bufferSizes.ClipElements.ByteLength,
+                "clip elements",
+                BindingLimitBuffer.None,
+                maxStorageBufferBindingSize,
+                out bindingLimitFailure,
+                out error) ||
+            !TryValidateBufferSize(
+                bufferSizes.ClipBics.ByteLength,
+                "clip bics",
+                BindingLimitBuffer.None,
+                maxStorageBufferBindingSize,
+                out bindingLimitFailure,
+                out error) ||
+            !TryValidateBufferSize(
+                bufferSizes.ClipBboxes.ByteLength,
+                "clip bboxes",
+                BindingLimitBuffer.None,
+                maxStorageBufferBindingSize,
+                out bindingLimitFailure,
+                out error) ||
+            !TryValidateBufferSize(
+                bufferSizes.DrawBboxes.ByteLength,
+                "draw bboxes",
+                BindingLimitBuffer.None,
+                maxStorageBufferBindingSize,
+                out bindingLimitFailure,
+                out error) ||
+            !TryValidateBufferSize(
+                bufferSizes.Paths.ByteLength,
+                "scene paths",
+                BindingLimitBuffer.None,
+                maxStorageBufferBindingSize,
+                out bindingLimitFailure,
+                out error) ||
+            !TryValidateBufferSize(
+                bufferSizes.Lines.ByteLength,
+                "scene lines",
+                BindingLimitBuffer.None,
+                maxStorageBufferBindingSize,
+                out bindingLimitFailure,
+                out error) ||
+            !TryValidateBufferSize(
+                bufferSizes.BinHeaders.ByteLength,
+                "bin headers",
+                BindingLimitBuffer.None,
+                maxStorageBufferBindingSize,
+                out bindingLimitFailure,
+                out error) ||
+            !TryValidateBufferSize(
+                bufferSizes.IndirectCount.ByteLength,
+                "indirect count",
+                BindingLimitBuffer.None,
+                maxStorageBufferBindingSize,
+                out bindingLimitFailure,
+                out error) ||
+            !TryValidateBufferSize(
+                bufferSizes.PathRows.ByteLength,
+                "path rows",
+                BindingLimitBuffer.PathRows,
+                maxStorageBufferBindingSize,
+                out bindingLimitFailure,
+                out error) ||
+            !TryValidateBufferSize(
+                bufferSizes.PathTiles.ByteLength,
+                "path tiles",
+                BindingLimitBuffer.PathTiles,
+                maxStorageBufferBindingSize,
+                out bindingLimitFailure,
+                out error) ||
+            !TryValidateBufferSize(
+                bufferSizes.SegCounts.ByteLength,
+                "segment counts",
+                BindingLimitBuffer.SegCounts,
+                maxStorageBufferBindingSize,
+                out bindingLimitFailure,
+                out error) ||
+            !TryValidateBufferSize(
+                bufferSizes.Segments.ByteLength,
+                "segments",
+                BindingLimitBuffer.Segments,
+                maxStorageBufferBindingSize,
+                out bindingLimitFailure,
+                out error) ||
+            !TryValidateBufferSize(
+                bufferSizes.BlendSpill.ByteLength,
+                "blend spill",
+                BindingLimitBuffer.BlendSpill,
+                maxStorageBufferBindingSize,
+                out bindingLimitFailure,
+                out error) ||
+            !TryValidateBufferSize(
+                bufferSizes.Ptcl.ByteLength,
+                "ptcl",
+                BindingLimitBuffer.Ptcl,
+                maxStorageBufferBindingSize,
+                out bindingLimitFailure,
+                out error))
         {
             return false;
         }
@@ -1645,7 +1816,13 @@ internal static class WebGPUSceneDispatch
         int targetWidth = target.Bounds.Width;
         int targetHeight = target.Bounds.Height;
 
-        if (!WebGPUDrawingBackend.TryCreateCompositionTexture(flushContext, targetWidth, targetHeight, out WGPUTextureImpl* outputTexture, out WGPUTextureViewImpl* outputTextureView, out error))
+        if (!WebGPUDrawingBackend.TryCreateCompositionTexture(
+            flushContext,
+            targetWidth,
+            targetHeight,
+            out WGPUTextureImpl* outputTexture,
+            out WGPUTextureViewImpl* outputTextureView,
+            out error))
         {
             return false;
         }
@@ -1688,7 +1865,12 @@ internal static class WebGPUSceneDispatch
         // The readback map blocks until the GPU finishes everything.
         if (!TryEnqueueSchedulingStatusReadback(flushContext, scheduling.BumpBuffer, currentArena.ReadbackBuffer, 0, out error) ||
             !WebGPUDrawingBackend.TrySubmitWithIndex(flushContext, out ulong schedulingSubmissionIndex) ||
-            !TryReadSchedulingStatus(flushContext, currentArena.ReadbackBuffer, schedulingSubmissionIndex, out GpuSceneBumpAllocators bumpAllocators, out error))
+            !TryReadSchedulingStatus(
+                flushContext,
+                currentArena.ReadbackBuffer,
+                schedulingSubmissionIndex,
+                out GpuSceneBumpAllocators bumpAllocators,
+                out error))
         {
             return false;
         }
@@ -1834,7 +2016,13 @@ internal static class WebGPUSceneDispatch
         int targetHeight = target.Bounds.Height;
         nuint maxStorageBufferBindingSize = flushContext.ScratchBufferBindingSizeLimit;
 
-        if (!WebGPUDrawingBackend.TryCreateCompositionTexture(flushContext, targetWidth, targetHeight, out WGPUTextureImpl* outputTexture, out WGPUTextureViewImpl* outputTextureView, out error))
+        if (!WebGPUDrawingBackend.TryCreateCompositionTexture(
+            flushContext,
+            targetWidth,
+            targetHeight,
+            out WGPUTextureImpl* outputTexture,
+            out WGPUTextureViewImpl* outputTextureView,
+            out error))
         {
             return false;
         }
@@ -1879,7 +2067,9 @@ internal static class WebGPUSceneDispatch
         try
         {
             // Track each chunk's config sizes and tile heights for the batch readback at the end.
-            using IMemoryOwner<WebGPUSceneBumpSizes> chunkBumpSizeOwner = flushContext.MemoryAllocator.Allocate<WebGPUSceneBumpSizes>(checked((int)Math.Max(totalTileHeight, 1U)));
+            using IMemoryOwner<WebGPUSceneBumpSizes> chunkBumpSizeOwner =
+                flushContext.MemoryAllocator.Allocate<WebGPUSceneBumpSizes>(checked((int)Math.Max(totalTileHeight, 1U)));
+
             using IMemoryOwner<uint> chunkTileHeightOwner = flushContext.MemoryAllocator.Allocate<uint>(checked((int)Math.Max(totalTileHeight, 1U)));
             Span<WebGPUSceneBumpSizes> chunkAttemptBumpSizes = chunkBumpSizeOwner.Memory.Span;
             Span<uint> chunkAttemptTileHeights = chunkTileHeightOwner.Memory.Span;
@@ -1910,7 +2100,12 @@ internal static class WebGPUSceneDispatch
                         ? WebGPUSceneConfig.Create(encodedScene, stagedScene.Range.Value, chunkBumpSize, chunkWindow)
                         : WebGPUSceneConfig.Create(encodedScene, chunkBumpSize, chunkWindow);
 
-                    if (!TryValidateBindingSizes(encodedScene, chunkConfig, maxStorageBufferBindingSize, out BindingLimitFailure bindingLimitFailure, out error))
+                    if (!TryValidateBindingSizes(
+                        encodedScene,
+                        chunkConfig,
+                        maxStorageBufferBindingSize,
+                        out BindingLimitFailure bindingLimitFailure,
+                        out error))
                     {
                         if (IsChunkableBindingFailure(bindingLimitFailure.Buffer))
                         {
@@ -1930,9 +2125,20 @@ internal static class WebGPUSceneDispatch
                     // Chunk fits. Re-ensure the arena for this chunk's buffer sizes (may be
                     // different from the previous chunk if the scene has non-uniform density).
                     WebGPUStagedScene chunkScene = stagedScene.Range.HasValue
-                        ? new WebGPUStagedScene(flushContext, encodedScene, stagedScene.Range.Value, chunkConfig, stagedScene.Resources, BindingLimitFailure.None)
+                        ? new WebGPUStagedScene(
+                            flushContext,
+                            encodedScene,
+                            stagedScene.Range.Value,
+                            chunkConfig,
+                            stagedScene.Resources,
+                            BindingLimitFailure.None)
                         : new WebGPUStagedScene(flushContext, encodedScene, chunkConfig, stagedScene.Resources, BindingLimitFailure.None, false, false);
-                    WebGPUSceneSchedulingArena currentArena = EnsureSchedulingArena(flushContext, chunkConfig.BufferSizes, readbackByteLength, ref schedulingArena);
+                    WebGPUSceneSchedulingArena currentArena = EnsureSchedulingArena(
+                        flushContext,
+                        chunkConfig.BufferSizes,
+                        readbackByteLength,
+                        ref schedulingArena);
+
                     WGPUBufferImpl* statusReadbackBuffer = deferOverflowCheck ? deferredReadbackBuffer : currentArena.ReadbackBuffer;
 
                     // A first chunk that already covers the full tile height renders through the
@@ -2108,7 +2314,12 @@ internal static class WebGPUSceneDispatch
 
         if (reuseSharedSchedulingState)
         {
-            if (!TryDispatchChunkLocalSchedulingStages(ref stagedScene, schedulingArena, resetChunkLocalBumpAllocators, out WebGPUSceneSchedulingResources sharedScheduling, out error))
+            if (!TryDispatchChunkLocalSchedulingStages(
+                ref stagedScene,
+                schedulingArena,
+                resetChunkLocalBumpAllocators,
+                out WebGPUSceneSchedulingResources sharedScheduling,
+                out error))
             {
                 return false;
             }
@@ -2178,7 +2389,12 @@ internal static class WebGPUSceneDispatch
         WGPUBufferImpl* headerSourceBuffer = CreateAndUploadCopySourceBuffer(stagedScene.FlushContext, in header);
 
         if (!TryEnqueueSceneHeaderCopy(stagedScene.FlushContext, headerSourceBuffer, stagedScene.Resources.HeaderBuffer, out error) ||
-            !TryDispatchChunkLocalSchedulingStages(ref stagedScene, schedulingArena, resetChunkLocalBumpAllocators, out WebGPUSceneSchedulingResources scheduling, out error))
+            !TryDispatchChunkLocalSchedulingStages(
+                ref stagedScene,
+                schedulingArena,
+                resetChunkLocalBumpAllocators,
+                out WebGPUSceneSchedulingResources scheduling,
+                out error))
         {
             return false;
         }
@@ -2559,7 +2775,8 @@ internal static class WebGPUSceneDispatch
     /// <returns><see langword="true"/> when the failed binding shrinks with the chunk window; otherwise, <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsChunkableBindingFailure(BindingLimitBuffer buffer)
-        => buffer is BindingLimitBuffer.PathRows or BindingLimitBuffer.PathTiles or BindingLimitBuffer.SegCounts or BindingLimitBuffer.Segments or BindingLimitBuffer.BlendSpill or BindingLimitBuffer.Ptcl;
+        => buffer is BindingLimitBuffer.PathRows or BindingLimitBuffer.PathTiles or BindingLimitBuffer.SegCounts or
+            BindingLimitBuffer.Segments or BindingLimitBuffer.BlendSpill or BindingLimitBuffer.Ptcl;
 
     /// <summary>
     /// Scales one count by the chunk's tile-height ratio while keeping the result non-zero.
@@ -2829,7 +3046,14 @@ internal static class WebGPUSceneDispatch
         entries[2] = CreateBufferBinding(2, parentBuffer, parentBufferSize);
         entries[3] = CreateBufferBinding(3, resources.PathMonoidBuffer, pathMonoidBufferSize);
 
-        return recording.TryRecord(useSmallVariant ? WebGPUSceneShaderId.PathtagScanSmall : WebGPUSceneShaderId.PathtagScan, entries, 4, dispatchX, 1, 1, out error);
+        return recording.TryRecord(
+            useSmallVariant ? WebGPUSceneShaderId.PathtagScanSmall : WebGPUSceneShaderId.PathtagScan,
+            entries,
+            4,
+            dispatchX,
+            1,
+            1,
+            out error);
     }
 
     /// <summary>
@@ -3311,7 +3535,8 @@ internal static class WebGPUSceneDispatch
         flushContext.Api.BufferMapAsync(readbackBuffer, MapMode.Read, 0, (nuint)sizeof(GpuSceneBumpAllocators), callback, null);
         using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
         {
-            if (!WaitForMapSignal(flushContext.Api, (WGPUDeviceImpl*)deviceReference.Handle, mapReady, submissionIndex) || mapStatus != WGPUMapAsyncStatus.Success)
+            if (!WaitForMapSignal(flushContext.Api, (WGPUDeviceImpl*)deviceReference.Handle, mapReady, submissionIndex) ||
+                mapStatus != WGPUMapAsyncStatus.Success)
             {
                 error = $"Failed to map staged-scene scheduling status with status '{mapStatus}'.";
                 return false;
@@ -3450,7 +3675,8 @@ internal static class WebGPUSceneDispatch
         flushContext.Api.BufferMapAsync(readbackBuffer, MapMode.Read, 0, mappedByteLength, callback, null);
         using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
         {
-            if (!WaitForMapSignal(flushContext.Api, (WGPUDeviceImpl*)deviceReference.Handle, mapReady, submissionIndex) || mapStatus != WGPUMapAsyncStatus.Success)
+            if (!WaitForMapSignal(flushContext.Api, (WGPUDeviceImpl*)deviceReference.Handle, mapReady, submissionIndex) ||
+                mapStatus != WGPUMapAsyncStatus.Success)
             {
                 error = $"Failed to map staged-scene chunk scheduling status with status '{mapStatus}'.";
                 return false;
@@ -4054,7 +4280,11 @@ internal static class WebGPUSceneDispatch
         entries[0] = CreateBufferBinding(0, resources.HeaderBuffer, (nuint)sizeof(GpuSceneConfig));
         entries[1] = CreateBufferBinding(1, scheduling.SegmentBuffer, bufferSizes.Segments.ByteLength);
         entries[2] = CreateBufferBinding(2, scheduling.PtclBuffer, bufferSizes.Ptcl.ByteLength);
-        entries[3] = CreateBufferBinding(3, resources.InfoBinDataBuffer, checked(bufferSizes.Info.ByteLength + bufferSizes.BinData.ByteLength + bufferSizes.BinHeaders.ByteLength));
+        entries[3] = CreateBufferBinding(
+            3,
+            resources.InfoBinDataBuffer,
+            checked(bufferSizes.Info.ByteLength + bufferSizes.BinData.ByteLength + bufferSizes.BinHeaders.ByteLength));
+
         entries[4] = CreateBufferBinding(4, scheduling.BlendBuffer, bufferSizes.BlendSpill.ByteLength);
         entries[5] = new WGPUBindGroupEntry { binding = 5, textureView = outputTextureView };
         entries[6] = new WGPUBindGroupEntry { binding = 6, textureView = resources.GradientTextureView };
@@ -4170,7 +4400,12 @@ internal static class WebGPUSceneDispatch
         foreach (WebGPUSceneComputeCommand command in recording.Commands)
         {
             string shaderName = GetShaderDebugName(command.ShaderId);
-            if (!TryResolveComputeShader(flushContext.DeviceState, command.ShaderId, out WGPUBindGroupLayoutImpl* bindGroupLayout, out WGPUComputePipelineImpl* pipeline, out error))
+            if (!TryResolveComputeShader(
+                flushContext.DeviceState,
+                command.ShaderId,
+                out WGPUBindGroupLayoutImpl* bindGroupLayout,
+                out WGPUComputePipelineImpl* pipeline,
+                out error))
             {
                 error = error is null ? null : $"{error} Stage: {shaderName}.";
                 return false;
@@ -4306,7 +4541,8 @@ internal static class WebGPUSceneDispatch
                 WebGPUSceneShaderId.PathtagReduce => PathtagReduceComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
                 WebGPUSceneShaderId.PathtagReduce2 => PathtagReduce2ComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
                 WebGPUSceneShaderId.PathtagScan1 => PathtagScan1ComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
-                WebGPUSceneShaderId.PathtagScan or WebGPUSceneShaderId.PathtagScanSmall => PathtagScanComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
+                WebGPUSceneShaderId.PathtagScan or WebGPUSceneShaderId.PathtagScanSmall =>
+                    PathtagScanComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
                 WebGPUSceneShaderId.BboxClear => BboxClearComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
                 WebGPUSceneShaderId.PathLowering => PathLoweringComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
                 WebGPUSceneShaderId.DrawReduce => DrawReduceComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
@@ -4468,13 +4704,22 @@ internal static class WebGPUSceneDispatch
         }
 
         deviceState.RegisterPipelineWarmup();
-        (WebGPURuntime.DeviceSharedState DeviceState, WGPUTextureFormat TextureFormat, WebGPUTargetDescriptor Descriptor) warmupState = (deviceState, textureFormat, targetDescriptor);
+        (WebGPURuntime.DeviceSharedState DeviceState, WGPUTextureFormat TextureFormat, WebGPUTargetDescriptor Descriptor) warmupState =
+            (deviceState, textureFormat, targetDescriptor);
+
         bool queued = ThreadPool.UnsafeQueueUserWorkItem(
             static (state) =>
             {
                 try
                 {
-                    _ = TryResolveFinePipeline(state.DeviceState, state.TextureFormat, state.Descriptor.AlphaRepresentation, state.Descriptor.NumericEncoding, out _, out _, out _);
+                    _ = TryResolveFinePipeline(
+                        state.DeviceState,
+                        state.TextureFormat,
+                        state.Descriptor.AlphaRepresentation,
+                        state.Descriptor.NumericEncoding,
+                        out _,
+                        out _,
+                        out _);
                 }
                 catch
                 {
@@ -4502,7 +4747,10 @@ internal static class WebGPUSceneDispatch
     /// <param name="numericEncoding">The target numeric encoding.</param>
     /// <returns>The cache key.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static string GetFinePipelineKey(WGPUTextureFormat textureFormat, PixelAlphaRepresentation alphaRepresentation, WebGPUTargetNumericEncoding numericEncoding)
+    private static string GetFinePipelineKey(
+        WGPUTextureFormat textureFormat,
+        PixelAlphaRepresentation alphaRepresentation,
+        WebGPUTargetNumericEncoding numericEncoding)
         => $"{FineAreaPipelineKey}/{textureFormat}/{alphaRepresentation}/{numericEncoding}";
 
     /// <summary>
@@ -4771,7 +5019,8 @@ internal static class WebGPUSceneDispatch
         if (byteLength > maxStorageBufferBindingSize)
         {
             bindingLimitFailure = new BindingLimitFailure(bindingLimitBuffer, byteLength, maxStorageBufferBindingSize);
-            error = $"The staged-scene {bufferName} buffer requires {byteLength} bytes, exceeding the current WebGPU binding limit of {maxStorageBufferBindingSize} bytes.";
+            error = $"The staged-scene {bufferName} buffer requires {byteLength} bytes, " +
+                $"exceeding the current WebGPU binding limit of {maxStorageBufferBindingSize} bytes.";
             return false;
         }
 

@@ -1,0 +1,92 @@
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
+
+namespace SixLabors.ImageSharp.Drawing.Barcodes;
+
+/// <summary>
+/// The Marks &amp; Spencer in-house symbology. It is an EAN-8 symbol that holds the centre guard bars at digit bar height and prints the letters M and S in the
+/// quiet zones. It has no public specification.
+/// <para>
+/// The input is seven or eight digits, and the last digit is the EAN-8 check digit. A zero pads a seven digit number to eight. The printed interpretation
+/// does not show that leading zero: the seven input digits fill the first seven character cells, and the eighth cell stays empty.
+/// </para>
+/// </summary>
+public sealed class MandsSymbology : BarcodeSymbology
+{
+    /// <summary>
+    /// The quiet zone in modules. This quiet zone is wider than the EAN-8 minimum of seven. The M and S letters sit twelve modules before and two modules after
+    /// the symbol. The wider quiet zone keeps these letters inside the reserved area.
+    /// </summary>
+    private const int QuietZone = 12;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MandsSymbology"/> class.
+    /// </summary>
+    public MandsSymbology()
+    {
+    }
+
+    /// <summary>
+    /// Gets the indexes of the extended bars: the two bars of each outer guard pattern. The centre guard bars stay at digit bar height.
+    /// </summary>
+    private static ReadOnlySpan<int> GuardBars => [0, 1, 20, 21];
+
+    /// <inheritdoc/>
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    {
+        Guard.MustBeBetweenOrEqualTo(text.Length, 7, 8, nameof(text));
+
+        // An M&S number is seven or eight characters with the check digit last, and a seven character one carries an implied leading zero, so the padded
+        // form fits eight inline characters.
+        bool padded = text.Length == 7;
+        InlineArray8<char> paddedStorage = default;
+        Span<char> paddedBuffer = paddedStorage;
+        if (padded)
+        {
+            paddedBuffer[0] = '0';
+            text.CopyTo(paddedBuffer[1..]);
+        }
+        else
+        {
+            text.CopyTo(paddedBuffer);
+        }
+
+        InlineArray8<char> digitStorage = default;
+        ReadOnlySpan<char> digits = EanUpcEncoder.ValidateAndApplyCheckDigit(paddedBuffer, 7, digitStorage);
+
+        InlineArray128<byte> moduleStorage = default;
+        Span<byte> modules = ((Span<byte>)moduleStorage)[..EanUpcEncoder.Ean8Width];
+        InlineArray128<sbyte> correctionStorage = default;
+        Span<sbyte> corrections = ((Span<sbyte>)correctionStorage)[..EanUpcEncoder.Ean8Width];
+        EanUpcEncoder.WriteEan8Modules(digits, modules, corrections);
+
+        EanUpcEncoder.BeginRuns(
+            modules,
+            corrections,
+            options.ResolveXDimension(0, EanUpcEncoder.NominalXDimension, double.PositiveInfinity),
+            ref symbol,
+            out Span<float> heights);
+
+        float digitHeight = options.ResolveBarHeight(symbol.XDimension, 0, EanUpcEncoder.NominalEan8BarHeight, float.PositiveInfinity);
+        EanUpcEncoder.FillGuardedHeights(heights, digitHeight, GuardBars);
+
+        if (options.Font is not null)
+        {
+            // A padded number hides its leading zero: its seven digits, the check digit included, fill the first seven character cells, and the eighth cell
+            // stays empty. The full eight digit form prints as-is.
+            float textLine = digitHeight + BarcodeTextPlacement.Clearance;
+            ReadOnlySpan<char> shown = padded ? digits[1..] : digits;
+
+            // The M fills one character cell at the outer edge of the leading quiet zone. The S fills one character cell, two modules after the symbol.
+            const int characterWidth = EanUpcEncoder.CharacterWidth;
+            const int sLeft = EanUpcEncoder.Ean8Width + 2;
+            symbol.ReserveText(shown.Length + 2, shown.Length + 2);
+            EanUpcEncoder.AddDigits(shown[..4], EanUpcEncoder.NormalGuardWidth, characterWidth, BarcodeTextSide.BelowBars, textLine, ref symbol);
+            EanUpcEncoder.AddDigits(shown[4..], EanUpcEncoder.Ean8RightHalfStart, characterWidth, BarcodeTextSide.BelowBars, textLine, ref symbol);
+            symbol.AddText("M", -QuietZone, -QuietZone + characterWidth, BarcodeTextSide.BelowBars, textLine);
+            symbol.AddText("S", sLeft, sLeft + characterWidth, BarcodeTextSide.BelowBars, textLine);
+        }
+
+        symbol.EndLinear(QuietZone, QuietZone, 0F, EanUpcEncoder.RunUnit, false);
+    }
+}

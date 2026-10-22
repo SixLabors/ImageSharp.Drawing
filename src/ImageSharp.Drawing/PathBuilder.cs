@@ -318,7 +318,14 @@ public class PathBuilder
     /// <param name="sweepAngle">The angle between <paramref name="startAngle"/> and the end of the arc.</param>
     /// <returns>The <see cref="PathBuilder"/>.</returns>
     public PathBuilder AddArc(RectangleF rectangle, float rotation, float startAngle, float sweepAngle)
-        => this.AddArc((rectangle.Right + rectangle.Left) / 2, (rectangle.Bottom + rectangle.Top) / 2, rectangle.Width / 2, rectangle.Height / 2, rotation, startAngle, sweepAngle);
+        => this.AddArc(
+            (rectangle.Right + rectangle.Left) / 2,
+            (rectangle.Bottom + rectangle.Top) / 2,
+            rectangle.Width / 2,
+            rectangle.Height / 2,
+            rotation,
+            startAngle,
+            sweepAngle);
 
     /// <summary>
     /// Adds an elliptical arc to the current figure.

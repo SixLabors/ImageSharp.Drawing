@@ -1,0 +1,156 @@
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
+
+using SixLabors.ImageSharp.Drawing.Barcodes;
+
+namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
+
+/// <summary>
+/// Encoder tests for <see cref="Pzn8Symbology"/> and <see cref="Pzn7Symbology"/>. The check digit and the printed line come from the IFA technical
+/// information documents on PZN coding.
+/// </summary>
+public class PznSymbologyTests
+{
+    /// <summary>
+    /// The worked example in the IFA check digit document: the digits 2758089 weighted 1 to 7 give the products 2, 14, 15, 32, 0, 48 and 63, which sum to 174;
+    /// 174 divided by 11 leaves 9, so the complete PZN is 27580899.
+    /// </summary>
+    [Fact]
+    public void MatchesTheWorkedCheckDigitExample()
+    {
+        BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
+        string[] texts = SymbolEncoder.Read(new Pzn8Symbology(), "2758089", options, SymbolEncoder.Texts);
+
+        Assert.Equal("PZN - 27580899", Assert.Single(texts));
+    }
+
+    /// <summary>
+    /// The PZN of the worked PPN example in the same document is 03752864, whose check digit is therefore the trailing 4.
+    /// </summary>
+    [Fact]
+    public void AcceptsTheCheckDigitOfTheWorkedPpnExample()
+        => Assert.Equal(Encode(new Pzn8Symbology(), "0375286"), Encode(new Pzn8Symbology(), "03752864"));
+
+    /// <summary>
+    /// A supplied check digit that is not the check digit of the data throws.
+    /// </summary>
+    [Fact]
+    public void RejectsWrongCheckDigit()
+        => Assert.Throws<ArgumentException>(() => Encode(new Pzn8Symbology(), "27580891"));
+
+    /// <summary>
+    /// IFA: "If the remainder is the number 10, this digit sequence is not used as PZN." The digits 0000003 weight the trailing 3 by seven, giving 21, and 21
+    /// divided by 11 leaves 10.
+    /// </summary>
+    [Fact]
+    public void RejectsADigitSequenceThatLeavesTen()
+    {
+        ArgumentException exception = Assert.Throws<ArgumentException>(() => Encode(new Pzn8Symbology(), "0000003"));
+
+        Assert.Contains("remainder of 10", exception.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A PZN8 carries seven digits and an optional check digit. The symbology rejects other lengths and non-digits.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    [Theory]
+    [InlineData("275808")]
+    [InlineData("275808999")]
+    [InlineData("275808A")]
+    public void RejectsMalformedInput(string text)
+        => Assert.ThrowsAny<ArgumentException>(() => Encode(new Pzn8Symbology(), text));
+
+    /// <summary>
+    /// IFA prints the term PZN and the identifier separated with a space "for better readability", and says "the spaces and the term PZN are not represented in
+    /// the barcode".
+    /// </summary>
+    [Fact]
+    public void PrintsTheTermAndIdentifierWithoutEncodingThem()
+    {
+        BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
+        string[] texts = SymbolEncoder.Read(new Pzn8Symbology(), "03752864", options, SymbolEncoder.Texts);
+
+        Assert.Equal("PZN - 03752864", Assert.Single(texts));
+    }
+
+    /// <summary>
+    /// IFA gives a nominal code height of 10 mm at the nominal module width of 0.25 mm, which is 40 modules, and that height changes with the module width
+    /// rather than with the symbol length.
+    /// </summary>
+    [Fact]
+    public void DefaultsTheBarHeightToTheNominalCodeHeight()
+        => Assert.Equal(40F, SymbolEncoder.Read(new Pzn8Symbology(), "03752864", new BarcodeOptions(), static (ref symbol) => symbol.BarHeights[0]));
+
+    /// <summary>
+    /// IFA gives a nominal module width of 0.25 mm, so a symbol without an X dimension of the caller draws its modules at 0.25 mm and its 40 module bars 10 mm
+    /// high. At the default 300 dots per inch the module draws at the nearest whole number of pixels: 0.25 mm is 2.95 pixels and draws at 3 pixels. An X
+    /// dimension of the caller replaces the nominal width inside the permitted 187 µm to 450 µm, and one outside that range draws at the nearest limit.
+    /// </summary>
+    [Fact]
+    public void DefaultsTheModuleWidthToTheNominalModuleWidth()
+    {
+        Assert.Equal(
+            3 * 25.4 / 300,
+            SymbolEncoder.Read(new Pzn8Symbology(), "03752864", new BarcodeOptions(), static (ref symbol) => symbol.XDimension),
+            1e-12);
+
+        Assert.Equal(0.25, XDimensionAt(null), 1e-9);
+        Assert.Equal(0.4, XDimensionAt(0.4), 1e-9);
+        Assert.Equal(0.187, XDimensionAt(0.15), 1e-9);
+        Assert.Equal(0.45, XDimensionAt(0.6), 1e-9);
+
+        static double XDimensionAt(double? xDimension)
+            => SymbolEncoder.Read(
+                new Pzn8Symbology(),
+                "03752864",
+                new BarcodeOptions { Dpi = SymbolEncoder.MicrometreDpi, XDimension = xDimension },
+                static (ref symbol) => symbol.XDimension);
+    }
+
+    /// <summary>
+    /// IFA: "The nominal ratio (proportion of narrow to wide bar) should be 1:2.5". At 100 pixels a millimetre the 0.25 mm module is 25 pixels, and a wide
+    /// element of 2.5 modules rounds half up to 63 pixels, so every element is 25 or 63 pixels wide.
+    /// </summary>
+    [Fact]
+    public void DrawsTheNominalWideToNarrowRatio()
+    {
+        int[] runs = SymbolEncoder.Read(
+            new Pzn8Symbology(),
+            "03752864",
+            new BarcodeOptions { Dpi = SymbolEncoder.MillimetreDpi },
+            static (ref symbol) => symbol.Runs.ToArray());
+
+        Assert.Equal([25, 63], runs.Distinct().Order());
+    }
+
+    /// <summary>
+    /// The symbol carries the identifier, the digits and the check digit, and Code 39 adds no check character of its own. At 96 dots per inch, a module
+    /// draws at 1 pixel and a wide element at 3 pixels. Thus each character is 16 pixels wide with its gap.
+    /// </summary>
+    [Fact]
+    public void AddsNoCode39CheckCharacter()
+        => Assert.Equal(
+            ((1 + 8 + 2) * 16) - 1,
+            SymbolEncoder.Read(new Pzn8Symbology(), "03752864", new BarcodeOptions { Dpi = 96 }, SymbolEncoder.RunSum));
+
+    /// <summary>
+    /// IFA prints the PZN "in a well-readable font size (at least 6 pt. for a small code)".
+    /// </summary>
+    [Fact]
+    public void PrintsTheTextAtSixPointsOrLarger()
+    {
+        BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(4F) };
+
+        Assert.Equal(6F, SymbolEncoder.Read(new Pzn8Symbology(), "03752864", options, static (ref symbol) => symbol.TextMinimumSize));
+    }
+
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="symbology">The symbology to encode with.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The run widths of the symbol.</returns>
+    private static string Encode(BarcodeSymbology symbology, string text)
+        => SymbolEncoder.Read(symbology, text, new BarcodeOptions(), SymbolEncoder.RunString);
+}

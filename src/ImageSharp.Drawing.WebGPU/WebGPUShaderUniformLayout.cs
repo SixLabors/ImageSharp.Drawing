@@ -94,7 +94,9 @@ public sealed class WebGPUShaderUniformLayout
         // limit here keeps every successfully constructed program portable across conforming devices.
         if (this.ByteLength > MaximumByteLength)
         {
-            throw new ArgumentException($"The uniform layout requires {this.ByteLength} bytes; WebGPU layer-effect uniforms are limited to {MaximumByteLength} bytes.", nameof(uniforms));
+            throw new ArgumentException(
+                $"The uniform layout requires {this.ByteLength} bytes; WebGPU layer-effect uniforms are limited to {MaximumByteLength} bytes.",
+                nameof(uniforms));
         }
 
         this.WgslStructureDeclaration = CreateWgslStructureDeclaration(this.members);

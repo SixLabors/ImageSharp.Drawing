@@ -1,0 +1,117 @@
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
+
+using SixLabors.Fonts.Unicode;
+using SixLabors.ImageSharp.Drawing.Helpers;
+
+namespace SixLabors.ImageSharp.Drawing.Barcodes;
+
+/// <summary>
+/// The Code 11 symbology, also called USD-8. It carries the digits 0 to 9 and the dash between a start character and a stop character, which the printed line
+/// does not show.
+/// <para>
+/// The check characters are optional. A symbol with fewer than ten data characters carries the C check character, and a symbol with ten or more carries the C
+/// and K check characters. C is the weighted sum of the data modulo 11, and K is the weighted sum of the data and C modulo 11. The check characters print after
+/// the data by default.
+/// </para>
+/// </summary>
+public sealed class Code11Symbology : BarcodeSymbology
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Code11Symbology"/> class.
+    /// </summary>
+    public Code11Symbology()
+        : this(CheckCharacterMode.None, true)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Code11Symbology"/> class.
+    /// </summary>
+    /// <param name="checkCharacters"> Whether the symbol carries the C and K check characters, and whether the encoder calculates them or validates them.
+    /// </param>
+    public Code11Symbology(CheckCharacterMode checkCharacters)
+        : this(checkCharacters, true)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Code11Symbology"/> class.
+    /// </summary>
+    /// <param name="checkCharacters"> Whether the symbol carries the C and K check characters, and whether the encoder calculates them or validates them.
+    /// </param>
+    /// <param name="printCheckCharacters"> Whether the check characters the symbol carries are part of the human readable interpretation. </param>
+    public Code11Symbology(CheckCharacterMode checkCharacters, bool printCheckCharacters)
+    {
+        this.CheckCharacters = checkCharacters;
+        this.PrintCheckCharacters = printCheckCharacters;
+    }
+
+    /// <summary>
+    /// Gets a value that specifies whether the symbol carries the C and K check characters, and whether the encoder calculates them or validates them.
+    /// </summary>
+    public CheckCharacterMode CheckCharacters { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the check characters the symbol carries are part of the human readable interpretation. A symbol that carries none prints
+    /// none either way.
+    /// </summary>
+    public bool PrintCheckCharacters { get; }
+
+    /// <inheritdoc/>
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    {
+        Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
+        Guard.MustBeLessThanOrEqualTo(text.Length, Code11Encoder.MaximumLength, nameof(text));
+
+        int index = text.IndexOfAnyExcept(Code11Encoder.CharacterSet);
+        if (index >= 0)
+        {
+            throw new ArgumentException($"Code 11 carries only digits and the dash; got {text.CodePointAt(index).ToDisplayString()}.", nameof(text));
+        }
+
+        ReadOnlySpan<char> data = text;
+        InlineArray2<char> checkStorage = default;
+        Span<char> checks = checkStorage;
+        int checkCount = 0;
+        if (this.CheckCharacters == CheckCharacterMode.Validate)
+        {
+            // Nine data characters and one check character make ten, and ten data characters and two check characters make twelve, so eleven characters cannot
+            // carry a valid check.
+            if (text.Length == Code11Encoder.TwoCheckCharactersFrom + 1)
+            {
+                throw new ArgumentException(
+                    $"Code 11 cannot carry {text.Length} characters with its check characters: nine data characters take one and ten take two.", nameof(text));
+            }
+
+            checkCount = text.Length <= Code11Encoder.TwoCheckCharactersFrom ? 1 : 2;
+            if (text.Length <= checkCount)
+            {
+                throw new ArgumentException("Code 11 carries at least one data character before its check characters.", nameof(text));
+            }
+
+            data = text.Slice(0, text.Length - checkCount);
+        }
+        else if (this.CheckCharacters == CheckCharacterMode.Compute)
+        {
+            checkCount = data.Length >= Code11Encoder.TwoCheckCharactersFrom ? 2 : 1;
+        }
+
+        if (checkCount > 0)
+        {
+            int checkC = Code11Encoder.CheckC(data);
+            checks[0] = Code11Encoder.Characters[checkC];
+            if (checkCount == 2)
+            {
+                checks[1] = Code11Encoder.Characters[Code11Encoder.CheckK(data, checkC)];
+            }
+
+            if (this.CheckCharacters == CheckCharacterMode.Validate && !text.Slice(data.Length).SequenceEqual(checks[..checkCount]))
+            {
+                throw new ArgumentException($"Incorrect check characters: expected {checks[..checkCount]}, got {text.Slice(data.Length)}.", nameof(text));
+            }
+        }
+
+        Code11Encoder.BuildSymbol(data, checks[..checkCount], this.PrintCheckCharacters, options, ref symbol);
+    }
+}

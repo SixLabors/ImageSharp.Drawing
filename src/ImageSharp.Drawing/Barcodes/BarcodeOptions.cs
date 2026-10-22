@@ -1,0 +1,211 @@
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
+
+using SixLabors.Fonts;
+using SixLabors.ImageSharp.Drawing.Processing;
+
+namespace SixLabors.ImageSharp.Drawing.Barcodes;
+
+/// <summary>
+/// Options that control how a barcode is sized and painted. The sizes are physical: the X dimension and the bar height in millimetres, and the resolution that
+/// turns them into pixels.
+/// </summary>
+public sealed class BarcodeOptions
+{
+    /// <summary>
+    /// The number of millimetres in one inch, which converts the millimetre sizes to pixels at <see cref="Dpi"/>.
+    /// </summary>
+    internal const double MillimetresPerInch = 25.4;
+
+    /// <summary>
+    /// The tolerance in pixels that keeps a millimetre limit on the whole pixel it falls on against the rounding error of the millimetre to pixel conversion.
+    /// </summary>
+    internal const double LimitTolerance = 1E-9;
+
+    private float dpi = 300F;
+    private double? xDimension;
+    private double? barHeight;
+
+    /// <summary>
+    /// Gets or sets the resolution in dots per inch. This value converts the millimetre sizes to pixels. <see cref="XDimension"/> gives the rule that rounds a
+    /// module to whole pixels. The text also uses this resolution. Set this value to the resolution of the device that prints or shows the image. The default
+    /// is 300. Many printers use this resolution.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not greater than zero.</exception>
+    public float Dpi
+    {
+        get => this.dpi;
+        set
+        {
+            Guard.MustBeGreaterThan(value, 0, nameof(this.Dpi));
+            this.dpi = value;
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the X dimension in millimetres: the width of the narrowest element of the symbology, which is one module. Set <see langword="null"/> to
+    /// take the nominal X dimension the specification of the symbology gives. Where the specification fixes the width of the whole symbol, as for
+    /// <see cref="SwissQrCodeSymbology"/>, the nominal X dimension is that width divided by the module count of the symbol. Some specifications give no X
+    /// dimension. Aztec Code, Code One, Data Matrix, DotCode, Han Xin Code, QR Code and Ultracode then use
+    /// <see cref="BarcodeSymbology.DefaultMatrixXDimension"/>, 0.495 millimetres. The other symbologies then use
+    /// <see cref="BarcodeSymbology.DefaultXDimension"/>, 0.330 millimetres.
+    /// <para>
+    /// A symbol draws at the X dimension of the nearest whole number of pixels at <see cref="Dpi"/>, at least one pixel, so every module of the symbol is
+    /// the same number of pixels wide. The symbol can then be slightly larger or smaller than this X dimension gives. Where the specification of the symbology
+    /// gives a smallest and a largest X dimension, the code clamps the number of pixels to that range. A value outside the range thus draws at the nearest
+    /// limit. The specification sets the range to make sure that a scanner can read the symbol. Thus each symbol stays inside its specification for all
+    /// values. At a resolution where no whole number of pixels is inside the range, the symbol draws at the smallest whole number of pixels over the smallest X
+    /// dimension. <see cref="MaxiCodeSymbology"/>, whose hexagonal modules do not stand on whole pixels, and <see cref="SwissQrCodeSymbology"/>, whose width
+    /// the specification fixes, draw at the exact X dimension. <see cref="SwissQrCodeSymbology"/> throws when this value is set.
+    /// </para>
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not greater than zero.</exception>
+    public double? XDimension
+    {
+        get => this.xDimension;
+        set
+        {
+            if (value is double x)
+            {
+                Guard.MustBeGreaterThan(x, 0, nameof(this.XDimension));
+            }
+
+            this.xDimension = value;
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the bar height in millimetres. Set <see langword="null"/> to take the nominal height that the symbology specification gives.
+    /// <para>
+    /// Some specifications give a minimum bar height, a maximum bar height, or both. A value outside that range draws at the nearest limit. The specification
+    /// sets the range to make sure that a scanner can read the symbol. Thus each symbol stays inside its specification for all values. The X dimension uses
+    /// the same rule.
+    /// </para>
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not greater than zero.</exception>
+    public double? BarHeight
+    {
+        get => this.barHeight;
+        set
+        {
+            if (value is double height)
+            {
+                Guard.MustBeGreaterThan(height, 0, nameof(this.BarHeight));
+            }
+
+            this.barHeight = value;
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the brush used to fill the bars and dark modules.
+    /// </summary>
+    public Brush BarBrush { get; set; } = Brushes.Solid(Color.Black);
+
+    /// <summary>
+    /// Gets or sets the brush that fills the symbol background and the quiet zones. Set <see langword="null"/> to leave the background as it is. Symbology
+    /// specifications require a light background for reliable scanning. A <see langword="null"/> background is safe over light content only.
+    /// </summary>
+    public Brush? Background { get; set; }
+
+    /// <summary>
+    /// Gets or sets the font for the human readable interpretation, whose size is in points and renders at <see cref="Dpi"/>. Set <see langword="null"/> to
+    /// print no text. The text prints at the size of this font, except where the standard of a symbology sets a size. The text of an Intelligent Mail Package
+    /// Barcode moves into its printed character height of 0.090 to 0.125 inch. This text prints bold, as its standard requires. When the font has no bold face,
+    /// this text prints with a synthetic weight. The text of an Intelligent Mail barcode prints at 10 points or larger, and the text of an Australia Post
+    /// barcode at 8 points or smaller. The text of a PZN prints at 6 points or larger. The text of a GS1-128, GS1 DataBar, ITF-14 or GS1 two-dimensional symbol
+    /// prints at an em height of 2 mm or larger, which is about 5.67 points. When a line that must stay within its span is wider than the span, the line prints
+    /// smaller. The quiet zone digits of a UPC symbol are an example of such a line.
+    /// </summary>
+    public Font? Font { get; set; }
+
+    /// <summary>
+    /// Gets or sets the font for the caption that a data layer symbology prints above its symbol. Set <see langword="null"/> to use <see cref="Font"/>. Its
+    /// size is the starting point, and <see cref="FitCaptionToSymbolWidth"/> then decides the final size. An ISBN or ISMN caption does not print below 9 point,
+    /// the minimum the ISBN and ISMN manuals set.
+    /// </summary>
+    public Font? CaptionFont { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the caption spans the bars of its symbol. When <see langword="true"/>, which is the default, the ends of the
+    /// caption meet the ends of the bars. When <see langword="false"/>, the caption prints at the size of its own font. The drawn area then becomes wider when
+    /// the caption is wider than the bars.
+    /// </summary>
+    public bool FitCaptionToSymbolWidth { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the drawn area holds the mandatory quiet zones. When <see langword="false"/>, the symbol starts at the draw
+    /// origin, and the caller must keep the surrounding area clear. CAUTION: scanners reject a symbol without its quiet zones.
+    /// </summary>
+    public bool IncludeQuietZones { get; set; } = true;
+
+    /// <summary>
+    /// Resolves the X dimension that a symbol draws at, in millimetres: <see cref="XDimension"/>, or the nominal X dimension when no X dimension is set, at
+    /// the nearest whole number of pixels at <see cref="Dpi"/>, clamped to the whole numbers of pixels inside the range of the specification. A module of a
+    /// whole number of pixels draws every bar and space of one width at the same number of pixels. The encoder converts the millimetre sizes of the symbol,
+    /// such as the bar height, to modules with this X dimension, so they keep their sizes.
+    /// </summary>
+    /// <param name="minimum">The smallest X dimension the specification permits, in millimetres, or zero where it gives none.</param>
+    /// <param name="nominal">The nominal X dimension of the symbology in millimetres.</param>
+    /// <param name="maximum">The largest X dimension the specification permits, in millimetres, or <see cref="double.PositiveInfinity"/> where it gives
+    /// none.</param>
+    /// <returns>The X dimension in millimetres.</returns>
+    internal double ResolveXDimension(double minimum, double nominal, double maximum)
+    {
+        double pixelsPerMillimetre = this.Dpi / MillimetresPerInch;
+        double pixels = PixelsOf(this.XDimension ?? nominal, pixelsPerMillimetre);
+
+        // The clamp works in whole pixels: the largest whole number of pixels at or under the maximum, and the smallest at or over the minimum and at least
+        // one. The tolerance keeps a limit that falls on a whole pixel, such as 0.254 mm at 100 dpi, on that pixel against the rounding error of the
+        // conversion. At a low resolution a narrow range can hold no whole pixel, and the lowest count is then over the highest. The minimum applies last, so
+        // the module is never under the minimum and is then over the maximum.
+        double highest = Math.Floor((maximum * pixelsPerMillimetre) + LimitTolerance);
+        double lowest = Math.Max(1, Math.Ceiling((minimum * pixelsPerMillimetre) - LimitTolerance));
+        pixels = Math.Max(Math.Min(pixels, highest), lowest);
+
+        // An inch is 254 tenths of a millimetre. The product 254 x pixels is a whole number, and 10 x Dpi is exact in a double because Dpi is a float. So
+        // the division is the only rounding, and IEEE 754 rounds it to the nearest double of the true size. Division by pixelsPerMillimetre rounds twice,
+        // and the size can then miss the nearest double by one bit.
+        return pixels * 254 / (10 * (double)this.Dpi);
+    }
+
+    /// <summary>
+    /// Returns the number of pixels a module of an X dimension from <see cref="ResolveXDimension(double, double, double)"/> draws at, at <see cref="Dpi"/>. A
+    /// symbology whose elements are not whole modules counts its runs in these pixels, so every element draws at a whole number of pixels.
+    /// </summary>
+    /// <param name="xDimension">The resolved X dimension in millimetres.</param>
+    /// <returns>The number of pixels in one module.</returns>
+    internal int ModulePixels(double xDimension)
+        => (int)PixelsOf(xDimension, this.Dpi / MillimetresPerInch);
+
+    /// <summary>
+    /// Returns the width in pixels of a module of a built symbol at <see cref="Dpi"/>.
+    /// </summary>
+    /// <param name="xDimension">The X dimension of the built symbol in millimetres.</param>
+    /// <returns>The width of one module in pixels.</returns>
+    internal float ModuleWidth(double xDimension)
+        => (float)(xDimension / MillimetresPerInch * this.Dpi);
+
+    /// <summary>
+    /// Returns the nearest whole number of pixels to an X dimension, at least one pixel. Half a pixel rounds up, to the larger module.
+    /// </summary>
+    /// <param name="xDimension">The X dimension in millimetres.</param>
+    /// <param name="pixelsPerMillimetre">The number of pixels in one millimetre.</param>
+    /// <returns>The number of pixels.</returns>
+    private static double PixelsOf(double xDimension, double pixelsPerMillimetre)
+        => Math.Max(1, Math.Round(xDimension * pixelsPerMillimetre, MidpointRounding.AwayFromZero));
+
+    /// <summary>
+    /// Resolves the bar height in modules: <see cref="BarHeight"/> divided by the X dimension, both in millimetres, or the nominal height of the symbology when
+    /// no bar height is set, clamped to the range of heights that the specification of the symbology gives. A bar height outside the range draws at the
+    /// nearest limit, as an X dimension outside its range does.
+    /// </summary>
+    /// <param name="xDimension">The X dimension of the symbol in millimetres, <see cref="BarcodeSymbol.XDimension"/>.</param>
+    /// <param name="minimumHeight">The smallest height that the specification permits in modules, or zero where it gives none.</param>
+    /// <param name="nominalHeight">The nominal height of the symbology in modules.</param>
+    /// <param name="maximumHeight">The largest height that the specification permits in modules, or <see cref="float.PositiveInfinity"/> where it gives
+    /// none.</param>
+    /// <returns>The bar height in modules.</returns>
+    internal float ResolveBarHeight(double xDimension, float minimumHeight, float nominalHeight, float maximumHeight)
+        => Math.Clamp(this.BarHeight.HasValue ? (float)(this.BarHeight.Value / xDimension) : nominalHeight, minimumHeight, maximumHeight);
+}

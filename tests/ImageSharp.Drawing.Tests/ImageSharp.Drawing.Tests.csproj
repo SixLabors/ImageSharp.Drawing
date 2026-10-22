@@ -30,6 +30,8 @@
     <PackageReference Include="System.Drawing.Common" />
     <PackageReference Include="SkiaSharp" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Condition="'$(IsLinux)'=='true'" />
+    <PackageReference Include="ZXing.Net" />
+    <PackageReference Include="ZXingCpp" />
   </ItemGroup>
 
   <ItemGroup>
@@ -43,6 +45,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="xunit.runner.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Barcodes\gs1-syntax-dictionary.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
