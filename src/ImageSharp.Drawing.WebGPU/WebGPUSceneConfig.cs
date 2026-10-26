@@ -937,7 +937,7 @@ internal readonly struct WebGPUSceneBufferSizes
             WebGPUSceneBufferSize<GpuPathBbox>.Create(checked((uint)range.PathCount)),
             WebGPUSceneBufferSize<GpuSceneDrawMonoid>.Create(workgroupCounts.DrawReduceX),
             WebGPUSceneBufferSize<GpuSceneDrawMonoid>.Create(drawObjectCount),
-            WebGPUSceneBufferSize<uint>.Create(checked((uint)(range.InfoWordCount + scene.PathGradientDataWordCount))),
+            WebGPUSceneBufferSize<uint>.Create(checked((uint)(range.InfoWordCount + scene.PathGradientDataWordCount + scene.BlockBrushDataWordCount))),
             WebGPUSceneBufferSize<GpuClipInp>.Create(checked((uint)range.ClipCount)),
             WebGPUSceneBufferSize<GpuClipElement>.Create(checked((uint)range.ClipCount)),
             WebGPUSceneBufferSize<GpuBic>.Create(checked((uint)range.ClipCount) / 256U),

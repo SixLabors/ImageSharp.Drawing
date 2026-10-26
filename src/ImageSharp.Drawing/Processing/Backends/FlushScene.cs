@@ -29,6 +29,7 @@ internal sealed partial class FlushScene : IDisposable
         strokeItems: [],
         layers: [],
         controlItems: [],
+        retainedScenes: [],
         hasApply: false,
         rows: [],
         segments: [],
@@ -49,7 +50,8 @@ internal sealed partial class FlushScene : IDisposable
     /// <param name="strokeItems">The retained stroke items indexed by original command index.</param>
     /// <param name="layers">The retained layer state indexed by begin-layer command index.</param>
     /// <param name="controlItems">The layer and apply control operations indexed by original command index.</param>
-    /// <param name="hasApply">Whether the scene contains apply barriers.</param>
+    /// <param name="retainedScenes">The retained scenes whose rows run as scene operations, indexed by original command index.</param>
+    /// <param name="hasApply">Whether the scene contains apply barriers or retained scenes with barriers.</param>
     /// <param name="rows">The retained row lists.</param>
     /// <param name="segments">The retained target-wide execution segments for scenes containing apply barriers.</param>
     /// <param name="profileStorages">The partition-owned aliased profile arenas.</param>
@@ -66,6 +68,7 @@ internal sealed partial class FlushScene : IDisposable
         StrokeSceneItem?[] strokeItems,
         DrawingCanvasLayer?[] layers,
         SceneControlItem?[] controlItems,
+        FlushScene?[] retainedScenes,
         bool hasApply,
         SceneRow[] rows,
         SceneSegment[] segments,
@@ -83,6 +86,7 @@ internal sealed partial class FlushScene : IDisposable
         this.StrokeItems = strokeItems;
         this.Layers = layers;
         this.ControlItems = controlItems;
+        this.RetainedScenes = retainedScenes;
         this.HasApply = hasApply;
         this.Rows = rows;
         this.Segments = segments;
@@ -125,7 +129,16 @@ internal sealed partial class FlushScene : IDisposable
     private SceneControlItem?[] ControlItems { get; }
 
     /// <summary>
-    /// Gets a value indicating whether the scene contains apply barriers.
+    /// Gets the retained scenes whose rows run as scene operations, indexed by original command index.
+    /// </summary>
+    /// <remarks>
+    /// The caller of <see cref="DrawingCanvas.RenderScene"/> owns these scenes and keeps them alive
+    /// while this scene is in use, so this scene does not dispose them.
+    /// </remarks>
+    public FlushScene?[] RetainedScenes { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the scene contains apply barriers or retained scenes with barriers.
     /// </summary>
     public bool HasApply { get; }
 
@@ -207,10 +220,22 @@ internal sealed partial class FlushScene : IDisposable
             return Empty();
         }
 
+        // A retained scene with barriers runs as segments, so a batch that contains one takes the
+        // segment path of an apply barrier, and each layer open around it is scoped.
+        bool hasBarriers = scene.HasApply;
+        bool[]? scopedSceneLayers = null;
+        if (scene.HasScenes)
+        {
+            hasBarriers |= scene.FindOrderedScenes(
+                static retained => retained is DefaultDrawingBackendScene { Scene.Segments.Length: > 0 },
+                out scopedSceneLayers);
+        }
+
         FillSceneItem?[] fillItems = new FillSceneItem?[commandCount];
         StrokeSceneItem?[] strokeItems = new StrokeSceneItem?[commandCount];
         DrawingCanvasLayer?[] layers = new DrawingCanvasLayer?[commandCount];
-        SceneControlItem?[] controlItems = scene.HasApply ? new SceneControlItem?[commandCount] : [];
+        SceneControlItem?[] controlItems = hasBarriers ? new SceneControlItem?[commandCount] : [];
+        FlushScene?[] retainedScenes = scene.HasScenes ? new FlushScene?[commandCount] : [];
         int partitionCount = ParallelExecutionHelper.GetPartitionCount(maxDegreeOfParallelism, commandCount, targetRowCount);
         PartitionState[] partitions = new PartitionState[partitionCount];
         LinearGeometryProfileStorage[] profileStorages = new LinearGeometryProfileStorage[partitionCount];
@@ -252,7 +277,8 @@ internal sealed partial class FlushScene : IDisposable
                         fillItems,
                         strokeItems,
                         layers,
-                        controlItems);
+                        controlItems,
+                        retainedScenes);
 
                     partitions[partitionIndex] = partition;
                     profileStorages[partitionIndex] = partition.ProfileStorage;
@@ -260,6 +286,7 @@ internal sealed partial class FlushScene : IDisposable
 
             int fillItemCount = 0;
             int strokeItemCount = 0;
+            int sceneItemCount = 0;
             long totalEdgeCount = 0;
             int singleBandItemCount = 0;
             int smallEdgeItemCount = 0;
@@ -273,6 +300,7 @@ internal sealed partial class FlushScene : IDisposable
                 PartitionState partition = partitions[i];
                 fillItemCount += partition.FillItemCount;
                 strokeItemCount += partition.StrokeItemCount;
+                sceneItemCount += partition.SceneItemCount;
                 totalEdgeCount += partition.TotalEdgeCount;
                 singleBandItemCount += partition.SingleBandItemCount;
                 smallEdgeItemCount += partition.SmallEdgeItemCount;
@@ -302,8 +330,9 @@ internal sealed partial class FlushScene : IDisposable
             }
 
             // Apply barriers execute even when no draw work survived clipping, so a scene that
-            // contains them can never collapse to the empty singleton.
-            if (((fillItemCount + strokeItemCount) == 0 || rowItemCount == 0) && !scene.HasApply)
+            // contains them can never collapse to the empty singleton. Retained scene rows are
+            // draw work of this scene, the same as its own fill and stroke items.
+            if (((fillItemCount + strokeItemCount + sceneItemCount) == 0 || rowItemCount == 0) && !hasBarriers)
             {
                 // Retained items whose row operations were all clipped away still own rasterized
                 // geometry and clip state; the empty singleton carries nothing, so release them here.
@@ -318,12 +347,13 @@ internal sealed partial class FlushScene : IDisposable
                 : FinalizeRows(rowBuilders, firstTargetRowBandIndex, rowCount);
             rowsFinalized = true;
 
-            if (scene.HasApply)
+            if (hasBarriers)
             {
                 segments = CreateApplySegments(
                     commandCount,
                     sceneRows,
                     controlItems,
+                    scopedSceneLayers,
                     allocator,
                     firstTargetRowBandIndex,
                     targetRowCount,
@@ -355,7 +385,8 @@ internal sealed partial class FlushScene : IDisposable
                 strokeItems,
                 layers,
                 controlItems,
-                scene.HasApply,
+                retainedScenes,
+                hasBarriers,
                 sceneRows,
                 segments,
                 profileStorages);
@@ -756,6 +787,10 @@ internal sealed partial class FlushScene : IDisposable
     /// <param name="commandCount">The number of commands in the source batch.</param>
     /// <param name="rows">The merged scene rows whose operations are redistributed into segments.</param>
     /// <param name="controlItems">The layer and apply control operations indexed by original command index.</param>
+    /// <param name="scopedSceneLayers">
+    /// For each command index, whether the BeginLayer command there opens a layer around a retained
+    /// scene with barriers, or <see langword="null"/> when there is no such layer.
+    /// </param>
     /// <param name="allocator">The allocator used for retained row storage.</param>
     /// <param name="firstTargetRowBandIndex">The first row-band index covered by the target.</param>
     /// <param name="targetRowCount">The number of row bands covered by the target.</param>
@@ -766,6 +801,7 @@ internal sealed partial class FlushScene : IDisposable
         int commandCount,
         SceneRow[] rows,
         SceneControlItem?[] controlItems,
+        bool[]? scopedSceneLayers,
         MemoryAllocator allocator,
         int firstTargetRowBandIndex,
         int targetRowCount,
@@ -788,7 +824,7 @@ internal sealed partial class FlushScene : IDisposable
             switch (controlItem.Kind)
             {
                 case SceneOperationKind.BeginLayer:
-                    if (controlItem.Layer.RequiresScopedApply)
+                    if (controlItem.Layer.RequiresScopedApply || scopedSceneLayers?[commandIndex] == true)
                     {
                         SceneSequenceBuilder child = new(allocator, firstTargetRowBandIndex, targetRowCount);
                         scopedLayers.Add(new ScopedLayerBuildFrame(current, controlItem.Layer, controlItem.LayerBounds, child));
@@ -819,6 +855,10 @@ internal sealed partial class FlushScene : IDisposable
 
                 case SceneOperationKind.Apply:
                     current.AddApply(controlItem.ApplyItem);
+                    break;
+
+                case SceneOperationKind.Scene:
+                    current.AddScene(controlItem.Scene);
                     break;
             }
         }
@@ -909,6 +949,7 @@ internal sealed partial class FlushScene : IDisposable
     /// <param name="strokeItems">The shared retained stroke items indexed by original command index.</param>
     /// <param name="layers">The shared retained layer state indexed by begin-layer command index.</param>
     /// <param name="controlItems">The shared layer and apply control operations indexed by original command index; empty when the batch has no apply barriers.</param>
+    /// <param name="retainedScenes">The shared retained scenes indexed by original command index; empty when the batch has no retained scene commands.</param>
     /// <returns>The partition-local counts and row builders to merge after all partitions complete.</returns>
     private static PartitionState ProcessPartition(
         IReadOnlyList<CompositionSceneCommand> commands,
@@ -922,11 +963,13 @@ internal sealed partial class FlushScene : IDisposable
         FillSceneItem?[] fillItems,
         StrokeSceneItem?[] strokeItems,
         DrawingCanvasLayer?[] layers,
-        SceneControlItem?[] controlItems)
+        SceneControlItem?[] controlItems,
+        FlushScene?[] retainedScenes)
     {
         RowBuilder[] rowBuilders = new RowBuilder[targetRowCount];
         int fillItemCount = 0;
         int strokeItemCount = 0;
+        int sceneItemCount = 0;
         long totalEdgeCount = 0;
         int singleBandItemCount = 0;
         int smallEdgeItemCount = 0;
@@ -1035,11 +1078,25 @@ internal sealed partial class FlushScene : IDisposable
                         ref singleBandItemCount,
                         ref smallEdgeItemCount);
                 }
+                else if (command is RetainedSceneCompositionSceneCommand sceneCommand)
+                {
+                    ProcessSceneCommand(
+                        sceneCommand,
+                        commandIndex,
+                        targetBounds,
+                        firstTargetRowBandIndex,
+                        rowBuilders,
+                        allocator,
+                        controlItems,
+                        retainedScenes,
+                        ref sceneItemCount);
+                }
             }
 
             return new PartitionState(
                 fillItemCount,
                 strokeItemCount,
+                sceneItemCount,
                 totalEdgeCount,
                 singleBandItemCount,
                 smallEdgeItemCount,
@@ -1434,6 +1491,85 @@ internal sealed partial class FlushScene : IDisposable
     }
 
     /// <summary>
+    /// Prepares one retained scene command. A retained scene with rows only adds one scene
+    /// operation to each row band that it draws, so its rows run in the band order of this scene.
+    /// A retained scene with barriers becomes a control item that runs the whole scene at its
+    /// position in the stream.
+    /// </summary>
+    /// <param name="command">The retained scene command to prepare.</param>
+    /// <param name="commandIndex">The original command index; the retained scene is stored at this index.</param>
+    /// <param name="targetBounds">The destination bounds of the flush.</param>
+    /// <param name="firstTargetRowBandIndex">The first row-band index covered by the target.</param>
+    /// <param name="rowBuilders">The partition-owned row builders, one slot per target row band.</param>
+    /// <param name="allocator">The allocator used for row-block storage.</param>
+    /// <param name="controlItems">The shared layer and apply control operations; empty when the batch has no apply barriers.</param>
+    /// <param name="retainedScenes">The shared retained scenes indexed by original command index.</param>
+    /// <param name="sceneItemCount">The running partition count of retained scenes with work.</param>
+    private static void ProcessSceneCommand(
+        RetainedSceneCompositionSceneCommand command,
+        int commandIndex,
+        in Rectangle targetBounds,
+        int firstTargetRowBandIndex,
+        RowBuilder[] rowBuilders,
+        MemoryAllocator allocator,
+        SceneControlItem?[] controlItems,
+        FlushScene?[] retainedScenes,
+        ref int sceneItemCount)
+    {
+        // RenderScene accepts any backend scene, so this is the boundary that checks it. The
+        // bounds must match so that both scenes use the same row bands.
+        if (command.Scene is not DefaultDrawingBackendScene cpuScene)
+        {
+            throw new InvalidOperationException("The scene is not compatible with the CPU drawing backend.");
+        }
+
+        if (cpuScene.Bounds != targetBounds)
+        {
+            throw new InvalidOperationException("The target bounds do not match the CPU drawing backend scene bounds.");
+        }
+
+        FlushScene scene = cpuScene.Scene;
+        if (scene.Segments.Length != 0)
+        {
+            // The scene holds barriers, so its rows cannot run inside the bands of this scene. Create
+            // found it with FindOrderedScenes, so the control items exist and every open layer
+            // around it is scoped.
+            controlItems[commandIndex] = new SceneControlItem(scene);
+            sceneItemCount++;
+            return;
+        }
+
+        if (scene.RowCount == 0)
+        {
+            return;
+        }
+
+        retainedScenes[commandIndex] = scene;
+        sceneItemCount++;
+
+        // Inside a layer the rows are limited to the layer bands, the same as for a fill in that
+        // layer. Retained row operations outside the layer bounds would otherwise draw on the parent.
+        GetEffectiveRowSlotRange(command.TargetBounds, firstTargetRowBandIndex, rowBuilders.Length, command.IsInsideLayer, out int rowStart, out int rowEnd);
+        SceneRow[] rows = scene.Rows;
+        for (int rowIndex = 0; rowIndex < rows.Length; rowIndex++)
+        {
+            int rowSlot = rows[rowIndex].RowBandIndex - firstTargetRowBandIndex;
+            if (rowSlot < rowStart || rowSlot >= rowEnd)
+            {
+                continue;
+            }
+
+            ref RowBuilder builder = ref rowBuilders[rowSlot];
+            if (!builder.IsInitialized)
+            {
+                builder = new RowBuilder(allocator);
+            }
+
+            builder.Append(new SceneOperation(SceneOperationKind.Scene, commandIndex, rowIndex));
+        }
+    }
+
+    /// <summary>
     /// Appends one begin or end layer operation into every row builder the layer touches so that
     /// per-row rendering can open and close the layer at the correct point in row order.
     /// </summary>
@@ -1822,19 +1958,7 @@ internal sealed partial class FlushScene : IDisposable
     /// <returns>The inflated stroke bounds.</returns>
     private static RectangleF GetStrokeBounds(RectangleF bounds, Pen pen, float widthScale)
     {
-        float halfWidth = pen.StrokeWidth * widthScale * 0.5F;
-        float joinInflate = pen.StrokeOptions.LineJoin switch
-        {
-            LineJoin.Miter or LineJoin.MiterRevert or LineJoin.MiterRound => (float)(halfWidth * Math.Max(pen.StrokeOptions.MiterLimit, 1D)),
-            _ => halfWidth
-        };
-
-        float capInflate = pen.StrokeOptions.LineCap == LineCap.Square
-            ? halfWidth * MathF.Sqrt(2F)
-            : halfWidth;
-
-        float inflate = MathF.Max(joinInflate, capInflate);
-
+        float inflate = pen.GetOutlineRadius(widthScale);
         bounds.Inflate(new SizeF(inflate, inflate));
         return bounds;
     }
@@ -1961,6 +2085,7 @@ internal sealed partial class FlushScene : IDisposable
         /// </summary>
         /// <param name="fillItemCount">The number of fill items retained by the partition.</param>
         /// <param name="strokeItemCount">The number of stroke items retained by the partition.</param>
+        /// <param name="sceneItemCount">The number of retained scenes with work in the partition.</param>
         /// <param name="totalEdgeCount">The total number of encoded raster edges retained by the partition.</param>
         /// <param name="singleBandItemCount">The number of items that occupy a single row band.</param>
         /// <param name="smallEdgeItemCount">The number of covered bands with a small edge count.</param>
@@ -1971,6 +2096,7 @@ internal sealed partial class FlushScene : IDisposable
         public PartitionState(
             int fillItemCount,
             int strokeItemCount,
+            int sceneItemCount,
             long totalEdgeCount,
             int singleBandItemCount,
             int smallEdgeItemCount,
@@ -1981,6 +2107,7 @@ internal sealed partial class FlushScene : IDisposable
         {
             this.FillItemCount = fillItemCount;
             this.StrokeItemCount = strokeItemCount;
+            this.SceneItemCount = sceneItemCount;
             this.TotalEdgeCount = totalEdgeCount;
             this.SingleBandItemCount = singleBandItemCount;
             this.SmallEdgeItemCount = smallEdgeItemCount;
@@ -1999,6 +2126,11 @@ internal sealed partial class FlushScene : IDisposable
         /// Gets the number of stroke items retained by the partition.
         /// </summary>
         public int StrokeItemCount { get; }
+
+        /// <summary>
+        /// Gets the number of retained scenes with work in the partition.
+        /// </summary>
+        public int SceneItemCount { get; }
 
         /// <summary>
         /// Gets the total number of encoded raster edges retained by the partition.
@@ -2134,6 +2266,16 @@ internal sealed partial class FlushScene : IDisposable
         }
 
         /// <summary>
+        /// Appends a retained scene with barriers after the current row segment.
+        /// </summary>
+        /// <param name="scene">The retained scene. The caller owns it.</param>
+        public void AddScene(FlushScene scene)
+        {
+            this.CurrentSegment.SetScene(scene);
+            this.CurrentSegment = this.CreateSegment();
+        }
+
+        /// <summary>
         /// Finalizes all retained segments in this sequence.
         /// </summary>
         /// <param name="rowCount">The total retained row count.</param>
@@ -2180,6 +2322,7 @@ internal sealed partial class FlushScene : IDisposable
         private RowBuilder[]? rowBuilders;
         private ApplySceneItem? applyItem;
         private ScopedLayerSceneBuilder? layerBuilder;
+        private FlushScene? sceneItem;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SceneSegmentBuilder"/> class.
@@ -2222,6 +2365,12 @@ internal sealed partial class FlushScene : IDisposable
         public void SetLayer(ScopedLayerSceneBuilder builder) => this.layerBuilder = builder;
 
         /// <summary>
+        /// Sets the retained scene with barriers executed after this segment's rows.
+        /// </summary>
+        /// <param name="scene">The retained scene. The caller owns it.</param>
+        public void SetScene(FlushScene scene) => this.sceneItem = scene;
+
+        /// <summary>
         /// Finalizes this builder into retained segment storage.
         /// </summary>
         /// <param name="firstTargetRowBandIndex">The first target row-band index.</param>
@@ -2261,13 +2410,13 @@ internal sealed partial class FlushScene : IDisposable
             rowCount = segmentRowCount + (layerItem?.RowCount ?? 0);
             rowItemCount = segmentRowItemCount + (layerItem?.RowItemCount ?? 0);
 
-            if (segmentRowCount == 0 && this.applyItem is null && layerItem is null)
+            if (segmentRowCount == 0 && this.applyItem is null && layerItem is null && this.sceneItem is null)
             {
                 segment = null;
                 return false;
             }
 
-            segment = new SceneSegment(rows, segmentRowItemCount, this.applyItem, layerItem);
+            segment = new SceneSegment(rows, segmentRowItemCount, this.applyItem, layerItem, this.sceneItem);
             return true;
         }
     }

@@ -40,6 +40,11 @@ internal sealed partial class FlushScene
         /// Applies an image processor to the current target.
         /// </summary>
         Apply = 4,
+
+        /// <summary>
+        /// Executes one row of a retained scene, or a whole retained scene with barriers, against the current target.
+        /// </summary>
+        Scene = 5,
     }
 
     /// <summary>
@@ -83,12 +88,14 @@ internal sealed partial class FlushScene
         /// <summary>
         /// Gets the retained fill or stroke item index for draw operations. For layer operations
         /// this is the layer command's own index; begin-layer operations use it to look up the
-        /// shared layer state. In all cases this equals the original command index.
+        /// shared layer state. For scene operations it indexes <see cref="RetainedScenes"/>.
+        /// In all cases this equals the original command index.
         /// </summary>
         public int ItemIndex { get; }
 
         /// <summary>
-        /// Gets the retained rasterizable row index for draw operations, or -1 for layer operations.
+        /// Gets the retained rasterizable row index for draw operations, the index into the
+        /// retained scene rows for scene operations, or -1 for layer operations.
         /// </summary>
         public int LocalRowIndex { get; }
 
@@ -105,6 +112,7 @@ internal sealed partial class FlushScene
     {
         private readonly ApplySceneItem? applyItem;
         private readonly DrawingCanvasLayer? layer;
+        private readonly FlushScene? scene;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SceneControlItem"/> struct for a layer control operation.
@@ -118,6 +126,7 @@ internal sealed partial class FlushScene
             this.LayerBounds = layerBounds;
             this.layer = layer;
             this.applyItem = null;
+            this.scene = null;
         }
 
         /// <summary>
@@ -130,6 +139,21 @@ internal sealed partial class FlushScene
             this.LayerBounds = default;
             this.layer = null;
             this.applyItem = applyItem;
+            this.scene = null;
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="SceneControlItem"/> struct for a retained
+        /// scene with barriers, which executes as a whole at its position in the stream.
+        /// </summary>
+        /// <param name="scene">The retained scene. The caller owns it.</param>
+        public SceneControlItem(FlushScene scene)
+        {
+            this.Kind = SceneOperationKind.Scene;
+            this.LayerBounds = default;
+            this.layer = null;
+            this.applyItem = null;
+            this.scene = scene;
         }
 
         /// <summary>
@@ -151,6 +175,11 @@ internal sealed partial class FlushScene
         /// Gets the retained apply operation.
         /// </summary>
         public ApplySceneItem ApplyItem => this.applyItem ?? throw new InvalidOperationException("Only apply steps carry apply state.");
+
+        /// <summary>
+        /// Gets the retained scene for a scene operation.
+        /// </summary>
+        public FlushScene Scene => this.scene ?? throw new InvalidOperationException("Only scene steps carry a retained scene.");
     }
 
     /// <summary>
@@ -398,16 +427,19 @@ internal sealed partial class FlushScene
         /// <param name="rowItemCount">The number of retained row operations in this segment.</param>
         /// <param name="applyItem">The apply operation executed after the rows.</param>
         /// <param name="layerItem">The scoped layer executed after the rows.</param>
+        /// <param name="sceneItem">The retained scene with barriers executed after the rows.</param>
         public SceneSegment(
             SceneRow[] rows,
             int rowItemCount,
             ApplySceneItem? applyItem,
-            ScopedLayerSceneItem? layerItem)
+            ScopedLayerSceneItem? layerItem,
+            FlushScene? sceneItem)
         {
             this.Rows = rows;
             this.RowItemCount = rowItemCount;
             this.ApplyItem = applyItem;
             this.LayerItem = layerItem;
+            this.SceneItem = sceneItem;
         }
 
         /// <summary>
@@ -429,6 +461,12 @@ internal sealed partial class FlushScene
         /// Gets the scoped layer executed after the rows.
         /// </summary>
         public ScopedLayerSceneItem? LayerItem { get; }
+
+        /// <summary>
+        /// Gets the retained scene with barriers executed after the rows. The caller of
+        /// <see cref="DrawingCanvas.RenderScene"/> owns it, so the segment does not dispose it.
+        /// </summary>
+        public FlushScene? SceneItem { get; }
 
         /// <inheritdoc />
         public void Dispose()

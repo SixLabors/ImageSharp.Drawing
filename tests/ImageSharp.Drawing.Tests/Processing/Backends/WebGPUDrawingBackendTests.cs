@@ -2490,6 +2490,546 @@ public partial class WebGPUDrawingBackendTests
     }
 
     [WebGPUTheory]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32)]
+    public void CreateScene_KeepsScenesRecordedBeforeItInOrder<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
+        };
+
+        // Green is recorded before the inserted red scene and blue after it. Both overlap the red
+        // square, so the colors in the overlaps show the order of the three parts. The combined
+        // scene then renders into a second canvas.
+        static void DrawScenes(DrawingCanvas sourceCanvas, Func<DrawingCanvas> createTargetCanvas)
+        {
+            sourceCanvas.Fill(Brushes.Solid(Color.Red), new Rectangle(4, 4, 8, 8));
+            using DrawingBackendScene inserted = sourceCanvas.CreateScene();
+
+            sourceCanvas.Fill(Brushes.Solid(Color.Green), new Rectangle(0, 4, 6, 8));
+            sourceCanvas.RenderScene(inserted);
+            sourceCanvas.Fill(Brushes.Solid(Color.Blue), new Rectangle(10, 4, 8, 8));
+            using DrawingBackendScene combined = sourceCanvas.CreateScene();
+
+            using DrawingCanvas targetCanvas = createTargetCanvas();
+            targetCanvas.RenderScene(combined);
+        }
+
+        using Image<TPixel> defaultSource = provider.GetImage();
+        using Image<TPixel> defaultImage = provider.GetImage();
+        using (DrawingCanvas sourceCanvas = defaultSource.Frames.RootFrame.CreateCanvas(defaultSource.Configuration, drawingOptions))
+        {
+            DrawScenes(sourceCanvas, () => defaultImage.Frames.RootFrame.CreateCanvas(defaultImage.Configuration, drawingOptions));
+        }
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        Configuration nativeConfig = Configuration.Default.Clone();
+        nativeConfig.SetDrawingBackend(nativeSurfaceBackend);
+
+        using WebGPURenderTarget sourceTarget = new(defaultImage.Width, defaultImage.Height);
+        using WebGPURenderTarget renderTarget = new(defaultImage.Width, defaultImage.Height);
+        using (DrawingCanvas nativeSourceCanvas = WebGPUCanvasFactory.CreateCanvas(
+                   nativeConfig,
+                   drawingOptions,
+                   nativeSurfaceBackend,
+                   sourceTarget.Bounds,
+                   sourceTarget.Surface,
+                   sourceTarget.Surface.TargetDescriptor))
+        {
+            DrawScenes(
+                nativeSourceCanvas,
+                () =>
+                {
+                    DrawingCanvas canvas = WebGPUCanvasFactory.CreateCanvas(
+                        nativeConfig,
+                        drawingOptions,
+                        nativeSurfaceBackend,
+                        renderTarget.Bounds,
+                        renderTarget.Surface,
+                        renderTarget.Surface.TargetDescriptor);
+
+                    // The render target starts transparent, so match the white default image first.
+                    canvas.Clear(Brushes.Solid(Color.White));
+                    return canvas;
+                });
+        }
+
+        using Image<TPixel> nativeSurfaceImage = renderTarget.ReadbackImage<TPixel>();
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+
+        foreach (Image<TPixel> image in new[] { defaultImage, nativeSurfaceImage })
+        {
+            Assert.Equal(Color.Green.ToPixel<TPixel>(), image[2, 8]);
+            Assert.Equal(Color.Red.ToPixel<TPixel>(), image[5, 8]);
+            Assert.Equal(Color.Red.ToPixel<TPixel>(), image[8, 8]);
+            Assert.Equal(Color.Blue.ToPixel<TPixel>(), image[11, 8]);
+            Assert.Equal(Color.Blue.ToPixel<TPixel>(), image[16, 8]);
+        }
+
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "Flush", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "Flush", true)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderScene", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderScene", true)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderSceneWithLayer", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderSceneWithLayer", true)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "TwoScenes", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "TwoScenes", true)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "CreateScene", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "CreateScene", true)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "CreateSceneAfterRestore", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "CreateSceneAfterRestore", true)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "CopyPixelsFrom", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "CopyPixelsFrom", true)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "CopyPixelsFromSourceChanges", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "CopyPixelsFromSourceChanges", true)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderSceneAfterApply", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderSceneAfterApply", true)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderSceneInScopedChild", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderSceneInScopedChild", true)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderPathGradientSceneAfterApply", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderPathGradientSceneAfterApply", true)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderPartsScene", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderPartsScene", true)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderNestedScene", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderNestedScene", true)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "CopyPixelsFromSelf", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "CopyPixelsFromSelf", true)]
+    public void SaveLayer_WithSealInsideLayer_MatchesDirectDrawing<TPixel>(
+        TestImageProvider<TPixel> provider,
+        string seal,
+        bool scopedLayer)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
+        };
+
+        GraphicsOptions layerOptions = new() { BlendPercentage = 0.5F };
+        Rectangle layerBounds = new(0, 0, 32, 16);
+        Rectangle red = new(2, 4, 12, 8);
+        Rectangle blue = new(8, 4, 12, 8);
+        Rectangle green = new(14, 4, 12, 8);
+        Point copyTarget = new(2, 4);
+
+        // The right half of the blue rectangle, yellow in the copy source.
+        Rectangle yellow = new(14, 4, 6, 8);
+
+        // The pixels that the self copy reads: the green rectangle of the frame before the layer.
+        using Image<TPixel> copiedGreen = new(green.Width, green.Height, Color.Green.ToPixel<TPixel>());
+
+        // Opens the outer layer and draws the content before the seal. An Apply in the layer makes
+        // both backends render it on the scoped path.
+        void BeginLayer(DrawingCanvas canvas)
+        {
+            _ = canvas.SaveLayer(layerOptions, layerBounds);
+            canvas.Fill(Brushes.Solid(Color.Red), red);
+            if (scopedLayer)
+            {
+                canvas.Apply(new Rectangle(2, 4, 4, 8), context => context.Invert());
+            }
+        }
+
+        // Records commands into a retained scene of the same canvas before anything else is
+        // recorded, so the scene holds only those commands and has the backend and bounds of the canvas.
+        static DrawingBackendScene CreateRetainedScene(DrawingCanvas canvas, Action<DrawingCanvas> draw, List<DrawingBackendScene> scenes)
+        {
+            draw(canvas);
+            DrawingBackendScene scene = canvas.CreateScene();
+            scenes.Add(scene);
+            return scene;
+        }
+
+        void DrawBlue(DrawingCanvas canvas) => canvas.Fill(Brushes.Solid(Color.Blue), blue);
+
+        void DrawGreen(DrawingCanvas canvas) => canvas.Fill(Brushes.Solid(Color.Green), green);
+
+        void DrawBlueInLayer(DrawingCanvas canvas)
+        {
+            _ = canvas.SaveLayer(layerOptions, layerBounds);
+            canvas.Fill(Brushes.Solid(Color.Blue), blue);
+            canvas.Restore();
+        }
+
+        // A path gradient has brush data outside the draw data, which a retained scene keeps in its own block.
+        void DrawPathGradient(DrawingCanvas canvas)
+            => canvas.Fill(
+                new PathGradientBrush(
+                    [new PointF(8, 4), new PointF(20, 4), new PointF(20, 12), new PointF(8, 12)],
+                    [Color.Blue, Color.Green, Color.Yellow, Color.Cyan]),
+                blue);
+
+        // A scoped layer with an Apply, and the content drawn by drawContent after the Apply.
+        void DrawInScopedLayer(DrawingCanvas canvas, Action<DrawingCanvas> drawContent)
+        {
+            _ = canvas.SaveLayer(layerOptions, layerBounds);
+            canvas.Apply(new Rectangle(4, 2, 4, 4), context => context.Invert());
+            drawContent(canvas);
+            canvas.Restore();
+        }
+
+        // An Apply before the layer makes the canvas scene ordered, and the layer stays plain unless
+        // scopedLayer is set.
+        void ApplyBeforeLayer(DrawingCanvas canvas)
+            => canvas.Apply(new Rectangle(26, 0, 6, 4), context => context.Invert());
+
+        // Opens a scoped layer that is smaller than the canvas, and a plain layer inside it. The
+        // Apply makes the smaller layer scoped. The content of the plain layer is drawn by drawContent.
+        void DrawInScopedChild(DrawingCanvas canvas, Action<DrawingCanvas> drawContent)
+        {
+            Rectangle childBounds = new(4, 2, 24, 12);
+            BeginLayer(canvas);
+            _ = canvas.SaveLayer(layerOptions, childBounds);
+            canvas.Apply(new Rectangle(4, 2, 4, 4), context => context.Invert());
+            _ = canvas.SaveLayer(layerOptions, childBounds);
+            drawContent(canvas);
+            canvas.Restore();
+            canvas.Restore();
+            canvas.Restore();
+        }
+
+        // The sealed drawing: the same content as the direct drawing, with the seal inside the layer.
+        // The copy source is a canvas of the same backend whose frame is blue with a yellow right half
+        // in the blue rectangle, so a copy that reads from the wrong origin gives other pixels.
+        void DrawSealed(DrawingCanvas canvas, List<DrawingBackendScene> scenes, Func<DrawingCanvas> createCopySource)
+        {
+            switch (seal)
+            {
+                case "CopyPixelsFrom":
+                {
+                    using DrawingCanvas source = createCopySource();
+                    BeginLayer(canvas);
+                    canvas.CopyPixelsFrom(source, blue, blue.Location);
+                    canvas.Restore();
+                    break;
+                }
+
+                case "CopyPixelsFromSourceChanges":
+                {
+                    // The source frame changes and renders before the target replays. The copy must
+                    // still give the source pixels from the time of the call.
+                    DrawingCanvas source = createCopySource();
+                    BeginLayer(canvas);
+                    canvas.CopyPixelsFrom(source, blue, blue.Location);
+                    canvas.Restore();
+                    source.Fill(Brushes.Solid(Color.Green), blue);
+                    source.Dispose();
+                    break;
+                }
+
+                case "Flush":
+                    BeginLayer(canvas);
+                    canvas.Flush();
+                    DrawBlue(canvas);
+                    canvas.Restore();
+                    break;
+
+                case "RenderScene":
+                {
+                    DrawingBackendScene blueScene = CreateRetainedScene(canvas, DrawBlue, scenes);
+                    BeginLayer(canvas);
+                    canvas.RenderScene(blueScene);
+                    canvas.Restore();
+                    break;
+                }
+
+                case "RenderSceneWithLayer":
+                {
+                    DrawingBackendScene layerScene = CreateRetainedScene(canvas, DrawBlueInLayer, scenes);
+                    BeginLayer(canvas);
+                    canvas.RenderScene(layerScene);
+                    canvas.Restore();
+                    break;
+                }
+
+                case "TwoScenes":
+                {
+                    DrawingBackendScene blueScene = CreateRetainedScene(canvas, DrawBlue, scenes);
+                    DrawingBackendScene greenScene = CreateRetainedScene(canvas, DrawGreen, scenes);
+                    BeginLayer(canvas);
+                    canvas.RenderScene(blueScene);
+                    canvas.RenderScene(greenScene);
+                    canvas.Restore();
+                    break;
+                }
+
+                case "CreateScene":
+                {
+                    // The returned scene closes the open layer at its end, and the canvas opens the layer
+                    // again. Rendering the scene back therefore puts its content in a nested layer.
+                    BeginLayer(canvas);
+                    DrawingBackendScene scene = canvas.CreateScene();
+                    scenes.Add(scene);
+                    canvas.RenderScene(scene);
+                    DrawBlue(canvas);
+                    canvas.Restore();
+                    break;
+                }
+
+                case "CreateSceneAfterRestore":
+                {
+                    DrawingBackendScene blueScene = CreateRetainedScene(canvas, DrawBlue, scenes);
+                    BeginLayer(canvas);
+                    canvas.RenderScene(blueScene);
+                    canvas.Restore();
+                    DrawingBackendScene combinedScene = canvas.CreateScene();
+                    scenes.Add(combinedScene);
+                    canvas.RenderScene(combinedScene);
+                    break;
+                }
+
+                case "RenderSceneAfterApply":
+                {
+                    DrawingBackendScene blueScene = CreateRetainedScene(canvas, DrawBlue, scenes);
+                    ApplyBeforeLayer(canvas);
+                    BeginLayer(canvas);
+                    canvas.RenderScene(blueScene);
+                    canvas.Restore();
+                    break;
+                }
+
+                case "RenderSceneInScopedChild":
+                {
+                    DrawingBackendScene blueScene = CreateRetainedScene(canvas, DrawBlue, scenes);
+                    DrawInScopedChild(canvas, target => target.RenderScene(blueScene));
+                    break;
+                }
+
+                case "RenderPathGradientSceneAfterApply":
+                {
+                    DrawingBackendScene gradientScene = CreateRetainedScene(canvas, DrawPathGradient, scenes);
+                    ApplyBeforeLayer(canvas);
+                    BeginLayer(canvas);
+                    canvas.RenderScene(gradientScene);
+                    canvas.Restore();
+                    break;
+                }
+
+                case "RenderPartsScene":
+                {
+                    // A scene that renders another scene outside every layer holds its parts in order.
+                    DrawingBackendScene blueScene = CreateRetainedScene(canvas, DrawBlue, scenes);
+                    DrawingBackendScene partsScene = CreateRetainedScene(
+                        canvas,
+                        target =>
+                        {
+                            target.RenderScene(blueScene);
+                            DrawGreen(target);
+                        },
+                        scenes);
+
+                    BeginLayer(canvas);
+                    canvas.RenderScene(partsScene);
+                    canvas.Restore();
+                    break;
+                }
+
+                case "CopyPixelsFromSelf":
+                    // CopyPixelsFrom applies the queued commands of the source first. The content
+                    // of the open layer reaches the frame only at Restore, so the copy of the green
+                    // rectangle holds the green fill that was recorded before the layer.
+                    DrawGreen(canvas);
+                    BeginLayer(canvas);
+                    canvas.CopyPixelsFrom(canvas, green, copyTarget);
+                    canvas.Restore();
+                    break;
+
+                case "RenderNestedScene":
+                {
+                    // The outer scene renders the blue scene directly inside its scoped layer, and
+                    // the canvas renders the outer scene inside its own layer.
+                    DrawingBackendScene blueScene = CreateRetainedScene(canvas, DrawBlue, scenes);
+                    DrawingBackendScene outerScene = CreateRetainedScene(
+                        canvas,
+                        target => DrawInScopedLayer(target, layer => layer.RenderScene(blueScene)),
+                        scenes);
+
+                    BeginLayer(canvas);
+                    canvas.RenderScene(outerScene);
+                    canvas.Restore();
+                    break;
+                }
+            }
+        }
+
+        // The direct drawing: the expected result of each sealed drawing, with no seal.
+        void DrawDirect(DrawingCanvas canvas)
+        {
+            switch (seal)
+            {
+                case "RenderSceneWithLayer":
+                    BeginLayer(canvas);
+                    DrawBlueInLayer(canvas);
+                    canvas.Restore();
+                    break;
+
+                case "TwoScenes":
+                    BeginLayer(canvas);
+                    DrawBlue(canvas);
+                    DrawGreen(canvas);
+                    canvas.Restore();
+                    break;
+
+                case "CreateScene":
+                    _ = canvas.SaveLayer(layerOptions, layerBounds);
+                    BeginLayer(canvas);
+                    canvas.Restore();
+                    DrawBlue(canvas);
+                    canvas.Restore();
+                    break;
+
+                case "RenderSceneAfterApply":
+                    ApplyBeforeLayer(canvas);
+                    BeginLayer(canvas);
+                    DrawBlue(canvas);
+                    canvas.Restore();
+                    break;
+
+                case "RenderSceneInScopedChild":
+                    DrawInScopedChild(canvas, DrawBlue);
+                    break;
+
+                case "RenderPathGradientSceneAfterApply":
+                    ApplyBeforeLayer(canvas);
+                    BeginLayer(canvas);
+                    DrawPathGradient(canvas);
+                    canvas.Restore();
+                    break;
+
+                case "RenderPartsScene":
+                    BeginLayer(canvas);
+                    DrawBlue(canvas);
+                    DrawGreen(canvas);
+                    canvas.Restore();
+                    break;
+
+                case "RenderNestedScene":
+                    BeginLayer(canvas);
+                    DrawInScopedLayer(canvas, DrawBlue);
+                    canvas.Restore();
+                    break;
+
+                case "CopyPixelsFrom":
+                case "CopyPixelsFromSourceChanges":
+                    // The copy writes the blue and yellow source pixels at the same position.
+                    BeginLayer(canvas);
+                    DrawBlue(canvas);
+                    canvas.Fill(Brushes.Solid(Color.Yellow), yellow);
+                    canvas.Restore();
+                    break;
+
+                case "CopyPixelsFromSelf":
+                    // The copy replaces the layer pixels with the green pixels of the frame. An
+                    // image of those pixels, drawn with Src, is the same operation.
+                    DrawGreen(canvas);
+                    BeginLayer(canvas);
+                    _ = canvas.Save(new DrawingOptions
+                    {
+                        GraphicsOptions = new GraphicsOptions { Antialias = false, AlphaCompositionMode = PixelAlphaCompositionMode.Src }
+                    });
+
+                    canvas.DrawImage(copiedGreen, copiedGreen.Bounds, new RectangleF(copyTarget, green.Size));
+                    canvas.Restore();
+                    canvas.Restore();
+                    break;
+
+                default:
+                    BeginLayer(canvas);
+                    DrawBlue(canvas);
+                    canvas.Restore();
+                    break;
+            }
+        }
+
+        // The scenes must stay alive until each canvas replays its timeline on disposal.
+        List<DrawingBackendScene> scenes = [];
+        string details = $"{seal}_{(scopedLayer ? "Scoped" : "Plain")}";
+        try
+        {
+            using Image<TPixel> defaultDirect = provider.GetImage();
+            RenderWithDefaultBackend(defaultDirect, drawingOptions, DrawDirect);
+
+            // The copy source frame must live until the target replays.
+            using Image<TPixel> defaultCopyImage = provider.GetImage();
+            DrawingCanvas CreateDefaultCopySource()
+            {
+                DrawingCanvas source = defaultCopyImage.Frames.RootFrame.CreateCanvas(defaultCopyImage.Configuration, drawingOptions);
+                source.Clear(Brushes.Solid(Color.Blue));
+                source.Fill(Brushes.Solid(Color.Yellow), yellow);
+                return source;
+            }
+
+            using Image<TPixel> defaultImage = provider.GetImage();
+            RenderWithDefaultBackend(defaultImage, drawingOptions, canvas => DrawSealed(canvas, scenes, CreateDefaultCopySource));
+
+            // The CPU images are saved before the WebGPU render, so a WebGPU failure cannot hide them.
+            defaultDirect.DebugSave(provider, CreateBackendPairDetails($"{details}_Direct", "Default"), appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+            defaultImage.DebugSave(provider, CreateBackendPairDetails(details, "Default"), appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+
+            using WebGPUDrawingBackend nativeSurfaceBackend = new();
+            using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+            using Image<TPixel> nativeSurfaceDirect = RenderWithNativeSurfaceWebGpuBackend(
+                defaultImage.Width,
+                defaultImage.Height,
+                nativeSurfaceBackend,
+                drawingOptions,
+                DrawDirect,
+                nativeSurfaceInitialImage);
+
+            Configuration nativeConfig = Configuration.Default.Clone();
+            nativeConfig.SetDrawingBackend(nativeSurfaceBackend);
+            using WebGPURenderTarget nativeCopyTarget = new(defaultImage.Width, defaultImage.Height);
+            DrawingCanvas CreateNativeCopySource()
+            {
+                DrawingCanvas source = WebGPUCanvasFactory.CreateCanvas(
+                    nativeConfig,
+                    drawingOptions,
+                    nativeSurfaceBackend,
+                    nativeCopyTarget.Bounds,
+                    nativeCopyTarget.Surface,
+                    nativeCopyTarget.Surface.TargetDescriptor);
+
+                source.Clear(Brushes.Solid(Color.Blue));
+                source.Fill(Brushes.Solid(Color.Yellow), yellow);
+                return source;
+            }
+
+            using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+                defaultImage.Width,
+                defaultImage.Height,
+                nativeSurfaceBackend,
+                drawingOptions,
+                canvas => DrawSealed(canvas, scenes, CreateNativeCopySource),
+                nativeSurfaceInitialImage);
+
+            DebugSaveBackendPair(provider, $"{details}_Direct", defaultDirect, nativeSurfaceDirect);
+            DebugSaveBackendPair(provider, details, defaultImage, nativeSurfaceImage);
+
+            ImageComparer.Exact.VerifySimilarity(defaultDirect, defaultImage);
+            ImageComparer.Exact.VerifySimilarity(nativeSurfaceDirect, nativeSurfaceImage);
+
+            // The exact checks above are the contract of each backend. The direct drawings already
+            // differ by one unit in some blended layer pixels between the CPU and the GPU, so the
+            // pair tolerance is the largest measured difference of all cases plus one unit.
+            AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0859F);
+            AssertBackendPairReferenceOutputs(provider, details, defaultImage, nativeSurfaceImage);
+        }
+        finally
+        {
+            foreach (DrawingBackendScene scene in scenes)
+            {
+                scene.Dispose();
+            }
+        }
+    }
+
+    [WebGPUTheory]
     [WithSolidFilledImages(160, 120, "White", PixelTypes.Rgba32)]
     public void RetainedScene_WithLayerCommands_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -2652,6 +3192,59 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
+    [WithBlankImage(300, 10, PixelTypes.Rgba32, GradientRepetitionMode.Repeat)]
+    [WithBlankImage(300, 10, PixelTypes.Rgba32, GradientRepetitionMode.Reflect)]
+    public void FillPath_WithLinearGradientBrush_RepeatsBeforeTheStartPoint<TPixel>(
+        TestImageProvider<TPixel> provider,
+        GradientRepetitionMode repetitionMode)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true }
+        };
+
+        // The axis runs from x = 100 to x = 200, so columns 0 to 99 lie before the start point.
+        Brush brush = new LinearGradientBrush(
+            new PointF(100, 0),
+            new PointF(200, 0),
+            repetitionMode,
+            new ColorStop(0, Color.Red),
+            new ColorStop(1, Color.Blue));
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, new RectanglePolygon(0, 0, 300, 10));
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        string testName = $"{repetitionMode}";
+        DebugSaveBackendPair(provider, testName, defaultImage, nativeSurfaceImage);
+
+        // Repeat gives columns 0 to 99 the colors of the first period, columns 100 to 199. Reflect
+        // mirrors the first period about the start point. Neither mode pads with the first stop.
+        using Image<TPixel> beforeStart = nativeSurfaceImage.Clone(ctx => ctx.Crop(new Rectangle(0, 0, 100, 10)));
+        using Image<TPixel> firstPeriod = nativeSurfaceImage.Clone(ctx => ctx.Crop(new Rectangle(100, 0, 100, 10)));
+        if (repetitionMode == GradientRepetitionMode.Reflect)
+        {
+            firstPeriod.Mutate(ctx => ctx.Flip(FlipMode.Horizontal));
+        }
+
+        ImageComparer.TolerantPercentage(0F).VerifySimilarity(firstPeriod, beforeStart);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0236F);
+        AssertBackendPairReferenceOutputs(provider, testName, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUFact]
@@ -2918,7 +3511,10 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0267F);
+
+        // The brushes repeat and reflect before their start points. The measured backend difference
+        // is 0.0301%, and the tolerance is that value plus 0.0001.
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0302F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -2993,9 +3589,20 @@ public partial class WebGPUDrawingBackendTests
 
         // The sampled point lies before the original start circle after the shader's
         // canonical circle swap. Repetition must therefore see the restored negative t.
-        Rgba32 expected = Color.Red.ToPixel<Rgba32>();
+        // The pixel center (0.5, 0.5) lies on the circle at t = (262 - sqrt(214756)) / 192 = -1.04905.
+        // Repeat maps t to t - floor(t) = 0.95095, and Reflect maps |t| = 1.04905 to 2 - 1.04905 = 0.95095.
+        // That position is 4.905% red and 95.095% lime. The swapped t' = 1 - t = 2.04905 gives 0.04905,
+        // which is almost pure red.
+        Rgba32 expected = new(13, 242, 0, 255);
         Assert.Equal(expected, defaultImage[0, 0]);
-        Assert.Equal(defaultImage[0, 0], actual[0, 0]);
+
+        // The exact channels are 12.508 and 242.49, next to a rounding boundary. The f32 shader can
+        // round to the other side, so WebGPU must be within one level of the CPU result.
+        Rgba32 actualPixel = actual[0, 0];
+        Assert.InRange(Math.Abs(expected.R - actualPixel.R), 0, 1);
+        Assert.InRange(Math.Abs(expected.G - actualPixel.G), 0, 1);
+        Assert.Equal(expected.B, actualPixel.B);
+        Assert.Equal(expected.A, actualPixel.A);
     }
 
     [WebGPUTheory]

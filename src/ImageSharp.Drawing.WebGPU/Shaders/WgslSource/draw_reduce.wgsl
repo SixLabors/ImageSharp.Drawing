@@ -6,8 +6,8 @@
 // DrawMonoid values and reduces them to a single aggregate. draw_leaf later
 // combines these per-workgroup aggregates into a full exclusive prefix sum.
 //
-// Inputs: config uniform; scene stream (draw tags read at
-// config.drawtag_base via read_draw_tag_from_scene).
+// Inputs: config uniform; scene stream (draw tags read through the segment bias
+// of scene_segment.wgsl, via read_draw_tag_from_scene).
 // Outputs: reduced[wg] holds the combined DrawMonoid of workgroup wg's blocks.
 //
 // Ported from Vello's draw_reduce.wgsl (linebender/vello,
@@ -15,6 +15,8 @@
 
 #import config
 #import drawtag
+#import scene_segment
+#import util
 
 @group(0) @binding(0)
 var<uniform> config: Config;
@@ -28,8 +30,6 @@ var<storage, read_write> reduced: array<DrawMonoid>;
 const WG_SIZE = 256u;
 
 var<workgroup> sh_scratch: array<DrawMonoid, WG_SIZE>;
-
-#import util
 
 // Reduces this workgroup's blocks of draw tags to a single DrawMonoid.
 // Each thread serially accumulates one lane across its strided block reads,

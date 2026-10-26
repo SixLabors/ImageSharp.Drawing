@@ -37,6 +37,12 @@ const CMD_BEGIN_CLIP = 10u;
 const CMD_END_CLIP = 11u;
 const CMD_JUMP = 12u;
 const CMD_PATH_GRAD = 16u;
+// Sets the profile record table for the next CMD_FILL. Its one payload word is the word offset of
+// the table. With a segment table, each retained scene keeps its own table (see
+// scene_segment.wgsl), so coarse writes this command before each aliased fill. Coarse writes it
+// only when config.segment_count is not zero. A separate command keeps CMD_FILL, the most
+// frequent command in fine, the same for every scene.
+const CMD_PROFILE_TABLE = 17u;
 
 // CMD_FILL and CMD_SOLID reference their raster interest rectangle by its offset in the
 // info stream. This value marks a draw without an interest block: the whole target.
@@ -130,8 +136,9 @@ struct CmdSweepGrad {
 // whose edge list lives in the shared info/bin-data buffer.
 struct CmdPathGrad {
     // Absolute offset of the gradient data in the shared info/bin-data
-    // buffer; coarse rebases the scene-relative offset by
-    // config.brush_data_base before writing the command.
+    // buffer. coarse rebases the scene-relative offset by the brush base
+    // of the scene segment (config.brush_data_base outside a segment table)
+    // before it writes the command.
     data_offset: u32,
     edge_count: u32,
     flags: u32,

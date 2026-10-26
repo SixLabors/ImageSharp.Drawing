@@ -158,6 +158,44 @@ public partial class WebGPUDrawingBackendTests
         Assert.True(grown.BlendSpill > submitted.BlendSpill);
     }
 
+    // 100k random stroked lines, the same scene as the 100k run of the DrawingBackendBenchmark sample,
+    // need more scratch memory than the first render has. At the 128 MiB default binding limit they
+    // also render in tile-row chunks. An offscreen render must return complete pixels: it grows the
+    // memory and renders again before it returns. The GPU copy reads the target as the render left
+    // it, before any readback, and must equal a second render that starts with the grown sizes.
+    [WebGPUFact]
+    public void FillManyLines_FirstRenderOverflows_ReturnsCompletePixels()
+    {
+        const int width = 1600;
+        const int height = 1100;
+        (PointF Start, PointF End, Color Color, float Width)[] lines = CreateRandomLines(width, height, 100_000);
+        Brush background = Brushes.Solid(Color.ParseHex("#003366"));
+        Rectangle bounds = new(0, 0, width, height);
+
+        using WebGPURenderTarget target = new(WebGPUTextureFormat.Bgra8Unorm, width, height);
+        using WebGPURenderTarget copy = target.CreateRenderTarget(width, height);
+        target.Backend.ScratchBufferBindingSizeLimit = 128U * 1024U * 1024U;
+
+        DrawLines(target, background, lines);
+        int overflowCount = target.Backend.DiagnosticScratchOverflowCount;
+        bool chunked = target.Backend.DiagnosticLastFlushUsedChunking;
+
+        using (DrawingCanvas source = target.CreateCanvas())
+        using (DrawingCanvas destination = copy.CreateCanvas())
+        {
+            destination.CopyPixelsFrom(source, bounds, Point.Empty);
+        }
+
+        DrawLines(target, background, lines);
+        using Image<Rgba32> copied = copy.ReadbackImage().CloneAs<Rgba32>();
+        using Image<Rgba32> expected = target.ReadbackImage().CloneAs<Rgba32>();
+
+        Assert.True(overflowCount > 0, "The first render must overflow, or this test does not run the retry.");
+        Assert.True(chunked, "The first render must use tile-row chunks.");
+        Assert.Equal(overflowCount, target.Backend.DiagnosticScratchOverflowCount);
+        Assert.Equal(0, CountDifferingPixels(expected, copied));
+    }
+
     // A correctly seeded scene renders fully on its first flush. An under-seeded scratch estimate (for
     // example counting only the stroke centerline instead of the emitted offset sides, joins and caps)
     // overflows the first flush, drops coverage, and only converges after later flushes grow the buffers.
@@ -178,6 +216,120 @@ public partial class WebGPUDrawingBackendTests
         Assert.True(
             differing <= total / 500,
             $"Single-pass render differs from the converged render in {differing} of {total} pixels, indicating under-seeded scratch.");
+    }
+
+    // Nine nested full-target layers put every tile at blend depth 9, so fine spills five levels of
+    // 256 slots for each of the 1024 tiles. That is more than the initial blend-spill buffer, and
+    // the scratch bounds must size it before the first render.
+    [WebGPUFact]
+    public void FirstRender_NineNestedLayers_DoesNotOverflowScratch()
+    {
+        using WebGPURenderTarget target = new(512, 512);
+        using (DrawingCanvas canvas = target.CreateCanvas())
+        {
+            DrawNestedLayers(canvas, 9, 512);
+        }
+
+        Assert.Equal(0, target.Backend.DiagnosticScratchOverflowCount);
+    }
+
+    // One hundred full-target layers in sequence write BeginClip, the forced solid and EndClip in
+    // every tile for each layer, which is more PTCL than the initial buffer.
+    [WebGPUFact]
+    public void FirstRender_HundredSequentialLayers_DoesNotOverflowScratch()
+    {
+        using WebGPURenderTarget target = new(2048, 2048);
+        using (DrawingCanvas canvas = target.CreateCanvas())
+        {
+            for (int i = 0; i < 100; i++)
+            {
+                _ = canvas.SaveLayer(new GraphicsOptions(), new Rectangle(0, 0, 2048, 2048));
+                canvas.Fill(Brushes.Solid(Color.FromPixel(new Rgba32((byte)(i * 2), 32, 200, 128))), new Rectangle((i % 10) * 200, (i / 10) * 200, 100, 100));
+                canvas.Restore();
+            }
+        }
+
+        Assert.Equal(0, target.Backend.DiagnosticScratchOverflowCount);
+    }
+
+    // A retained scene read in place inside layers nests its own layers inside the outer ones. Five
+    // outer layers and four retained layers reach blend depth 9, which only the shifted depths of
+    // the retained scene show.
+    [WebGPUFact]
+    public void FirstRender_RetainedNestedLayersInsideLayers_DoesNotOverflowScratch()
+    {
+        using WebGPURenderTarget target = new(512, 512);
+        using DrawingBackendScene scene = CreateNestedLayerScene(target, 4);
+        using (DrawingCanvas canvas = target.CreateCanvas())
+        {
+            for (int i = 0; i < 5; i++)
+            {
+                _ = canvas.SaveLayer(new GraphicsOptions(), new Rectangle(0, 0, 512, 512));
+            }
+
+            canvas.RenderScene(scene);
+            for (int i = 0; i < 5; i++)
+            {
+                canvas.Restore();
+            }
+        }
+
+        Assert.Equal(0, target.Backend.DiagnosticScratchOverflowCount);
+    }
+
+    // Dense lines in the top quarter of a large target render in tile-row chunks when the binding
+    // limit is 64 MiB: the per-tile PTCL allowance of 4096 x 4096 is already 64 MiB. A share of
+    // the target height would size the top chunks four times too small, so each chunk must be
+    // sized from the draws that reach its rows. The line buffer does not shrink with a chunk, and
+    // its initial 48 MiB fits the limit. The chunked image must equal the image rendered in one pass.
+    [WebGPUFact]
+    public void ChunkedRender_GeometryInFewRows_DoesNotOverflowScratch()
+    {
+        const int width = 4096;
+        const int height = 4096;
+        Random random = new(5);
+        (PointF Start, PointF End, Color Color, float Width)[] lines = new (PointF, PointF, Color, float)[20_000];
+        for (int i = 0; i < lines.Length; i++)
+        {
+            lines[i] = (
+                new PointF((float)(random.NextDouble() * width), (float)(random.NextDouble() * 1024)),
+                new PointF((float)(random.NextDouble() * width), (float)(random.NextDouble() * 1024)),
+                Color.FromPixel(new Rgba32((byte)random.Next(256), (byte)random.Next(256), (byte)random.Next(256))),
+                random.Next(1, 4));
+        }
+
+        Brush background = Brushes.Solid(Color.ParseHex("#003366"));
+        using Image<Rgba32> expected = RenderManyLinesToImage(width, height, background, lines, passes: 1);
+
+        using WebGPURenderTarget target = new(WebGPUTextureFormat.Bgra8Unorm, width, height);
+        target.Backend.ScratchBufferBindingSizeLimit = 64U * 1024U * 1024U;
+        DrawLines(target, background, lines);
+        using Image<Rgba32> chunked = target.ReadbackImage().CloneAs<Rgba32>();
+
+        Assert.True(target.Backend.DiagnosticLastFlushUsedChunking, "The binding limit must force chunked rendering.");
+        Assert.Equal(0, target.Backend.DiagnosticScratchOverflowCount);
+        Assert.Equal(0, CountDifferingPixels(expected, chunked));
+    }
+
+    private static void DrawNestedLayers(DrawingCanvas canvas, int depth, int size)
+    {
+        for (int i = 0; i < depth; i++)
+        {
+            _ = canvas.SaveLayer(new GraphicsOptions(), new Rectangle(0, 0, size, size));
+            canvas.Fill(Brushes.Solid(Color.FromPixel(new Rgba32((byte)(i * 28), 64, 128, 200))), new Rectangle(i * 20, i * 20, 300, 300));
+        }
+
+        for (int i = 0; i < depth; i++)
+        {
+            canvas.Restore();
+        }
+    }
+
+    private static DrawingBackendScene CreateNestedLayerScene(WebGPURenderTarget target, int depth)
+    {
+        using DrawingCanvas canvas = target.CreateCanvas();
+        DrawNestedLayers(canvas, depth, target.Width);
+        return canvas.CreateScene();
     }
 
     private static Image<Rgba32> RenderManyLinesToImage(int width, int height, Brush background, (PointF Start, PointF End, Color Color, float Width)[] lines, int passes)

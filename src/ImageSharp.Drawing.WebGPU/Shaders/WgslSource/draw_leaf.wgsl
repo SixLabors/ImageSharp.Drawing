@@ -26,6 +26,8 @@
 #import drawtag
 #import bbox
 #import transform
+#import scene_segment
+#import util
 
 @group(0) @binding(0)
 var<uniform> config: Config;
@@ -47,8 +49,6 @@ var<storage, read_write> info: array<u32>;
 
 @group(0) @binding(6)
 var<storage, read_write> clip_inp: array<ClipInp>;
-
-#import util
 
 // Reads one transform from the scene stream. ImageSharp encodes 9 words per
 // transform (2x2 matrix, translation, perspective row) where Vello encodes
@@ -117,7 +117,8 @@ fn main(
     let blocks_end = block_start + n_blocks * WG_SIZE;
     while block_start != blocks_end {
         let ix = block_start + local_id.x;
-        let tag_word = read_draw_tag_from_scene(ix);
+        let segment = resolve_draw_segment(ix);
+        let tag_word = read_draw_tag_from_segment(segment, ix);
         agg = map_draw_tag(tag_word);
         workgroupBarrier();
         sh_scratch[local_id.x] = agg;
@@ -136,11 +137,18 @@ fn main(
             m = combine_draw_monoid(m, sh_scratch[local_id.x - 1u]);
         }
         // m now contains exclusive prefix sum of draw monoid
-        if ix < config.n_drawobj {
-            draw_monoid[ix] = m;
-        }
-        let dd = config.drawdata_base + m.scene_offset;
+        let dd = draw_data_bias(segment) + m.scene_offset;
         let di = m.info_offset;
+        if ix < config.n_drawobj {
+            // Later stages read draw data at config.drawdata_base + scene_offset. Store the physical
+            // offset, so a draw object of a retained scene needs no segment lookup there. Without a
+            // segment table this is the monoid value unchanged. clip_leaf copies the offset of a
+            // BeginClip to its EndClip. The offset is physical, so the EndClip reads the BeginClip
+            // data also when a retained scene lies between them.
+            var stored = m;
+            stored.scene_offset = dd - config.drawdata_base;
+            draw_monoid[ix] = stored;
+        }
         if tag_word == DRAWTAG_FILL_COLOR || tag_word == DRAWTAG_FILL_RECOLOR || tag_word == DRAWTAG_FILL_LIN_GRADIENT ||
             tag_word == DRAWTAG_FILL_RAD_GRADIENT || tag_word == DRAWTAG_FILL_ELLIPTIC_GRADIENT || tag_word == DRAWTAG_FILL_SWEEP_GRADIENT ||
             tag_word == DRAWTAG_FILL_PATH_GRADIENT || tag_word == DRAWTAG_FILL_IMAGE || tag_word == DRAWTAG_BEGIN_CLIP
@@ -367,7 +375,14 @@ fn main(
                     info[di + 4u] = bitcast<u32>(1.0);
                     info[di + 5u] = bitcast<u32>(-bitcast<f32>(scene[dd + 3u]));
                     info[di + 6u] = bitcast<u32>(-bitcast<f32>(scene[dd + 4u]));
-                    info[di + 7u] = scene[dd];
+                    // The atlas offset packs (x << 16) | y. A retained scene keeps the atlas layout
+                    // of its own images, which follow the outer images, so add its first atlas row.
+                    var atlas_y_base = 0u;
+                    if segment != SCENE_SEGMENT_NONE {
+                        atlas_y_base = scene[segment + SCENE_SEGMENT_ATLAS_Y_BASE];
+                    }
+
+                    info[di + 7u] = scene[dd] + atlas_y_base;
                     info[di + 8u] = scene[dd + 1u];
                     info[di + 9u] = scene[dd + 2u];
                 }

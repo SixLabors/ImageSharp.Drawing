@@ -22,6 +22,7 @@
 #import drawtag
 #import bbox
 #import tile
+#import scene_segment
 
 @group(0) @binding(0)
 var<uniform> config: Config;
@@ -58,7 +59,7 @@ fn main(
         return;
     }
 
-    let drawtag = scene[config.drawtag_base + drawobj_ix];
+    let drawtag = scene[draw_tag_bias(resolve_draw_segment(drawobj_ix)) + drawobj_ix];
     let path_bbox = path_bboxes[drawobj_ix];
     // Only aliased fills use the original left edge. Fine needs this distinction for the one-pixel
     // extension of an interval that started before the drawing bounds.

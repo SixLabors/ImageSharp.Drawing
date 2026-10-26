@@ -62,9 +62,19 @@ struct Config {
     // Word offset of the profile record table, or zero when the table is absent. The table starts
     // with the X and Y record counts. Each record then stores two axis limits and one contour link.
     profile_records_base: u32,
-    profile_pad0: u32,
-    profile_pad1: u32,
-    profile_pad2: u32,
+    // Number of entries in the scene segment table, or zero when the scene has no retained scene
+    // inside a layer. With zero, every shader reads the streams through the bases above. See
+    // scene_segment.wgsl for the table layout.
+    segment_count: u32,
+    // Word offset of the scene segment table in the scene buffer.
+    segment_table_base: u32,
+    // Position of the target in the coordinates of the encoded data, packed as x | (y << 16). The
+    // data of an ordered scene is in the coordinates of its root target, so a scoped layer target
+    // has a value that is not zero: path_lowering moves the lines into target space, and fine
+    // moves sample positions back into data space for brushes and profiles. A layer target has at
+    // most maxTextureDimension2D (8192) texels on each axis and starts inside the canvas, so each
+    // value fits in 16 bits.
+    target_origin: u32,
 }
 
 // Geometry of tiles and bins
