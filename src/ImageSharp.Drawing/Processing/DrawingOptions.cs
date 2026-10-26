@@ -70,9 +70,6 @@ public class DrawingOptions
 
     /// <summary>
     /// Gets or sets the transform matrix applied to vector output before rasterization.
-    /// For strokes, the transform applies to the path. Then the pen strokes the transformed path in device space.
-    /// The stroke width is the pen width multiplied by the square root of the absolute determinant of the 2D part of the transform.
-    /// Thus the stroke width is the same in all directions, also under a non-uniform scale or a skew.
     /// Defaults to <see cref="Matrix4x4.Identity"/>.
     /// </summary>
     public Matrix4x4 Transform { get; set; }
