@@ -418,8 +418,9 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                 resourceArena ??= webGPUScene.RentResourceArena() ?? this.RentResourceArena();
                 schedulingArena ??= webGPUScene.RentSchedulingArena() ?? this.RentSchedulingArena();
 
-                // The same rule as the ordered path: offscreen pixels must be complete before
-                // control returns to user code, so only a presentation target defers the check.
+                // Offscreen pixels must be complete before control returns to user code. A render
+                // whose capacities are upper bounds cannot overflow and reads no status. Otherwise
+                // only a presentation target defers the check.
                 this.RenderEncodedSceneWithGrowth<TPixel>(
                     configuration,
                     webGPUTarget,
@@ -449,10 +450,11 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     /// scratch-growth retry loop.
     /// </summary>
     /// <remarks>
-    /// An offscreen render reads the scratch status before the copy to the target, so an overflow
-    /// retries here and never reaches the target. A presentation render defers the status: an
-    /// overflowed frame keeps the previous surface content, and the next frame redraws with the
-    /// grown capacities.
+    /// A render whose capacities are upper bounds of its scratch use cannot overflow. It submits
+    /// and returns without a status readback. For other renders, an offscreen render reads the
+    /// scratch status before the copy to the target, so an overflow retries here and never reaches
+    /// the target. A presentation render defers the status: an overflowed frame keeps the previous
+    /// surface content, and the next frame redraws with the grown capacities.
     /// </remarks>
     /// <typeparam name="TPixel">The pixel format of the flush target.</typeparam>
     /// <param name="configuration">The active processing configuration.</param>
@@ -461,7 +463,10 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     /// <param name="targetDescriptor">The target texture format and alpha representation.</param>
     /// <param name="requiredFeature">The device feature required by the target format, or the default value.</param>
     /// <param name="webGPUScene">The retained scene being rendered.</param>
-    /// <param name="deferOverflowCheck">Whether the overflow readback is deferred. Only presentation targets pass <see langword="true"/>.</param>
+    /// <param name="deferOverflowCheck">
+    /// Whether the overflow readback of a render without bounded capacities is deferred. Only
+    /// presentation targets pass <see langword="true"/>.
+    /// </param>
     /// <param name="currentBumpSizes">The scratch capacities carried across attempts.</param>
     /// <param name="resourceArena">The rented scene resource arena.</param>
     /// <param name="schedulingArena">The rented scheduling arena.</param>

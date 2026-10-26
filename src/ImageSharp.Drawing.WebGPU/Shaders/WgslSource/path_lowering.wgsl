@@ -95,8 +95,9 @@ fn stroke_arc_subdivision_count(radius: f32, sweep: f32, arc_detail_scale: f32) 
     if theta <= 0.0 {
         return 0u;
     }
-    // Bounded for GPU safety; far above any real tessellation demand.
-    return min(u32(max(sweep / theta, 0.0)), 1024u);
+    // The f32 radius and acos can give more vertices than the CPU count. The CPU line estimate
+    // allows the arc limit, so the count is clamped to it.
+    return min(u32(max(sweep / theta, 0.0)), arc_limit);
 }
 
 // Port of the CPU stroker's AppendDirectedArcContour (round caps): steps through the positive
@@ -581,6 +582,9 @@ var<private> profile_tag: u32 = PROFILE_TAG_SENTINEL;
 // Device-space bounds of the lines written by this invocation.
 var<private> bbox: vec4f;
 
+// The interior vertex limit of one round arc of the current stroke, from the style flags.
+var<private> arc_limit: u32;
+
 // One invocation processes one path tag. A segment tag emits one fill line or one part of a stroke
 // outline. A Path tag writes metadata for the path. At the end, each segment invocation merges its
 // line bounds into the path's shared bounds.
@@ -645,6 +649,7 @@ fn main(
             let half_width = 0.5 * linewidth;
             let miter_limit = bitcast<f32>(scene[style_base + style_ix + 3u]);
             let arc_detail_scale = bitcast<f32>(scene[style_base + style_ix + 4u]);
+            arc_limit = style_flags & STYLE_FLAGS_ARC_LIMIT_MASK;
 
             let is_open = (tag.tag_byte & PATH_TAG_SEG_TYPE) != PATH_TAG_LINETO;
             let is_stroke_cap_marker = (tag.tag_byte & PATH_TAG_SUBPATH_END) != 0u;

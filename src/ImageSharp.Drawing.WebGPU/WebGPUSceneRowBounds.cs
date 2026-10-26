@@ -6,8 +6,8 @@ using System.Buffers;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Holds the scratch bounds of an encoded scene or range for each bin of 16 tile rows. A tile-row
-/// chunk window then gets a bound from the draws that reach it.
+/// Holds the scratch bounds of an encoded scene or range for each tile row. A tile-row chunk
+/// window then gets a bound from the draws that reach it.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -18,22 +18,20 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// draw adds one entry for each row, and a window query is O(1).
 /// </para>
 /// <para>
-/// The entries are kept for each bin of 16 tile rows, which is also the alignment of the chunk
-/// windows. A window widens to whole bins, so a chunk smaller than one bin gets the bound of its
-/// bin. Bins keep the arrays 16 times smaller than rows, so a scene of any height pays almost
-/// nothing to fill, merge and seal them.
+/// The entries are kept for each tile row, so a window of any rows, also a chunk smaller than one
+/// bin, gets a bound. The arrays have one entry for each tile row, so a scene of any height pays
+/// almost nothing to fill, merge and seal them.
 /// </para>
 /// <para>
 /// Two kinds of sums are kept:
 /// </para>
 /// <list type="bullet">
-/// <item><description>Area sums. A draw adds a value for each of its rows. Each bin receives the
-/// value times the rows of the draw in that bin, through a difference array. The window sum is the
-/// sum of its bins.</description></item>
-/// <item><description>Overlap sums. A draw adds its full bound at the bin of its first row and at
-/// the bin of its last row. The window sum is the full bound of every draw that reaches the window
-/// bins. These are the draws whose first bin is before the window end, minus the draws whose last
-/// bin is before the window start.</description></item>
+/// <item><description>Area sums. A draw adds a value for each of its rows through a difference
+/// array. The window sum is the sum of its rows.</description></item>
+/// <item><description>Overlap sums. A draw adds its full bound at its first row and at its last
+/// row. The window sum is the full bound of every draw that reaches the window rows. These are the
+/// draws whose first row is before the window end, minus the draws whose last row is before the
+/// window start.</description></item>
 /// </list>
 /// <para>
 /// The arrays are rented as one block and returned by <see cref="Dispose"/>.
@@ -46,7 +44,7 @@ internal sealed class WebGPUSceneRowBounds : IDisposable
     /// </summary>
     public const int BinRows = 16;
 
-    // Array indices in the rented block. Each array has binCount + 1 entries.
+    // Array indices in the rented block. Each array has RowCount + 1 entries.
     private const int PathRowsArea = 0;
     private const int TilesArea = 1;
     private const int PtclArea = 2;
@@ -62,7 +60,6 @@ internal sealed class WebGPUSceneRowBounds : IDisposable
     private const int ArrayCount = 12;
 
     private long[]? data;
-    private readonly int binCount;
     private readonly int stride;
 
     /// <summary>
@@ -74,8 +71,7 @@ internal sealed class WebGPUSceneRowBounds : IDisposable
     {
         this.RowCount = rowCount;
         this.GridOriginY = gridOriginY;
-        this.binCount = (rowCount + BinRows - 1) / BinRows;
-        this.stride = this.binCount + 1;
+        this.stride = rowCount + 1;
         this.data = ArrayPool<long>.Shared.Rent(ArrayCount * this.stride);
         this.data.AsSpan(0, ArrayCount * this.stride).Clear();
     }
@@ -141,16 +137,15 @@ internal sealed class WebGPUSceneRowBounds : IDisposable
         this.AddRows(data, PtclArea, firstRow, endRow, (long)widthTiles * ptclWordsPerTile);
         this.AddRows(data, CrossingsArea, firstRow, endRow, crossingsPerRow);
 
-        int firstBin = firstRow / BinRows;
-        int lastBin = (endRow - 1) / BinRows;
-        data[(TilesFirst * this.stride) + firstBin] += tiles;
-        data[(TilesLast * this.stride) + lastBin] += tiles;
-        data[(CrossingsFirst * this.stride) + firstBin] += crossings;
-        data[(CrossingsLast * this.stride) + lastBin] += crossings;
-        data[(PtclFirst * this.stride) + firstBin] += ptclWords;
-        data[(PtclLast * this.stride) + lastBin] += ptclWords;
-        data[(EndCrossingsFirst * this.stride) + firstBin] += endCrossings;
-        data[(EndCrossingsLast * this.stride) + lastBin] += endCrossings;
+        int lastRow = endRow - 1;
+        data[(TilesFirst * this.stride) + firstRow] += tiles;
+        data[(TilesLast * this.stride) + lastRow] += tiles;
+        data[(CrossingsFirst * this.stride) + firstRow] += crossings;
+        data[(CrossingsLast * this.stride) + lastRow] += crossings;
+        data[(PtclFirst * this.stride) + firstRow] += ptclWords;
+        data[(PtclLast * this.stride) + lastRow] += ptclWords;
+        data[(EndCrossingsFirst * this.stride) + firstRow] += endCrossings;
+        data[(EndCrossingsLast * this.stride) + lastRow] += endCrossings;
     }
 
     /// <summary>
@@ -163,11 +158,10 @@ internal sealed class WebGPUSceneRowBounds : IDisposable
     public void AddRowTiles(int row, long tiles, long ptclWords)
     {
         Span<long> data = this.data;
-        int bin = row / BinRows;
-        data[(TilesArea * this.stride) + bin] += tiles;
-        data[(TilesArea * this.stride) + bin + 1] -= tiles;
-        data[(PtclArea * this.stride) + bin] += ptclWords;
-        data[(PtclArea * this.stride) + bin + 1] -= ptclWords;
+        data[(TilesArea * this.stride) + row] += tiles;
+        data[(TilesArea * this.stride) + row + 1] -= tiles;
+        data[(PtclArea * this.stride) + row] += ptclWords;
+        data[(PtclArea * this.stride) + row + 1] -= ptclWords;
     }
 
     /// <summary>
@@ -209,39 +203,39 @@ internal sealed class WebGPUSceneRowBounds : IDisposable
     public void Seal()
     {
         Span<long> data = this.data;
-        int bins = this.binCount;
+        int rows = this.RowCount;
 
-        // An area array holds differences. The running sum is the per-bin value, and the entry at
-        // bin b becomes the sum of the per-bin values of bins 0 to b - 1.
+        // An area array holds differences. The running sum is the per-row value, and the entry at
+        // row r becomes the sum of the per-row values of rows 0 to r - 1.
         for (int a = PathRowsArea; a <= CrossingsArea; a++)
         {
             Span<long> array = data.Slice(a * this.stride, this.stride);
-            long binValue = 0;
+            long rowValue = 0;
             long sum = 0;
-            for (int b = 0; b < bins; b++)
+            for (int r = 0; r < rows; r++)
             {
-                binValue += array[b];
-                array[b] = sum;
-                sum += binValue;
+                rowValue += array[r];
+                array[r] = sum;
+                sum += rowValue;
             }
 
-            array[bins] = sum;
+            array[rows] = sum;
         }
 
-        // A first or last array holds per-bin additions. The entry at bin b becomes the sum of
-        // the additions at bins 0 to b - 1.
+        // A first or last array holds per-row additions. The entry at row r becomes the sum of
+        // the additions at rows 0 to r - 1.
         for (int a = TilesFirst; a <= EndCrossingsLast; a++)
         {
             Span<long> array = data.Slice(a * this.stride, this.stride);
             long sum = 0;
-            for (int b = 0; b < bins; b++)
+            for (int r = 0; r < rows; r++)
             {
-                long value = array[b];
-                array[b] = sum;
+                long value = array[r];
+                array[r] = sum;
                 sum += value;
             }
 
-            array[bins] = sum;
+            array[rows] = sum;
         }
     }
 
@@ -254,10 +248,10 @@ internal sealed class WebGPUSceneRowBounds : IDisposable
     public WebGPUSceneWindowBounds GetWindow(int dataY0, int dataY1)
     {
         // The window can start between grid rows when the target is not on the grid of the data,
-        // so it widens to whole grid rows, and then to whole bins.
-        const int binPixels = BinRows * WebGPUSceneEncoder.TileHeight;
-        int start = Math.Clamp(FloorDivide(dataY0 - this.GridOriginY, binPixels), 0, this.binCount);
-        int end = Math.Clamp(-FloorDivide(this.GridOriginY - dataY1, binPixels), start, this.binCount);
+        // so it widens to whole grid rows.
+        const int rowPixels = WebGPUSceneEncoder.TileHeight;
+        int start = Math.Clamp(FloorDivide(dataY0 - this.GridOriginY, rowPixels), 0, this.RowCount);
+        int end = Math.Clamp(-FloorDivide(this.GridOriginY - dataY1, rowPixels), start, this.RowCount);
         ReadOnlySpan<long> data = this.data;
 
         long pathRows = this.Area(data, PathRowsArea, start, end);
@@ -293,11 +287,6 @@ internal sealed class WebGPUSceneRowBounds : IDisposable
     /// <summary>
     /// Adds a value for each tile row of an interval to an area array.
     /// </summary>
-    /// <remarks>
-    /// A bin receives the value times the rows of the interval in that bin. The first and last bins
-    /// can be partial, so they get a single-bin entry. The full bins between them share one
-    /// difference entry.
-    /// </remarks>
     /// <param name="data">The unsealed block.</param>
     /// <param name="array">The array index.</param>
     /// <param name="firstRow">The first tile row.</param>
@@ -311,30 +300,8 @@ internal sealed class WebGPUSceneRowBounds : IDisposable
         }
 
         int offset = array * this.stride;
-        int firstBin = firstRow / BinRows;
-        int lastBin = (endRow - 1) / BinRows;
-        if (firstBin == lastBin)
-        {
-            long value = valuePerRow * (endRow - firstRow);
-            data[offset + firstBin] += value;
-            data[offset + firstBin + 1] -= value;
-            return;
-        }
-
-        long firstValue = valuePerRow * (((firstBin + 1) * BinRows) - firstRow);
-        data[offset + firstBin] += firstValue;
-        data[offset + firstBin + 1] -= firstValue;
-
-        long lastValue = valuePerRow * (endRow - (lastBin * BinRows));
-        data[offset + lastBin] += lastValue;
-        data[offset + lastBin + 1] -= lastValue;
-
-        if (lastBin > firstBin + 1)
-        {
-            long fullValue = valuePerRow * BinRows;
-            data[offset + firstBin + 1] += fullValue;
-            data[offset + lastBin] -= fullValue;
-        }
+        data[offset + firstRow] += valuePerRow;
+        data[offset + endRow] -= valuePerRow;
     }
 
     /// <summary>
@@ -342,8 +309,8 @@ internal sealed class WebGPUSceneRowBounds : IDisposable
     /// </summary>
     /// <param name="data">The sealed block.</param>
     /// <param name="array">The array index.</param>
-    /// <param name="start">The first window bin.</param>
-    /// <param name="end">The bin after the window.</param>
+    /// <param name="start">The first window row.</param>
+    /// <param name="end">The row after the window.</param>
     /// <returns>The window sum.</returns>
     private long Area(ReadOnlySpan<long> data, int array, int start, int end)
         => data[(array * this.stride) + end] - data[(array * this.stride) + start];
@@ -352,10 +319,10 @@ internal sealed class WebGPUSceneRowBounds : IDisposable
     /// Gets the full bounds of the draws that reach a window.
     /// </summary>
     /// <param name="data">The sealed block.</param>
-    /// <param name="first">The index of the array keyed by the first bin of each draw.</param>
-    /// <param name="last">The index of the array keyed by the last bin of each draw.</param>
-    /// <param name="start">The first window bin.</param>
-    /// <param name="end">The bin after the window.</param>
+    /// <param name="first">The index of the array keyed by the first row of each draw.</param>
+    /// <param name="last">The index of the array keyed by the last row of each draw.</param>
+    /// <param name="start">The first window row.</param>
+    /// <param name="end">The row after the window.</param>
     /// <returns>The sum.</returns>
     private long Overlap(ReadOnlySpan<long> data, int first, int last, int start, int end)
         => data[(first * this.stride) + end] - data[(last * this.stride) + start];

@@ -20,9 +20,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// The stage order is fixed by data dependencies: prepare (bump reset), pathtag reduce/scan,
 /// bbox_clear, path lowering, draw reduce/leaf, clip reduce/leaf, binning, then the tile stages
 /// (path_row_alloc, path_row_span, tile_alloc, path_count, backdrop, coarse, path_tiling) and
-/// finally the fine shading pass. Scratch buffers use GPU bump allocators sized from cached
-/// estimates; after each attempt the allocator counters are read back and, on overflow, the caller
-/// retries with grown capacities (see <see cref="WebGPUDrawingBackend"/>'s bounded retry loop).
+/// finally the fine shading pass. Scratch buffers use GPU bump allocators sized from the encoder
+/// bounds. When every capacity is an upper bound (see <see cref="HasScratchBounds"/>), the render
+/// cannot overflow and submits without a status readback. Otherwise the allocator counters are read
+/// back and, on overflow, the caller retries with grown capacities (see
+/// <see cref="WebGPUDrawingBackend"/>'s bounded retry loop).
 /// </para>
 /// <para>
 /// Scenes whose tile-dependent buffers exceed the device storage-buffer binding limit are rendered
@@ -67,10 +69,20 @@ internal static class WebGPUSceneDispatch
     // validation rejects deeper nesting before anything is dispatched.
     private const int MaxClipStackDepth = 256;
 
-    // Coarse allocates the dynamic PTCL tail in PTCL_INCREMENT-word chunks (Shared/ptcl.wgsl); a
-    // command that does not fit the remaining chunk starts a new one, so each tile can leave one
-    // partial chunk and each chunk can waste up to one command of headroom.
+    // Coarse allocates the dynamic PTCL tail in PTCL_INCREMENT-word chunks (Shared/ptcl.wgsl). A
+    // command that does not fit the rest of the initial slot or chunk starts a new chunk.
     private const long PtclChunkWords = 256;
+
+    // The command words a tile writes before its first chunk. The initial slot is PTCL_INITIAL_ALLOC
+    // words: one blend-spill word, then commands up to PTCL_HEADROOM words before its end. A tile
+    // starts a chunk when the used words plus the next command reach 64 - 2 - 1 = 61.
+    private const long PtclFirstChunkCommandWords = 61;
+
+    // The command words each chunk holds at least before the next one starts. A chunk holds
+    // PTCL_INCREMENT - PTCL_HEADROOM = 254 words, and the next chunk starts when the used words
+    // plus the next command reach 254. The largest command is 8 words (CMD_PROFILE_TABLE and
+    // CMD_FILL in coarse.wgsl write_path), so a chunk holds at least 254 - 8 = 246 words.
+    private const long PtclChunkCommandWords = 246;
 
     /// <summary>
     /// Identifies the staged-scene storage binding that exceeded the device limit for one flush attempt.
@@ -1944,7 +1956,8 @@ internal static class WebGPUSceneDispatch
     /// <param name="schedulingArena">The reusable scheduling arena slot for this render.</param>
     /// <param name="initialChunkTileHeightHint">The advisory chunk height to try first when this scene requires chunking.</param>
     /// <param name="deferOverflowCheck">
-    /// Whether to defer the scratch-overflow readback instead of blocking on the GPU.
+    /// Whether to defer the scratch-overflow readback instead of blocking on the GPU. A render whose
+    /// capacities are upper bounds reads no status.
     /// </param>
     /// <param name="requiresGrowth">Receives whether the caller should retry with larger scratch capacities.</param>
     /// <param name="grownBumpSizes">Receives the scratch capacities reported by the render attempt.</param>
@@ -2008,7 +2021,8 @@ internal static class WebGPUSceneDispatch
     /// <param name="schedulingArena">The reusable scheduling arena slot for this render.</param>
     /// <param name="initialChunkTileHeightHint">The advisory chunk height to try first when this scene requires chunking.</param>
     /// <param name="deferOverflowCheck">
-    /// Whether to defer the scratch-overflow readback instead of blocking on the GPU.
+    /// Whether to defer the scratch-overflow readback instead of blocking on the GPU. A render whose
+    /// capacities are upper bounds reads no status.
     /// </param>
     /// <param name="requiresGrowth">Receives whether the caller should retry with larger scratch capacities.</param>
     /// <param name="grownBumpSizes">Receives the scratch capacities reported by the render attempt.</param>
@@ -2106,6 +2120,20 @@ internal static class WebGPUSceneDispatch
                 out error))
         {
             return false;
+        }
+
+        if (HasScratchBounds(stagedScene))
+        {
+            // The capacities are upper bounds of the GPU scratch use, so the GPU cannot overflow.
+            // The fine output and the target copy go in one submission, and no status is read.
+            CopyToTarget(ref stagedScene, target, outputTexture, targetWidth, targetHeight);
+            if (!WebGPUDrawingBackend.TrySubmitPendingCommands(flushContext))
+            {
+                error = "Failed to submit the staged-scene frame.";
+                return false;
+            }
+
+            return true;
         }
 
         if (deferOverflowCheck)
@@ -2250,7 +2278,10 @@ internal static class WebGPUSceneDispatch
     /// <param name="target">The render-time target receiving the chunked output.</param>
     /// <param name="schedulingArena">The flush-local reusable scheduling scratch and readback arena.</param>
     /// <param name="initialChunkTileHeightHint">The advisory chunk height to try before estimating from the full-scene overflow.</param>
-    /// <param name="deferOverflowCheck">Whether to defer the scratch-overflow readback instead of blocking on the GPU.</param>
+    /// <param name="deferOverflowCheck">
+    /// Whether to defer the scratch-overflow readback instead of blocking on the GPU. A render whose
+    /// capacities are upper bounds reads no status.
+    /// </param>
     /// <param name="requiresGrowth">Receives whether the chunked path needs the caller to retry with larger global scratch capacities.</param>
     /// <param name="grownBumpSizes">Receives the enlarged scratch capacities when <paramref name="requiresGrowth"/> is <see langword="true"/>.</param>
     /// <param name="successfulChunkTileHeight">Receives the largest chunk height that rendered successfully.</param>
@@ -2281,6 +2312,10 @@ internal static class WebGPUSceneDispatch
         int targetWidth = target.Bounds.Width;
         int targetHeight = target.Bounds.Height;
         nuint maxStorageBufferBindingSize = flushContext.ScratchBufferBindingSizeLimit;
+
+        // A render with bounded capacities cannot overflow, so it reads no status, now or later.
+        bool hasScratchBounds = HasScratchBounds(stagedScene);
+        bool deferStatus = deferOverflowCheck && !hasScratchBounds;
 
         if (!WebGPUDrawingBackend.TryCreateCompositionTexture(
             flushContext,
@@ -2320,7 +2355,7 @@ internal static class WebGPUSceneDispatch
         nuint readbackByteLength = checked(Math.Max(totalTileHeight, 1U) * (uint)sizeof(GpuSceneBumpAllocators));
         WGPUBufferImpl* deferredReadbackBuffer = null;
         bool deferredReadbackBufferTransferred = false;
-        if (deferOverflowCheck)
+        if (deferStatus)
         {
             deferredReadbackBuffer = flushContext.DeviceState.RentStatusReadbackBuffer(readbackByteLength);
             if (deferredReadbackBuffer is null)
@@ -2405,7 +2440,7 @@ internal static class WebGPUSceneDispatch
                         readbackByteLength,
                         ref schedulingArena);
 
-                    WGPUBufferImpl* statusReadbackBuffer = deferOverflowCheck ? deferredReadbackBuffer : currentArena.ReadbackBuffer;
+                    WGPUBufferImpl* statusReadbackBuffer = deferStatus ? deferredReadbackBuffer : currentArena.ReadbackBuffer;
 
                     // A first chunk that already covers the full tile height renders through the
                     // monolithic scheduling path below; genuine multi-chunk renders run the shared
@@ -2475,7 +2510,7 @@ internal static class WebGPUSceneDispatch
                 return false;
             }
 
-            if (!deferOverflowCheck)
+            if (!hasScratchBounds && !deferStatus)
             {
                 // All chunks submitted. Map the readback buffer once and check every chunk's
                 // bump allocators. If any overflowed, grow sizes and the outer retry loop re-runs.
@@ -2514,7 +2549,7 @@ internal static class WebGPUSceneDispatch
                 return false;
             }
 
-            if (deferOverflowCheck)
+            if (deferStatus)
             {
                 pendingStatus = new WebGPUPendingSchedulingStatus(
                     flushContext.Api,
@@ -3015,17 +3050,21 @@ internal static class WebGPUSceneDispatch
 
         // A chunk of one bin or more starts on a bin and holds whole bins, except the last chunk,
         // which ends at the target. A chunk smaller than one bin happens only when one bin alone
-        // does not fit the binding limit, and it stays inside its bin. The row bounds keep bins,
-        // so such a chunk gets the bin bound shared by its rows, the same sizing as
-        // ScaleChunkBumpSizes. That share is not a bound, so the overflow protocol stays the safety
-        // net for that case only.
+        // does not fit the binding limit. It can start on any row, and CreateChunkWindow ends it
+        // at the end of its bin. The row bounds keep each tile row, so every such window gets a
+        // true bound.
         uint binRows = WebGPUSceneRowBounds.BinRows;
-        uint windowRows = Math.Max(chunkTileHeight, binRows);
-        int windowPixels = checked((int)windowRows * WebGPUSceneEncoder.TileHeight);
-        for (uint start = 0; start < Math.Max(targetTileHeight, 1U); start += binRows)
+        uint step = chunkTileHeight >= binRows ? binRows : 1U;
+        for (uint start = 0; start < Math.Max(targetTileHeight, 1U); start += step)
         {
+            uint end = start + chunkTileHeight;
+            if (chunkTileHeight < binRows)
+            {
+                end = Math.Min(end, (start | (binRows - 1U)) + 1U);
+            }
+
             int y0 = checked(originY + ((int)start * WebGPUSceneEncoder.TileHeight));
-            int y1 = checked(y0 + windowPixels);
+            int y1 = checked(originY + ((int)end * WebGPUSceneEncoder.TileHeight));
             WebGPUSceneWindowBounds window = rowBounds.GetWindow(y0, y1);
             pathRows = Math.Max(pathRows, window.PathRows);
             tiles = Math.Max(tiles, window.Tiles);
@@ -3036,33 +3075,14 @@ internal static class WebGPUSceneDispatch
                 blendSpillSlots = Math.Max(blendSpillSlots, scene.GetBlendSpillSlots(y0, y1));
             }
 
-            if (start + windowRows >= targetTileHeight)
+            if (end >= targetTileHeight)
             {
                 break;
             }
         }
 
-        if (chunkTileHeight < binRows)
-        {
-            pathRows = ShareBinBound(pathRows, chunkTileHeight, binRows);
-            tiles = ShareBinBound(tiles, chunkTileHeight, binRows);
-            crossings = ShareBinBound(crossings, chunkTileHeight, binRows);
-            ptclWords = ShareBinBound(ptclWords, chunkTileHeight, binRows);
-            blendSpillSlots = ShareBinBound(blendSpillSlots, chunkTileHeight, binRows);
-        }
-
         return new WebGPUSceneWindowBounds(pathRows, tiles, crossings, ptclWords);
     }
-
-    /// <summary>
-    /// Shares a bin bound by the rows of a chunk that is smaller than one bin.
-    /// </summary>
-    /// <param name="binBound">The bound of one bin.</param>
-    /// <param name="chunkTileHeight">The chunk height in tile rows.</param>
-    /// <param name="binRows">The tile rows of one bin.</param>
-    /// <returns>The share, rounded up.</returns>
-    private static long ShareBinBound(long binBound, uint chunkTileHeight, uint binRows)
-        => ((binBound * chunkTileHeight) + binRows - 1) / binRows;
 
     /// <summary>
     /// Raises chunk-local scratch capacities to the bounds of one chunk window.
@@ -3082,12 +3102,11 @@ internal static class WebGPUSceneDispatch
         bool hasSegmentTable,
         long blendSpillSlots)
     {
-        // The PTCL bound matches SeedSceneBumpSizes: the draw words with the same 5% margin, two
-        // words for each crossing when a CMD_PROFILE_TABLE can precede a fill, and one partial
-        // chunk for each tile of the window.
-        long ptclWords = ((window.PtclWords * 105L) / 100L)
-            + (hasSegmentTable ? 2L * window.Crossings : 0L)
-            + ((long)widthInTiles * chunkTileHeight * PtclChunkWords);
+        // The command words are the draw words and two words for each crossing when a
+        // CMD_PROFILE_TABLE can precede a fill.
+        long ptclWords = GetPtclChunkBound(
+            window.PtclWords + (hasSegmentTable ? 2L * window.Crossings : 0L),
+            widthInTiles * chunkTileHeight);
 
         return new WebGPUSceneBumpSizes(
             scaled.Lines,
@@ -3166,7 +3185,7 @@ internal static class WebGPUSceneDispatch
     /// <param name="estimatedBinFootprint">The CPU-side upper bound for per-(draw, bin) records.</param>
     /// <param name="estimatedPathTiles">The CPU-side upper bound for path-tile records.</param>
     /// <param name="estimatedBlendSpillSlots">The CPU-side upper bound for blend-spill slots.</param>
-    /// <param name="targetTileCount">The number of tiles in the target, each of which can leave one partial PTCL chunk.</param>
+    /// <param name="targetTileCount">The number of tiles in the target.</param>
     /// <param name="maxStorageBufferBindingSize">The device-reported maximum size of one storage-buffer binding.</param>
     /// <returns>The retained capacities raised to the CPU-side upper bounds.</returns>
     private static WebGPUSceneBumpSizes SeedSceneBumpSizes(
@@ -3193,8 +3212,7 @@ internal static class WebGPUSceneDispatch
         uint pathTileFloor = Math.Max(ToBoundCount(estimatedPathTiles), pathRowFloor);
         uint blendSpillFloor = ToBoundCount(estimatedBlendSpillSlots);
         uint binningFloor = ClampEstimate(estimatedBinFootprint, maxStorageBufferBindingSize, sizeof(uint));
-        long ptclWords = ((estimatedPtclWords * 105L) / 100L) + (targetTileCount * PtclChunkWords);
-        uint ptclFloor = ToBoundCount(ptclWords);
+        uint ptclFloor = ToBoundCount(GetPtclChunkBound(estimatedPtclWords, targetTileCount));
 
         return new WebGPUSceneBumpSizes(
             Math.Max(currentSizes.Lines, lineFloor),
@@ -3205,6 +3223,26 @@ internal static class WebGPUSceneDispatch
             Math.Max(currentSizes.Segments, segmentFloor),
             Math.Max(currentSizes.BlendSpill, blendSpillFloor),
             Math.Max(currentSizes.Ptcl, ptclFloor));
+    }
+
+    /// <summary>
+    /// Bounds the dynamic PTCL words that coarse allocates for a set of tiles.
+    /// </summary>
+    /// <remarks>
+    /// A tile with j chunks writes at least 61 + 246 * (j - 1) command words, so it has at most
+    /// 1 + (W_t - 61) / 246 chunks. Over the tiles that start a chunk, the chunk count is at most
+    /// N + (W - 61 * N) / 246, with W the command words of the tiles and N the number of these
+    /// tiles. This grows with N, and N is at most the tile count and at most W / 61. Each chunk is
+    /// 256 words.
+    /// </remarks>
+    /// <param name="commandWords">The bound on the command words of all the tiles.</param>
+    /// <param name="tileCount">The number of tiles.</param>
+    /// <returns>The bound in words.</returns>
+    private static long GetPtclChunkBound(long commandWords, long tileCount)
+    {
+        long chunkTiles = Math.Min(tileCount, commandWords / PtclFirstChunkCommandWords);
+        long chunks = chunkTiles + ((commandWords - (PtclFirstChunkCommandWords * chunkTiles)) / PtclChunkCommandWords);
+        return chunks * PtclChunkWords;
     }
 
     /// <summary>
@@ -3236,6 +3274,45 @@ internal static class WebGPUSceneDispatch
         // the element count that keeps the buffer within one storage binding.
         ulong maxElements = maxStorageBufferBindingSize / Math.Max(elementByteSize, 1U);
         return (uint)Math.Min((ulong)estimate, Math.Min(maxElements, uint.MaxValue));
+    }
+
+    /// <summary>
+    /// Determines whether the scratch capacities of a staged scene are upper bounds of its GPU
+    /// scratch use. Such a render cannot overflow, so it needs no status readback.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="SeedSceneBumpSizes(WebGPUSceneBumpSizes, WebGPUEncodedScene, ulong)"/> raises every
+    /// capacity to the bound that the encoder computed for the whole scene, and
+    /// <see cref="GetChunkBumpSizes(WebGPUSceneBumpSizes, WebGPUEncodedScene, WebGPUSceneChunkWindow)"/>
+    /// raises every chunk capacity to the bound of its rows. These cases have no bound:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>A range of an ordered scene. Its origin can move the tile grid of its
+    /// data, and the ordered path reads its status in its transaction.</description></item>
+    /// <item><description>A binning bound above the binding limit. Binning does not shrink with a
+    /// chunk, so its capacity is capped at the limit.</description></item>
+    /// <item><description>A chunked scene without row bounds. Its chunks get a share of the scene
+    /// capacities.</description></item>
+    /// </list>
+    /// </remarks>
+    /// <param name="stagedScene">The staged scene.</param>
+    /// <returns><see langword="true"/> when the capacities are upper bounds; otherwise, <see langword="false"/>.</returns>
+    private static bool HasScratchBounds(in WebGPUStagedScene stagedScene)
+    {
+        if (stagedScene.Range.HasValue)
+        {
+            return false;
+        }
+
+        WebGPUEncodedScene scene = stagedScene.EncodedScene;
+        ulong binningLimit = Math.Min(stagedScene.FlushContext.ScratchBufferBindingSizeLimit / sizeof(uint), uint.MaxValue);
+        if ((ulong)Math.Max(scene.EstimatedBinFootprint, 0L) > binningLimit)
+        {
+            return false;
+        }
+
+        return !IsChunkableBindingFailure(stagedScene.BindingLimitFailure.Buffer) || scene.RowBounds is not null;
     }
 
     /// <summary>
