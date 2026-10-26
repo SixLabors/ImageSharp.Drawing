@@ -107,6 +107,32 @@ public abstract class Pen : IEquatable<Pen>
     /// <returns>The <see cref="IPath"/> with the pen styling applied.</returns>
     public abstract IPath GeneratePath(IPath path, float strokeWidth);
 
+    /// <summary>
+    /// Gets the largest distance from the centerline that the stroke outline can reach.
+    /// </summary>
+    /// <remarks>
+    /// A miter join reaches the miter limit times the half width. A square cap corner reaches
+    /// sqrt(2) times the half width. Round and bevel joins and round and butt caps stay inside the
+    /// half width.
+    /// </remarks>
+    /// <param name="widthScale">The transform-derived scale applied to the stroke width.</param>
+    /// <returns>The distance in pixels.</returns>
+    internal float GetOutlineRadius(float widthScale)
+    {
+        float halfWidth = this.StrokeWidth * widthScale * 0.5F;
+        float joinRadius = this.StrokeOptions.LineJoin switch
+        {
+            LineJoin.Miter or LineJoin.MiterRevert or LineJoin.MiterRound => (float)(halfWidth * Math.Max(this.StrokeOptions.MiterLimit, 1D)),
+            _ => halfWidth
+        };
+
+        float capRadius = this.StrokeOptions.LineCap == LineCap.Square
+            ? halfWidth * MathF.Sqrt(2F)
+            : halfWidth;
+
+        return MathF.Max(joinRadius, capRadius);
+    }
+
     /// <inheritdoc/>
     public virtual bool Equals(Pen? other)
         => other != null

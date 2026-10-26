@@ -66,7 +66,7 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// The tile width in pixels used by binning, coarse, and fine. Must match TILE_WIDTH in config.wgsl.
     /// </summary>
-    private const int TileWidth = 16;
+    public const int TileWidth = 16;
 
     /// <summary>
     /// The tile height in pixels used by binning, coarse, and fine. Must match TILE_HEIGHT in config.wgsl.
@@ -77,6 +77,12 @@ internal static class WebGPUSceneEncoder
     /// The PTCL word count of one CMD_FILL command. Must match write_path in coarse.wgsl.
     /// </summary>
     private const int PtclFillWords = 6;
+
+    /// <summary>
+    /// The extra PTCL words of one clip or layer on a tile: BeginClip (2), the forced solid and
+    /// EndClip (5), and its path (2). Must match coarse.wgsl.
+    /// </summary>
+    private const int PtclClipWords = 9;
 
     /// <summary>
     /// Half the length of the synthetic horizontal segment substituted for point-like strokes so caps
@@ -91,6 +97,41 @@ internal static class WebGPUSceneEncoder
     /// segment list the CPU stroker strokes.
     /// </summary>
     private const float StrokeMicroSegmentEpsilon = 1F / 64F;
+
+    /// <summary>
+    /// The largest scene segment count of one encoding. A range has at most this count. coarse.wgsl stores the segment index in 8 bits.
+    /// </summary>
+    private const int MaxSceneSegmentCount = 255;
+
+    /// <summary>
+    /// The draw-object count limit of a scene with a segment table. coarse.wgsl stores the draw
+    /// object index in 24 bits, so the count must be less than this value.
+    /// </summary>
+    private const int SegmentedDrawObjectLimit = 1 << 24;
+
+    /// <summary>
+    /// Gets the error message for a scene that reads retained scenes in place and has more draw
+    /// objects than <see cref="SegmentedDrawObjectLimit"/> allows.
+    /// </summary>
+    private static string SegmentedDrawObjectLimitError
+        => $"A WebGPU scene that reads retained scenes in place can have at most {SegmentedDrawObjectLimit - 1} draw objects.";
+
+    /// <summary>
+    /// The blend depth that fine keeps in registers. Must match BLEND_STACK_SPLIT in Shared/config.wgsl.
+    /// </summary>
+    public const int BlendStackSplit = 4;
+
+    /// <summary>
+    /// The bounding-box tile count from which a polyline stroke walks its rows for the row-span
+    /// tile bound. The walk costs about one step for each row that a segment spans. A smaller
+    /// draw keeps its area bound, which is at most this many tiles.
+    /// </summary>
+    private const int RowWalkMinimumTiles = 1024;
+
+    /// <summary>
+    /// The words in one scene segment table entry. Must match SCENE_SEGMENT_WORDS in scene_segment.wgsl.
+    /// </summary>
+    public const int SceneSegmentEntryWordCount = 13;
 
     /// <summary>
     /// Vello's clip blend word, (MIX_CLIP &lt;&lt; 8) | COMPOSE_SRC_OVER. Values must match blend.wgsl.
@@ -207,7 +248,11 @@ internal static class WebGPUSceneEncoder
         // layer's graphics options when they close, so a partition boundary may not cut through
         // an open layer; the prescan snaps boundaries forward to the next point where no layer
         // scope is open instead of serializing the whole scene.
-        int partitionCount = GetPartitionCount(maxDegreeOfParallelism, commandCount, targetRowCount);
+        // A retained scene inside a layer is a gap in the outer streams at a stream position. One
+        // partition keeps every gap position in the final streams, so the resolver can build the
+        // segment table without a partition offset map. Only batches with a retained scene inside
+        // a layer pay this.
+        int partitionCount = scene.HasScenes ? 1 : GetPartitionCount(maxDegreeOfParallelism, commandCount, targetRowCount);
         int[]? partitionBoundaries = null;
         CompositionCommand[][]? partitionSeedClips = null;
         if (partitionCount > 1 && (scene.HasClipControls || scene.HasLayers))
@@ -314,6 +359,15 @@ internal static class WebGPUSceneEncoder
                 return false;
             }
 
+            // TryAppendRetainedScene checks the limit at each retained scene. Outer draws after the
+            // last one also count, so check the final total here.
+            if (encoding.ExceedsSegmentedDrawObjectLimit)
+            {
+                encodedScene = WebGPUEncodedScene.Empty;
+                error = SegmentedDrawObjectLimitError;
+                return false;
+            }
+
             if (encoding.IsEmpty)
             {
                 encodedScene = WebGPUEncodedScene.Empty;
@@ -335,6 +389,10 @@ internal static class WebGPUSceneEncoder
     /// Encodes a prepared command batch containing Apply into ordered WebGPU scene operations.
     /// </summary>
     /// <param name="scene">The prepared command batch.</param>
+    /// <param name="scopedSceneLayers">
+    /// For each command index, whether the BeginLayer command there opens a layer around a retained
+    /// scene with ordered work, or <see langword="null"/> when there is no such layer.
+    /// </param>
     /// <param name="targetBounds">The target bounds used for target-local coordinate conversion.</param>
     /// <param name="allocator">The allocator used for temporary and packed scene storage.</param>
     /// <param name="maxDegreeOfParallelism">The maximum degree of parallelism used by leaf scene encoding.</param>
@@ -343,6 +401,7 @@ internal static class WebGPUSceneEncoder
     /// <returns><see langword="true"/> when the scene encoded successfully; otherwise, <see langword="false"/>.</returns>
     public static bool TryEncodeOrdered(
         DrawingCommandBatch scene,
+        bool[]? scopedSceneLayers,
         in Rectangle targetBounds,
         MemoryAllocator allocator,
         int maxDegreeOfParallelism,
@@ -363,6 +422,7 @@ internal static class WebGPUSceneEncoder
             SceneEncodingCheckpoint rangeStart = encoding.BeginPackedIndependentRange(targetBounds, ClipBlendMode, replayActiveClips: true);
             if (!TryEncodeOrderedOperations(
                 scene,
+                scopedSceneLayers,
                 0,
                 scene.CommandCount,
                 targetBounds,
@@ -381,6 +441,15 @@ internal static class WebGPUSceneEncoder
             if (finalRange.FillCount != 0)
             {
                 operations.Add(new WebGPUSceneOperation(finalRange));
+            }
+
+            // The same check as TryEncode. A range has at most the draw objects of the whole
+            // scene, so the check of the whole scene holds for each range dispatch.
+            if (encoding.ExceedsSegmentedDrawObjectLimit)
+            {
+                encodedScene = WebGPUEncodedScene.Empty;
+                error = SegmentedDrawObjectLimitError;
+                return false;
             }
 
             if (encoding.IsEmpty)
@@ -406,6 +475,10 @@ internal static class WebGPUSceneEncoder
     /// splitting the packed draw stream at every Apply barrier.
     /// </summary>
     /// <param name="scene">The prepared command batch.</param>
+    /// <param name="scopedSceneLayers">
+    /// For each command index, whether the BeginLayer command there opens a layer around a retained
+    /// scene with ordered work, or <see langword="null"/> when there is no such layer.
+    /// </param>
     /// <param name="commandStart">The inclusive command start index.</param>
     /// <param name="commandEnd">The exclusive command end index.</param>
     /// <param name="targetBounds">The bounds of the target the range renders into.</param>
@@ -418,6 +491,7 @@ internal static class WebGPUSceneEncoder
     /// <returns><see langword="true"/> when the range encoded successfully.</returns>
     private static bool TryEncodeOrderedOperations(
         DrawingCommandBatch scene,
+        bool[]? scopedSceneLayers,
         int commandStart,
         int commandEnd,
         Rectangle targetBounds,
@@ -438,7 +512,8 @@ internal static class WebGPUSceneEncoder
             if (sceneCommand is PathCompositionSceneCommand pathCommand)
             {
                 CompositionCommand command = pathCommand.Command;
-                if (command.Kind == CompositionCommandKind.BeginLayer && command.RequiresScopedApply)
+                if (command.Kind == CompositionCommandKind.BeginLayer &&
+                    (command.RequiresScopedApply || scopedSceneLayers?[i] == true))
                 {
                     WebGPUSceneRange pendingRange = encoding.EndPackedIndependentRange(targetBounds, rangeStart, closeActiveClips: true);
                     if (pendingRange.FillCount != 0)
@@ -460,6 +535,7 @@ internal static class WebGPUSceneEncoder
                     SceneEncodingCheckpoint childStart = encoding.BeginPackedIndependentRange(layerBounds, ClipBlendMode, replayActiveClips: true);
                     if (!TryEncodeOrderedOperations(
                         scene,
+                        scopedSceneLayers,
                         i + 1,
                         layerEnd,
                         layerBounds,
@@ -515,6 +591,24 @@ internal static class WebGPUSceneEncoder
 
                     continue;
                 }
+            }
+
+            if (sceneCommand is RetainedSceneCompositionSceneCommand retainedCommand)
+            {
+                if (!TryAppendOrderedRetainedScene(
+                    retainedCommand,
+                    targetBounds,
+                    targetId,
+                    ref encoding,
+                    operations,
+                    ref rangeStart,
+                    ref nextLayerTargetId,
+                    out error))
+                {
+                    return false;
+                }
+
+                continue;
             }
 
             if (sceneCommand is PathCompositionSceneCommand fillCommand)
@@ -583,6 +677,194 @@ internal static class WebGPUSceneEncoder
         }
 
         rangeStart = encoding.BeginPackedIndependentRange(targetBounds, nextClipBlendMode, replayActiveClips: true);
+    }
+
+    /// <summary>
+    /// Encodes one retained scene command of an ordered scene.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Directly inside a scoped layer, the retained scene renders as its own passes into the layer
+    /// target, in stream order. An Apply there splits the layer content into passes in the same way.
+    /// Its operations read its own encoded data. Their origin moves its data coordinates into the
+    /// layer target, so the retained data does not change.
+    /// </para>
+    /// <para>
+    /// Inside a layer of the current range that is not scoped, the layer content cannot split into
+    /// passes, so the range reads the retained scene in place through the segment table.
+    /// </para>
+    /// </remarks>
+    /// <param name="command">The retained scene command.</param>
+    /// <param name="targetBounds">The bounds of the target the current range renders into.</param>
+    /// <param name="targetId">The stable identity of that target.</param>
+    /// <param name="encoding">The shared mutable scene encoding.</param>
+    /// <param name="operations">Receives the ordered scene operations.</param>
+    /// <param name="rangeStart">The checkpoint of the currently open packed range. The method updates it when it splits the range.</param>
+    /// <param name="nextLayerTargetId">The next stable target identity available for a scoped layer.</param>
+    /// <param name="error">Receives the failure reason when encoding fails.</param>
+    /// <returns><see langword="true"/> when the command encoded successfully.</returns>
+    private static bool TryAppendOrderedRetainedScene(
+        RetainedSceneCompositionSceneCommand command,
+        Rectangle targetBounds,
+        int targetId,
+        ref SupportedSubsetSceneEncoding encoding,
+        List<WebGPUSceneOperation> operations,
+        ref SceneEncodingCheckpoint rangeStart,
+        ref int nextLayerTargetId,
+        out string? error)
+    {
+        if (encoding.OpenLayerCount != 0)
+        {
+            return encoding.TryAppendRetainedScene(command.Scene, out error);
+        }
+
+        // The retained data is in the coordinates of the root target, which the scene bounds must
+        // match. The layer target lies inside the root target, so the origin is never negative.
+        Rectangle rootTargetBounds = encoding.RootTargetBounds;
+        Point origin = new(targetBounds.X - rootTargetBounds.X, targetBounds.Y - rootTargetBounds.Y);
+        AddRenderRange(targetBounds, ref encoding, operations, ref rangeStart, ClipBlendMode);
+        return AppendRetainedSceneOperations(command.Scene, rootTargetBounds, targetBounds, targetId, origin, operations, ref nextLayerTargetId, out error);
+    }
+
+    /// <summary>
+    /// Appends the operations that render one retained scene into a scoped layer target.
+    /// </summary>
+    /// <param name="retainedScene">The retained scene. It must be a WebGPU scene.</param>
+    /// <param name="rootTargetBounds">The bounds of the root target of the encoding, which the scene bounds must match.</param>
+    /// <param name="targetBounds">The bounds of the layer target.</param>
+    /// <param name="targetId">The stable identity of the layer target.</param>
+    /// <param name="origin">The position of the layer target in the coordinates of the scene data.</param>
+    /// <param name="operations">Receives the ordered scene operations.</param>
+    /// <param name="nextLayerTargetId">The next stable target identity available for a scoped layer.</param>
+    /// <param name="error">Receives the failure reason when the scene cannot render into the layer.</param>
+    /// <returns><see langword="true"/> when the operations were appended.</returns>
+    private static bool AppendRetainedSceneOperations(
+        DrawingBackendScene retainedScene,
+        Rectangle rootTargetBounds,
+        Rectangle targetBounds,
+        int targetId,
+        Point origin,
+        List<WebGPUSceneOperation> operations,
+        ref int nextLayerTargetId,
+        out string? error)
+    {
+        // The same rules as RenderScene: the scene must come from this backend, and it renders only
+        // into a target with its own bounds.
+        if (retainedScene is not WebGPUDrawingBackendScene scene)
+        {
+            error = "The scene is not compatible with the WebGPU drawing backend.";
+            return false;
+        }
+
+        if (scene.Bounds != rootTargetBounds)
+        {
+            error = "The target bounds do not match the WebGPU drawing backend scene bounds.";
+            return false;
+        }
+
+        if (scene.Parts is DrawingBackendScene[] parts)
+        {
+            // A parts scene renders its parts in order. The call checks each part.
+            for (int i = 0; i < parts.Length; i++)
+            {
+                if (!AppendRetainedSceneOperations(parts[i], rootTargetBounds, targetBounds, targetId, origin, operations, ref nextLayerTargetId, out error))
+                {
+                    return false;
+                }
+            }
+
+            error = null;
+            return true;
+        }
+
+        WebGPUEncodedScene encoded = scene.EncodedScene;
+        if (!encoded.HasOperations)
+        {
+            if (encoded.FillCount != 0)
+            {
+                operations.Add(new WebGPUSceneOperation(WebGPUSceneRange.CreateWholeScene(encoded, targetBounds, origin))
+                {
+                    RetainedScene = scene
+                });
+            }
+
+            error = null;
+            return true;
+        }
+
+        // The operations of an ordered scene keep their order. Those at depth zero render into its
+        // root target, which is now the layer target, so they take its bounds and the origin. Its
+        // own scoped layers get new target identities and keep their own bounds. An operation that
+        // already reads a retained scene of its own keeps that scene, because its range indexes
+        // the data of that scene.
+        ReadOnlySpan<WebGPUSceneOperation> source = encoded.OrderedOperations;
+        int[] targetIds = new int[encoded.OrderedTargetCount];
+        targetIds[0] = targetId;
+        int depth = 0;
+        for (int i = 0; i < source.Length; i++)
+        {
+            WebGPUSceneOperation operation = source[i];
+            switch (operation.Kind)
+            {
+                case WebGPUSceneOperationKind.RenderRange:
+                    operations.Add(new WebGPUSceneOperation(depth == 0 ? operation.Range.WithTarget(targetBounds, origin) : operation.Range)
+                    {
+                        RetainedScene = operation.RetainedScene ?? scene
+                    });
+                    break;
+
+                case WebGPUSceneOperationKind.BeginLayer:
+                    targetIds[operation.LayerTargetId] = nextLayerTargetId++;
+                    operations.Add(new WebGPUSceneOperation(operation.LayerBounds, targetIds[operation.LayerTargetId], targetIds[operation.ParentTargetId])
+                    {
+                        RetainedScene = operation.RetainedScene ?? scene
+                    });
+
+                    depth++;
+                    break;
+
+                case WebGPUSceneOperationKind.EndLayer:
+                    depth--;
+                    operations.Add(new WebGPUSceneOperation(
+                        depth == 0 ? operation.Range.WithTarget(targetBounds, origin) : operation.Range,
+                        targetIds[operation.LayerTargetId],
+                        targetIds[operation.ParentTargetId])
+                    {
+                        RetainedScene = operation.RetainedScene ?? scene
+                    });
+                    break;
+
+                case WebGPUSceneOperationKind.Apply:
+                    WebGPUApplySceneItem apply = operation.Apply!;
+                    operations.Add(new WebGPUSceneOperation(new WebGPUApplySceneItem(
+                        apply.Operation,
+                        apply.Effect,
+                        apply.InputRect,
+                        apply.OutputRect,
+                        apply.ReadOffset,
+                        depth == 0 ? apply.DrawRange.WithTarget(targetBounds, origin) : apply.DrawRange))
+                    {
+                        RetainedScene = operation.RetainedScene ?? scene
+                    });
+                    break;
+
+                case WebGPUSceneOperationKind.ShaderEffect:
+                    WebGPUShaderEffectSceneItem effect = operation.ShaderEffect!;
+                    operations.Add(new WebGPUSceneOperation(new WebGPUShaderEffectSceneItem(
+                        effect.Effect,
+                        effect.InputRect,
+                        effect.OutputRect,
+                        effect.ReadOffset,
+                        depth == 0 ? effect.DrawRange.WithTarget(targetBounds, origin) : effect.DrawRange))
+                    {
+                        RetainedScene = operation.RetainedScene ?? scene
+                    });
+                    break;
+            }
+        }
+
+        error = null;
+        return true;
     }
 
     /// <summary>
@@ -889,6 +1171,8 @@ internal static class WebGPUSceneEncoder
         /// <param name="estimatedTileCrossings">The accumulated tile-crossing upper bound.</param>
         /// <param name="estimatedPtclWords">The accumulated PTCL word upper bound.</param>
         /// <param name="estimatedBinFootprint">The accumulated per-(draw, bin) record upper bound.</param>
+        /// <param name="insertionCount">The number of retained scenes recorded so far.</param>
+        /// <param name="estimatedPathTiles">The accumulated path-tile bound.</param>
         public SceneEncodingCheckpoint(
             int pathTagByteCount,
             int pathDataWordCount,
@@ -904,8 +1188,12 @@ internal static class WebGPUSceneEncoder
             long estimatedPathRowCount,
             long estimatedTileCrossings,
             long estimatedPtclWords,
-            long estimatedBinFootprint)
+            long estimatedBinFootprint,
+            int insertionCount,
+            long estimatedPathTiles)
         {
+            this.InsertionCount = insertionCount;
+            this.EstimatedPathTiles = estimatedPathTiles;
             this.PathTagByteCount = pathTagByteCount;
             this.PathDataWordCount = pathDataWordCount;
             this.DrawTagCount = drawTagCount;
@@ -997,6 +1285,16 @@ internal static class WebGPUSceneEncoder
         /// Gets the accumulated per-(draw, bin) record upper bound.
         /// </summary>
         public long EstimatedBinFootprint { get; }
+
+        /// <summary>
+        /// Gets the number of retained scenes recorded so far.
+        /// </summary>
+        public int InsertionCount { get; }
+
+        /// <summary>
+        /// Gets the accumulated path-tile bound.
+        /// </summary>
+        public long EstimatedPathTiles { get; }
     }
 
     /// <summary>
@@ -1644,6 +1942,20 @@ internal static class WebGPUSceneEncoder
         private long estimatedPtclWords;
         private long estimatedBinFootprint;
 
+        // The path-tile bound: the tiles of each draw's clipped bounds.
+        private long estimatedPathTiles;
+
+        // The clip and layer nesting depth in stream order, and the union region of each depth,
+        // starting at depth 1, in the tile grid of the current range.
+        private int blendDepth;
+        private List<Rectangle>? blendLevels;
+
+        // The row bounds of the current range, and every row bounds instance this encoding
+        // created. The resolved scene or partition takes ownership of the list.
+        private WebGPUSceneRowBounds? rowBounds;
+        private List<WebGPUSceneRowBounds>? ownedRowBounds;
+        private bool rowBoundsDetached;
+
         // Cache of the last emitted 10-word style record. Consecutive draws with identical
         // styles share one record, so the encoder only appends a style when a word changes.
         private uint lastStyle0;
@@ -1657,7 +1969,15 @@ internal static class WebGPUSceneEncoder
         private uint lastStyle8;
         private uint lastStyle9;
         private GpuSceneTransform lastTransform;
+
+        // The encoded data of every range is in the coordinates of the root target, so retained
+        // scenes of the root target can be read in place in any range. A range for another target,
+        // for example a scoped layer, has that target position as its origin (WebGPUSceneRange.Origin).
         private Rectangle rootTargetBounds;
+
+        // The target of the current range, in the coordinates of the root target. The GPU tile grid
+        // of the range starts at its top-left corner.
+        private Rectangle rangeDataBounds;
         private List<CompositionCommand>? activeClips;
         private List<Rectangle>? openLayerBounds;
 
@@ -1689,6 +2009,13 @@ internal static class WebGPUSceneEncoder
             this.Recolors = [];
             this.SolidColors = [];
             this.GradientRamps = [];
+            this.Insertions = null;
+            this.SegmentedRanges = null;
+            this.retainedDrawTagCount = 0;
+            this.rangeSegmentEntryCount = 0;
+
+            // A scene with no retained scene is one piece of every stream.
+            this.SegmentCount = 1;
             this.FillCount = 0;
             this.PathCount = 0;
             this.LineCount = 0;
@@ -1711,6 +2038,7 @@ internal static class WebGPUSceneEncoder
             this.lastStyle8 = 0;
             this.lastStyle9 = 0;
             this.rootTargetBounds = rootTargetBounds;
+            this.rangeDataBounds = new Rectangle(0, 0, rootTargetBounds.Width, rootTargetBounds.Height);
             this.lastTransform = GpuSceneTransform.Identity;
             this.activeClips = null;
             this.openLayerBounds = null;
@@ -1718,6 +2046,9 @@ internal static class WebGPUSceneEncoder
             this.estimatedTileCrossings = 0;
             this.estimatedPtclWords = 0;
             this.estimatedBinFootprint = 0;
+            this.estimatedPathTiles = 0;
+            this.blendDepth = 0;
+            this.blendLevels = null;
             this.VisibleFillCount = 0;
 
             this.PathTags.Add(PackPathTag(PathTag.Transform));
@@ -1800,6 +2131,56 @@ internal static class WebGPUSceneEncoder
         public List<GpuGradientRampDescriptor> GradientRamps;
 
         /// <summary>
+        /// Gets or sets the retained scenes read in place inside layers, in stream order, or
+        /// <see langword="null"/> when the encoding has none.
+        /// </summary>
+        public List<WebGPUSceneInsertion>? Insertions;
+
+        /// <summary>
+        /// Gets or sets the ranges that read retained scenes in place, in stream order, or
+        /// <see langword="null"/> when no range does. The resolver writes one segment table for each.
+        /// </summary>
+        public List<WebGPUSceneRange>? SegmentedRanges;
+
+        // The draw tags of the retained scenes in Insertions, which the virtual draw-tag stream adds.
+        private int retainedDrawTagCount;
+
+        // The table entries of the ranges in SegmentedRanges, which the range tables of the scene hold.
+        private int rangeSegmentEntryCount;
+
+        /// <summary>
+        /// Gets the scene segment count that the retained scenes recorded so far give.
+        /// </summary>
+        public int SegmentCount { get; private set; }
+
+        /// <summary>
+        /// Gets the virtual draw-tag count: the draw tags of this encoding and of its retained scenes.
+        /// </summary>
+        public readonly int JoinedDrawTagCount => this.DrawTags.Count + this.retainedDrawTagCount;
+
+        /// <summary>
+        /// Gets a value indicating whether the encoding reads retained scenes in place and has more
+        /// draw objects than coarse can pack.
+        /// </summary>
+        public readonly bool ExceedsSegmentedDrawObjectLimit
+            => this.Insertions is not null && this.JoinedDrawTagCount >= SegmentedDrawObjectLimit;
+
+        /// <summary>
+        /// Gets the number of table entries of the ranges that read retained scenes in place.
+        /// </summary>
+        public readonly int RangeSegmentEntryCount => this.rangeSegmentEntryCount;
+
+        /// <summary>
+        /// Gets the number of layers open in the current range, which encode inline as clip groups.
+        /// </summary>
+        public readonly int OpenLayerCount => this.openLayerBounds?.Count ?? 0;
+
+        /// <summary>
+        /// Gets the bounds of the root target, whose coordinates every range of the encoding uses.
+        /// </summary>
+        public readonly Rectangle RootTargetBounds => this.rootTargetBounds;
+
+        /// <summary>
         /// Gets the number of emitted fill records.
         /// </summary>
         public int FillCount { get; private set; }
@@ -1846,6 +2227,17 @@ internal static class WebGPUSceneEncoder
         public readonly long EstimatedTileCrossings => this.estimatedTileCrossings;
 
         /// <summary>
+        /// Gets a value indicating whether the tile grid of the current range has the alignment of the
+        /// tile grid of the root target.
+        /// </summary>
+        /// <remarks>
+        /// The encoder counts tile crossings on the grid of the root target. When the grids do not
+        /// align, each line can cross one more tile on each axis.
+        /// </remarks>
+        private readonly bool IsRangeTileAligned
+            => this.rangeDataBounds.X % TileWidth == 0 && this.rangeDataBounds.Y % TileHeight == 0;
+
+        /// <summary>
         /// Gets the CPU-side upper-bound estimate of the dynamic PTCL words the scene's tile
         /// crossings can write: one fill command plus the draw's paint command per crossing.
         /// </summary>
@@ -1857,9 +2249,51 @@ internal static class WebGPUSceneEncoder
         public readonly long EstimatedBinFootprint => this.estimatedBinFootprint;
 
         /// <summary>
-        /// Gets a value indicating whether the encoding produced no fill work.
+        /// Gets the path-tile bound: the tiles of each draw's clipped bounds.
         /// </summary>
-        public readonly bool IsEmpty => this.FillCount == 0;
+        public readonly long EstimatedPathTiles => this.estimatedPathTiles;
+
+        /// <summary>
+        /// Gets the union region of each blend depth, starting at depth 1, or <see langword="null"/>.
+        /// </summary>
+        public readonly List<Rectangle>? BlendLevels => this.blendLevels;
+
+        /// <summary>
+        /// Gets the row bounds of the current range, or <see langword="null"/> when it has no draws.
+        /// </summary>
+        public readonly WebGPUSceneRowBounds? RowBounds => this.rowBounds;
+
+        /// <summary>
+        /// Takes ownership of every row bounds instance that this encoding created.
+        /// </summary>
+        /// <returns>The instances, or an empty array.</returns>
+        public WebGPUSceneRowBounds[] DetachRowBounds()
+        {
+            this.rowBoundsDetached = true;
+            return this.ownedRowBounds is { } owned ? [.. owned] : [];
+        }
+
+        /// <summary>
+        /// Gets the row bounds of the current range, and creates them for the range grid when the
+        /// range has none yet.
+        /// </summary>
+        /// <returns>The row bounds.</returns>
+        private WebGPUSceneRowBounds GetOrCreateRowBounds()
+        {
+            if (this.rowBounds is null)
+            {
+                this.rowBounds = new WebGPUSceneRowBounds(DivideRoundUp(this.rangeDataBounds.Height, TileHeight), this.rangeDataBounds.Y);
+                (this.ownedRowBounds ??= []).Add(this.rowBounds);
+            }
+
+            return this.rowBounds;
+        }
+
+        /// <summary>
+        /// Gets a value indicating whether the encoding produced no fill work. A retained scene is
+        /// recorded only when it has fills.
+        /// </summary>
+        public readonly bool IsEmpty => this.FillCount == 0 && this.Insertions is null;
 
         /// <summary>
         /// Captures the current stream offsets for a renderable range inside this scene.
@@ -1881,7 +2315,9 @@ internal static class WebGPUSceneEncoder
                 this.estimatedPathRowCount,
                 this.estimatedTileCrossings,
                 this.estimatedPtclWords,
-                this.estimatedBinFootprint);
+                this.estimatedBinFootprint,
+                this.Insertions?.Count ?? 0,
+                this.estimatedPathTiles);
 
         /// <summary>
         /// Starts a range that can be decoded independently by the staged pipeline.
@@ -1890,7 +2326,10 @@ internal static class WebGPUSceneEncoder
         private void BeginIndependentRange(Rectangle targetBounds)
         {
             this.PadPathTagsToSegmentBoundary();
-            this.rootTargetBounds = targetBounds;
+            this.rangeDataBounds = ToTargetLocal(targetBounds, this.rootTargetBounds);
+
+            // The row bounds use the grid of one range. The new range starts its own.
+            this.rowBounds = null;
             this.openLayerBounds?.Clear();
             this.hasLastStyle = false;
             this.lastTransform = GpuSceneTransform.Identity;
@@ -1947,7 +2386,7 @@ internal static class WebGPUSceneEncoder
             }
 
             this.EndIndependentRange();
-            return CreateRange(start, this.CaptureCheckpoint(), targetBounds);
+            return this.CreateRange(start, this.CaptureCheckpoint(), targetBounds);
         }
 
         /// <summary>
@@ -2013,38 +2452,115 @@ internal static class WebGPUSceneEncoder
         /// Ranges begin on the padded scan-segment boundaries produced by
         /// <see cref="PadPathTagsToSegmentBoundary"/>, so the starting path-tag byte offset always
         /// divides exactly into the word offset consumed by the tag-scan shaders.
+        /// A range that holds retained scenes gets joined counts and a segment table of its own.
         /// </remarks>
         /// <param name="start">The checkpoint captured at the start of the range.</param>
         /// <param name="end">The checkpoint captured at the end of the range.</param>
         /// <param name="targetBounds">The target bounds for the range.</param>
         /// <returns>The created scene range.</returns>
-        public static WebGPUSceneRange CreateRange(
+        private WebGPUSceneRange CreateRange(
             in SceneEncodingCheckpoint start,
             in SceneEncodingCheckpoint end,
             Rectangle targetBounds)
-            => new(
+        {
+            int pathTagByteCount = end.PathTagByteCount - start.PathTagByteCount;
+            int drawTagCount = end.DrawTagCount - start.DrawTagCount;
+            int drawDataWordCount = end.DrawDataWordCount - start.DrawDataWordCount;
+            SupportedSubsetSceneResolver.JoinedSceneCounts counts = new(
+                end.FillCount - start.FillCount,
+                end.PathCount - start.PathCount,
+                end.LineCount - start.LineCount,
+                end.ClipCount - start.ClipCount,
+                end.InfoWordCount - start.InfoWordCount,
+                drawTagCount,
+                drawDataWordCount,
+                checked((int)(end.EstimatedPathRowCount - start.EstimatedPathRowCount)),
+                end.EstimatedTileCrossings - start.EstimatedTileCrossings,
+                end.EstimatedPtclWords - start.EstimatedPtclWords,
+                end.EstimatedBinFootprint - start.EstimatedBinFootprint,
+                end.EstimatedPathTiles - start.EstimatedPathTiles);
+
+            WebGPUSceneRangeSegments? segments = null;
+            int insertionCount = end.InsertionCount - start.InsertionCount;
+            if (insertionCount != 0)
+            {
+                // The range starts on a scan-segment boundary and ends padded to one, so its own
+                // path tags are whole words. Each retained scene adds its virtual path-tag words.
+                ReadOnlySpan<WebGPUSceneInsertion> insertions = CollectionsMarshal.AsSpan(this.Insertions).Slice(start.InsertionCount, insertionCount);
+                int pathTagWordCount = pathTagByteCount / 4;
+                for (int i = 0; i < insertions.Length; i++)
+                {
+                    WebGPUEncodedScene retained = insertions[i].Scene.EncodedScene;
+                    counts.Add(retained);
+                    pathTagWordCount = checked(pathTagWordCount + retained.VirtualPathTagWordCount);
+                }
+
+                int segmentCount = SupportedSubsetSceneResolver.SceneSegmentTableWriter.CountSegments(insertions);
+                segments = new WebGPUSceneRangeSegments(
+                    start.InsertionCount,
+                    insertionCount,
+                    this.rangeSegmentEntryCount,
+                    segmentCount,
+                    pathTagByteCount / 4,
+                    drawTagCount,
+                    drawDataWordCount);
+
+                this.rangeSegmentEntryCount = checked(this.rangeSegmentEntryCount + segmentCount);
+                pathTagByteCount = checked(pathTagWordCount * 4);
+            }
+
+            // The range takes the blend depth regions and the row bounds recorded since the last
+            // range, so the next range starts its own.
+            long blendSpillSlots = WebGPUEncodedScene.GetBlendSpillSlots(CollectionsMarshal.AsSpan(this.blendLevels), int.MinValue, int.MaxValue);
+            this.blendLevels?.Clear();
+            WebGPUSceneRowBounds? rangeRowBounds = this.rowBounds;
+            this.rowBounds = null;
+
+            WebGPUSceneRange range = new(
                 targetBounds,
                 start.PathTagByteCount / 4,
-                end.PathTagByteCount - start.PathTagByteCount,
+                pathTagByteCount,
                 start.PathDataWordCount,
                 end.PathDataWordCount - start.PathDataWordCount,
                 start.DrawTagCount,
-                end.DrawTagCount - start.DrawTagCount,
+                counts.DrawTagCount,
                 start.DrawDataWordCount,
-                end.DrawDataWordCount - start.DrawDataWordCount,
+                counts.DrawDataWordCount,
                 start.TransformWordCount,
                 end.TransformWordCount - start.TransformWordCount,
                 start.StyleWordCount,
                 end.StyleWordCount - start.StyleWordCount,
-                end.InfoWordCount - start.InfoWordCount,
-                end.PathCount - start.PathCount,
-                end.ClipCount - start.ClipCount,
-                end.FillCount - start.FillCount,
-                end.LineCount - start.LineCount,
-                checked((int)(end.EstimatedPathRowCount - start.EstimatedPathRowCount)),
-                end.EstimatedTileCrossings - start.EstimatedTileCrossings,
-                end.EstimatedPtclWords - start.EstimatedPtclWords,
-                end.EstimatedBinFootprint - start.EstimatedBinFootprint);
+                counts.InfoWordCount,
+                counts.PathCount,
+                counts.ClipCount,
+                counts.FillCount,
+                counts.LineCount,
+                counts.EstimatedPathRowCount,
+                counts.EstimatedTileCrossings,
+                counts.EstimatedPtclWords,
+                counts.EstimatedBinFootprint,
+                segments)
+            {
+                EstimatedPathTiles = counts.EstimatedPathTiles,
+                EstimatedBlendSpillSlots = blendSpillSlots,
+                RowBounds = rangeRowBounds
+            };
+
+            // The data is in the coordinates of the root target. A range for another target, such
+            // as a scoped layer, moves the data by the position of that target in those coordinates.
+            Point origin = this.rangeDataBounds.Location;
+            if (origin != Point.Empty)
+            {
+                range = range.WithTarget(targetBounds, origin);
+            }
+
+            if (segments is not null)
+            {
+                (this.SegmentedRanges ??= []).Add(range);
+            }
+
+            return range;
+        }
 
         /// <summary>
         /// Disposes all owned stream storage that has not already been detached.
@@ -2074,6 +2590,14 @@ internal static class WebGPUSceneEncoder
                 this.DrawTags.Dispose();
                 this.PathData.Dispose();
                 this.PathTags.Dispose();
+            }
+
+            if (!this.rowBoundsDetached && this.ownedRowBounds is { } ownedRowBounds)
+            {
+                foreach (WebGPUSceneRowBounds bounds in ownedRowBounds)
+                {
+                    bounds.Dispose();
+                }
             }
         }
 
@@ -2226,7 +2750,142 @@ internal static class WebGPUSceneEncoder
                         return false;
                     }
                 }
+                else if (command is RetainedSceneCompositionSceneCommand sceneCommand)
+                {
+                    if (!this.TryAppendRetainedScene(sceneCommand.Scene, out error))
+                    {
+                        return false;
+                    }
+                }
             }
+
+            error = null;
+            return true;
+        }
+
+        /// <summary>
+        /// Records one retained scene inside a layer, or each part of a parts scene in order, as gaps
+        /// at the current position of every stream.
+        /// </summary>
+        /// <remarks>
+        /// The backend renders a retained scene outside every layer as its own pass, so only a scene
+        /// inside a layer reaches the encoder. The retained streams are not copied. The resolver
+        /// builds the segment table from the gap positions, and the shaders read the retained scene
+        /// in place (see scene_segment.wgsl).
+        /// </remarks>
+        /// <param name="scene">The retained scene.</param>
+        /// <param name="error">The error message when the scene cannot be read in place.</param>
+        /// <returns><see langword="true"/> when the scene was recorded.</returns>
+        public bool TryAppendRetainedScene(DrawingBackendScene scene, out string? error)
+        {
+            if (scene is not WebGPUDrawingBackendScene webGPUScene)
+            {
+                error = "The scene is not compatible with the WebGPU drawing backend.";
+                return false;
+            }
+
+            // A retained scene uses the coordinates of its own target, so it must match the root
+            // target of this encoding, the same as RenderScene requires. Every range of the
+            // encoding uses those coordinates (see rootTargetBounds).
+            if (webGPUScene.Bounds != this.rootTargetBounds)
+            {
+                error = "The target bounds do not match the WebGPU drawing backend scene bounds.";
+                return false;
+            }
+
+            // A parts scene renders its parts in order, so its parts are read in place in order.
+            // A part with ordered operations makes the parts scene require a scoped layer, so
+            // here every part is plain.
+            if (webGPUScene.Parts is DrawingBackendScene[] parts)
+            {
+                for (int i = 0; i < parts.Length; i++)
+                {
+                    if (!this.TryAppendRetainedScene(parts[i], out error))
+                    {
+                        return false;
+                    }
+                }
+
+                error = null;
+                return true;
+            }
+
+            if (webGPUScene.EncodedScene.HasOperations)
+            {
+                error = "A WebGPU retained scene with ordered operations cannot render inside a layer that is not scoped.";
+                return false;
+            }
+
+            WebGPUEncodedScene retained = webGPUScene.EncodedScene;
+            if (retained.FillCount == 0)
+            {
+                error = null;
+                return true;
+            }
+
+            // coarse.wgsl packs the segment index in 8 bits and the draw object index in 24 bits.
+            // One retained scene adds its own segments and one more outer piece.
+            int segmentCount = checked(this.SegmentCount + Math.Max(retained.SegmentCount, 1) + 1);
+            int drawObjectCount = checked(this.JoinedDrawTagCount + retained.DrawTagCount);
+            if (segmentCount > MaxSceneSegmentCount)
+            {
+                error = $"A WebGPU scene can read at most {MaxSceneSegmentCount} scene segments in one encoding.";
+                return false;
+            }
+
+            if (drawObjectCount >= SegmentedDrawObjectLimit)
+            {
+                error = SegmentedDrawObjectLimitError;
+                return false;
+            }
+
+            this.SegmentCount = segmentCount;
+            this.retainedDrawTagCount = checked(this.retainedDrawTagCount + retained.DrawTagCount);
+
+            // The clips and layers of the retained scene nest inside the open clips and layers of
+            // this encoding, so its blend depths start at the current depth.
+            this.AddRetainedBlendDepthRegions(retained.BlendDepthRegions);
+
+            // The retained crossings are counted on the grid of the root target. When the range grid
+            // has another alignment, each retained line can cross one more tile on each axis.
+            long alignmentCrossings = this.IsRangeTileAligned ? 0 : 2L * retained.LineCount;
+            this.estimatedTileCrossings += alignmentCrossings;
+
+            // The rows of the retained draws are not tracked here, so their totals count in every
+            // chunk window of this range.
+            this.GetOrCreateRowBounds().AddRetained(
+                retained.TotalPathRowCount,
+                retained.EstimatedPathTiles,
+                retained.EstimatedTileCrossings + alignmentCrossings,
+                retained.EstimatedPtclWords);
+
+            // A gap starts on a path-tag word. The None bytes add nothing to the tag monoid.
+            int padding = (4 - (this.PathTags.Count & 3)) & 3;
+            if (padding != 0)
+            {
+                Span<byte> paddedTags = this.PathTags.GetAppendSpan(padding);
+                paddedTags.Clear();
+                this.PathTags.Advance(padding);
+            }
+
+            (this.Insertions ??= []).Add(new WebGPUSceneInsertion(
+                webGPUScene,
+                this.PathTags.Count / 4,
+                this.PathData.Count,
+                this.Transforms.Count,
+                this.Styles.Count,
+                this.DrawTags.Count,
+                this.DrawData.Count));
+
+            // The last transform and style in the virtual stream are now those of the retained
+            // scene. Restart both, so the next outer path emits its own records and does not skip
+            // them as equal to the cached outer values.
+            this.PathTags.EnsureAdditionalCapacity(1);
+            this.Transforms.EnsureAdditionalCapacity(TransformWordCount);
+            this.PathTags.Add(PackPathTag(PathTag.Transform));
+            AppendIdentityTransform(ref this.Transforms);
+            this.lastTransform = GpuSceneTransform.Identity;
+            this.hasLastStyle = false;
 
             error = null;
             return true;
@@ -2648,7 +3307,25 @@ internal static class WebGPUSceneEncoder
                 ref this.PathTags,
                 ref this.PathData,
                 out int geometryLineCount,
-                out long geometryTileCrossings);
+                out long geometryTileCrossings,
+                out long geometryRowCrossings);
+
+            // EncodePath counts tile crossings on the grid of the root target, before the GPU
+            // transform. A translation, or a range grid with another alignment, moves the tile
+            // alignment, so each line can cross one more tile on each axis. Any other transform
+            // changes the lengths, so the bound falls back to the bounding box.
+            GpuSceneTransform pathTransform = this.lastTransform;
+            if (IsProfileCompatibleTransform(pathTransform))
+            {
+                if (pathTransform.Tx != 0F || pathTransform.Ty != 0F || !this.IsRangeTileAligned)
+                {
+                    geometryTileCrossings += 2L * geometryLineCount;
+                }
+            }
+            else
+            {
+                geometryTileCrossings = -1;
+            }
 
             if (encodedPathCount == 0)
             {
@@ -2671,7 +3348,14 @@ internal static class WebGPUSceneEncoder
             this.lastStyle7 = style7;
             this.lastStyle8 = style8;
             this.lastStyle9 = style9;
-            this.AccumulateDrawRowEstimate(command.RasterizerOptions.Interest, geometryLineCount, geometryTileCrossings, GetPtclPaintWords(drawTag));
+            RowSpanSource spanSource = this.CreateRowSpanSource(geometry, default, default, pathDataOffset, 0F, geometryRowCrossings, 0);
+            this.AccumulateDrawRowEstimate(
+                command.RasterizerOptions.Interest,
+                geometryLineCount,
+                geometryTileCrossings,
+                GetPtclPaintWords(drawTag),
+                spanSource);
+
             this.FillCount++;
             this.PathCount += encodedPathCount;
 
@@ -2800,7 +3484,9 @@ internal static class WebGPUSceneEncoder
                 ref this.PathTags,
                 ref this.PathData,
                 out int geometryLineCount,
-                out long geometryTileCrossings);
+                out long geometryTileCrossings,
+                out long geometryRowCrossings,
+                out long geometryEndCrossings);
 
             if (encodedPathCount == 0)
             {
@@ -2820,7 +3506,23 @@ internal static class WebGPUSceneEncoder
             this.lastStyle7 = style7;
             this.lastStyle8 = style8;
             this.lastStyle9 = style9;
-            this.AccumulateDrawRowEstimate(command.RasterizerOptions.Interest, geometryLineCount, geometryTileCrossings, GetPtclPaintWords(drawTag));
+            float outlineRadius = GetStrokeOutlineRadius(pen, widthScale);
+            RowSpanSource spanSource = this.CreateRowSpanSource(
+                geometry,
+                default,
+                default,
+                pathDataOffset,
+                outlineRadius,
+                geometryRowCrossings,
+                geometryEndCrossings);
+
+            this.AccumulateDrawRowEstimate(
+                command.RasterizerOptions.Interest,
+                geometryLineCount,
+                geometryTileCrossings,
+                GetPtclPaintWords(drawTag),
+                spanSource);
+
             this.FillCount++;
             this.PathCount += encodedPathCount;
             this.LineCount += geometryLineCount;
@@ -2925,7 +3627,9 @@ internal static class WebGPUSceneEncoder
                 ref this.PathTags,
                 ref this.PathData,
                 out int geometryLineCount,
-                out long geometryTileCrossings);
+                out long geometryTileCrossings,
+                out long geometryRowCrossings,
+                out long geometryEndCrossings);
 
             if (encodedPathCount == 0)
             {
@@ -2945,7 +3649,17 @@ internal static class WebGPUSceneEncoder
             this.lastStyle7 = style7;
             this.lastStyle8 = style8;
             this.lastStyle9 = style9;
-            this.AccumulateDrawRowEstimate(rasterizerOptions.Interest, geometryLineCount, geometryTileCrossings, GetPtclPaintWords(drawTag));
+            float outlineRadius = GetStrokeOutlineRadius(pen, widthScale);
+            RowSpanSource spanSource = this.CreateRowSpanSource(
+                geometry,
+                default,
+                default,
+                pathDataOffset,
+                outlineRadius,
+                geometryRowCrossings,
+                geometryEndCrossings);
+
+            this.AccumulateDrawRowEstimate(rasterizerOptions.Interest, geometryLineCount, geometryTileCrossings, GetPtclPaintWords(drawTag), spanSource);
             this.FillCount++;
             this.PathCount += encodedPathCount;
             this.LineCount += geometryLineCount;
@@ -3052,7 +3766,9 @@ internal static class WebGPUSceneEncoder
                 ref this.PathTags,
                 ref this.PathData,
                 out int geometryLineCount,
-                out long geometryTileCrossings);
+                out long geometryTileCrossings,
+                out long geometryRowCrossings,
+                out long geometryEndCrossings);
 
             if (encodedPathCount == 0)
             {
@@ -3072,7 +3788,17 @@ internal static class WebGPUSceneEncoder
             this.lastStyle7 = style7;
             this.lastStyle8 = style8;
             this.lastStyle9 = style9;
-            this.AccumulateDrawRowEstimate(rasterizerOptions.Interest, geometryLineCount, geometryTileCrossings, GetPtclPaintWords(drawTag));
+            float outlineRadius = GetStrokeOutlineRadius(pen, widthScale);
+            RowSpanSource spanSource = this.CreateRowSpanSource(
+                null,
+                (Vector2)start,
+                (Vector2)end,
+                pathDataOffset,
+                outlineRadius,
+                geometryRowCrossings,
+                geometryEndCrossings);
+
+            this.AccumulateDrawRowEstimate(rasterizerOptions.Interest, geometryLineCount, geometryTileCrossings, GetPtclPaintWords(drawTag), spanSource);
             this.FillCount++;
             this.PathCount += encodedPathCount;
             this.LineCount += geometryLineCount;
@@ -3136,11 +3862,11 @@ internal static class WebGPUSceneEncoder
             const uint style5 = 0U;
 
             // Clip coverage must not be restricted by a raster interest rectangle; a zero interest
-            // makes binning intersect the clip path away. Use the full target region.
-            uint style6 = BitcastSingle(0F);
-            uint style7 = BitcastSingle(0F);
-            uint style8 = BitcastSingle(this.rootTargetBounds.Width);
-            uint style9 = BitcastSingle(this.rootTargetBounds.Height);
+            // makes binning intersect the clip path away. Use the full target region of the range.
+            uint style6 = BitcastSingle(this.rangeDataBounds.Left);
+            uint style7 = BitcastSingle(this.rangeDataBounds.Top);
+            uint style8 = BitcastSingle(this.rangeDataBounds.Right);
+            uint style9 = BitcastSingle(this.rangeDataBounds.Bottom);
 
             int pathTagCheckpoint = this.PathTags.Count;
             int pathDataCheckpoint = this.PathData.Count;
@@ -3286,6 +4012,7 @@ internal static class WebGPUSceneEncoder
                         ref this.PathTags,
                         ref this.PathData,
                         out clipLineCount,
+                        out _,
                         out _);
                 }
             }
@@ -3400,7 +4127,8 @@ internal static class WebGPUSceneEncoder
             this.lastStyle7 = style7;
             this.lastStyle8 = style8;
             this.lastStyle9 = style9;
-            this.AccumulateDrawRowEstimateLocal(clipBounds, clipLineCount, -1, GetPtclPaintWords(GpuSceneDrawTag.EndClip));
+            this.blendDepth++;
+            this.AccumulateDrawRowEstimateLocal(clipBounds, clipLineCount, -1, GetPtclPaintWords(GpuSceneDrawTag.EndClip), true, RowSpanSource.None);
             this.PathCount += encodedPathCount;
             this.LineCount += clipLineCount;
             this.InfoWordCount += (int)GpuSceneDrawTag.Map(GpuSceneDrawTag.BeginClip).InfoOffset;
@@ -3487,7 +4215,8 @@ internal static class WebGPUSceneEncoder
             this.lastStyle7 = style7;
             this.lastStyle8 = style8;
             this.lastStyle9 = style9;
-            this.AccumulateDrawRowEstimateLocal(layerBounds, clipLineCount, -1, GetPtclPaintWords(GpuSceneDrawTag.EndClip));
+            this.blendDepth++;
+            this.AccumulateDrawRowEstimateLocal(layerBounds, clipLineCount, -1, GetPtclPaintWords(GpuSceneDrawTag.EndClip), true, RowSpanSource.None);
             this.PathCount += encodedPathCount;
             this.LineCount += clipLineCount;
             this.InfoWordCount += (int)GpuSceneDrawTag.Map(GpuSceneDrawTag.BeginClip).InfoOffset;
@@ -3508,14 +4237,63 @@ internal static class WebGPUSceneEncoder
         /// to fall back to the bounding-box diagonal bound (clips).
         /// </param>
         /// <param name="paintWords">The PTCL word count of the draw's paint command.</param>
-        private void AccumulateDrawRowEstimate(Rectangle absoluteInterest, int lineCount, long tileCrossings, int paintWords)
-            => this.AccumulateDrawRowEstimateLocal(ToTargetLocal(absoluteInterest, this.rootTargetBounds), lineCount, tileCrossings, paintWords);
+        /// <param name="spanSource">The source segments for the row-span tile bound.</param>
+        private void AccumulateDrawRowEstimate(Rectangle absoluteInterest, int lineCount, long tileCrossings, int paintWords, in RowSpanSource spanSource)
+            => this.AccumulateDrawRowEstimateLocal(
+                ToTargetLocal(absoluteInterest, this.rootTargetBounds),
+                lineCount,
+                tileCrossings,
+                paintWords,
+                false,
+                spanSource);
 
         /// <summary>
-        /// Adds one draw object's clipped root-target-local footprint to the sparse scratch estimates:
-        /// tile-row span for path rows, per-line tile-crossing bound for segments and path tiles, and
-        /// bin footprint for binning records.
+        /// Returns the row-span source of a draw whose points the GPU only translates.
         /// </summary>
+        /// <param name="geometry">The source geometry, or <see langword="null"/> for one segment.</param>
+        /// <param name="start">The segment start when <paramref name="geometry"/> is <see langword="null"/>.</param>
+        /// <param name="end">The segment end when <paramref name="geometry"/> is <see langword="null"/>.</param>
+        /// <param name="pathDataOffset">The destination offset that path data applies directly.</param>
+        /// <param name="radius">The radius around the segments that contains the GPU lines.</param>
+        /// <param name="crossingsPerRow">An upper bound for the tile crossings of the GPU body lines in one tile row.</param>
+        /// <param name="endCrossings">The tile crossings of the other GPU lines, such as stroke joins and caps.</param>
+        /// <returns>The source, or <see cref="RowSpanSource.None"/> when the transform is not a translation.</returns>
+        private readonly RowSpanSource CreateRowSpanSource(
+            LinearGeometry? geometry,
+            Vector2 start,
+            Vector2 end,
+            Point pathDataOffset,
+            float radius,
+            long crossingsPerRow,
+            long endCrossings)
+        {
+            GpuSceneTransform transform = this.lastTransform;
+            if (!IsProfileCompatibleTransform(transform))
+            {
+                return RowSpanSource.None;
+            }
+
+            Vector2 translate = new(
+                pathDataOffset.X - this.rootTargetBounds.X + transform.Tx,
+                pathDataOffset.Y - this.rootTargetBounds.Y + transform.Ty);
+
+            return new RowSpanSource(geometry, start, end, translate, radius, crossingsPerRow, endCrossings);
+        }
+
+        /// <summary>
+        /// Adds one draw object's footprint, clipped to the range data bounds and the open layers, to
+        /// the scratch estimates of the range.
+        /// </summary>
+        /// <remarks>
+        /// The footprint is measured on the tile grid of the range. It adds these values:
+        /// <list type="bullet">
+        /// <item><description>the tile-row span for path rows;</description></item>
+        /// <item><description>the tile-crossing bound for segments;</description></item>
+        /// <item><description>the row-span bound for path tiles;</description></item>
+        /// <item><description>the bin footprint for binning records;</description></item>
+        /// <item><description>the PTCL words, the row bounds and the blend depth regions.</description></item>
+        /// </list>
+        /// </remarks>
         /// <param name="localBounds">The draw object's root-target-local raster interest bounds.</param>
         /// <param name="lineCount">The draw object's linearized or GPU-expanded line count.</param>
         /// <param name="tileCrossings">
@@ -3523,9 +4301,17 @@ internal static class WebGPUSceneEncoder
         /// to fall back to the bounding-box diagonal bound (clips).
         /// </param>
         /// <param name="paintWords">The PTCL word count of the draw's paint command.</param>
-        private void AccumulateDrawRowEstimateLocal(Rectangle localBounds, int lineCount, long tileCrossings, int paintWords)
+        /// <param name="isClip">Whether the draw opens a clip or a layer, which the GPU also closes with an EndClip.</param>
+        /// <param name="spanSource">The source segments for the row-span tile bound, or <see cref="RowSpanSource.None"/>.</param>
+        private void AccumulateDrawRowEstimateLocal(
+            Rectangle localBounds,
+            int lineCount,
+            long tileCrossings,
+            int paintWords,
+            bool isClip,
+            in RowSpanSource spanSource)
         {
-            Rectangle clippedBounds = Rectangle.Intersect(localBounds, new Rectangle(0, 0, this.rootTargetBounds.Width, this.rootTargetBounds.Height));
+            Rectangle clippedBounds = Rectangle.Intersect(localBounds, this.rangeDataBounds);
 
             if (this.openLayerBounds is { Count: > 0 })
             {
@@ -3539,6 +4325,9 @@ internal static class WebGPUSceneEncoder
             {
                 return;
             }
+
+            // The tile grid of the range starts at the range target.
+            clippedBounds.Offset(-this.rangeDataBounds.X, -this.rangeDataBounds.Y);
 
             int tileY0 = clippedBounds.Top / TileHeight;
             int tileY1 = DivideRoundUp(clippedBounds.Bottom, TileHeight);
@@ -3555,14 +4344,124 @@ internal static class WebGPUSceneEncoder
             long crossings = tileCrossings >= 0 ? Math.Min(tileCrossings, boundingBoxCrossings) : boundingBoxCrossings;
             this.estimatedTileCrossings += crossings;
 
-            // Every crossing belongs to one (draw, tile) pair with segments, and such a pair writes
-            // one CMD_FILL plus the draw's paint command.
-            this.estimatedPtclWords += crossings * (PtclFillWords + paintWords);
+            // tile_alloc gives each row the span between its first and last touched tile, so the
+            // tiles of the clipped bounds bound the path tiles. When that area is larger than the
+            // crossings plus the rows, the geometry is sparse and the row-span bound can be smaller.
+            // The row walk costs about one step for each row that a segment spans, so dense draws,
+            // whose area is close to their crossings, skip it.
+            int tileX0 = clippedBounds.Left / TileWidth;
+            int tileX1 = DivideRoundUp(clippedBounds.Right, TileWidth);
+            long tiles = (long)(tileX1 - tileX0) * rowCount;
 
-            // Binning emits one record per (draw, 16x16-tile bin) pair the draw's bounds touch.
-            long binsWide = (clippedBounds.Width / (TileWidth * 16)) + 2;
-            long binsHigh = (clippedBounds.Height / (TileHeight * 16)) + 2;
-            this.estimatedBinFootprint += binsWide * binsHigh;
+            // coarse writes for every covered tile: a fill command (6 words) on a tile with
+            // segments, a solid command (2 words) otherwise, and the paint command. A clip or a
+            // layer also writes its PtclClipWords.
+            int ptclWordsPerTile = PtclFillWords + paintWords + (isClip ? PtclClipWords : 0);
+
+            // A stroke outline is thin, so its row spans can be far smaller than its bbox. A fill
+            // is usually solid, so its row spans are close to the bbox width and it keeps the area
+            // bound. A stroke with a positive outline radius and a sparse bbox gets a row bound:
+            // - One segment: the capsule width in one row, the same in every row, O(1).
+            // - A polyline: the row walk, which adds its span of each row to the row bounds.
+            // A chunk window then gets the spans of its own rows instead of the bbox width.
+            WebGPUSceneRowBounds rowBounds = this.GetOrCreateRowBounds();
+            int areaWidthTiles = tileX1 - tileX0;
+            if (spanSource.IsValid && spanSource.Radius > 0F && tiles > crossings + rowCount)
+            {
+                if (spanSource.Geometry is null)
+                {
+                    areaWidthTiles = Math.Min(areaWidthTiles, GetSegmentRowSpanTiles(spanSource.Start, spanSource.End, spanSource.Radius));
+                    tiles = Math.Min(tiles, (long)areaWidthTiles * rowCount);
+                }
+                else if (spanSource.Geometry.Contours is [{ SegmentCount: 1, PointCount: 2 } contour])
+                {
+                    // A two-point polyline is one segment, so it uses the same O(1) bound.
+                    IReadOnlyList<PointF> points = spanSource.Geometry.Points;
+                    areaWidthTiles = Math.Min(
+                        areaWidthTiles,
+                        GetSegmentRowSpanTiles(points[contour.PointStart], points[contour.PointStart + 1], spanSource.Radius));
+
+                    tiles = Math.Min(tiles, (long)areaWidthTiles * rowCount);
+                }
+                else if (tiles >= RowWalkMinimumTiles)
+                {
+                    Vector2 gridTranslate = spanSource.Translate - new Vector2(this.rangeDataBounds.X, this.rangeDataBounds.Y);
+                    tiles = Math.Min(tiles, BoundRowSpanTiles(spanSource, gridTranslate, tileX0, tileX1, tileY0, tileY1, rowBounds, ptclWordsPerTile));
+                    areaWidthTiles = 0;
+                }
+            }
+
+            this.estimatedPathTiles += tiles;
+
+            long segmentTiles = Math.Min(crossings, tiles);
+            long ptclWords = (segmentTiles * (PtclFillWords - 2)) + (tiles * (2 + paintWords));
+            if (isClip)
+            {
+                ptclWords += tiles * PtclClipWords;
+            }
+
+            this.estimatedPtclWords += ptclWords;
+
+            // The per-row crossing bound needs the slopes of the GPU lines, so it exists only when
+            // the GPU translates the points. Otherwise every row can hold all the crossings.
+            long crossingsPerRow = spanSource.IsValid ? Math.Min(spanSource.CrossingsPerRow, crossings) : crossings;
+            long endCrossings = spanSource.IsValid ? Math.Min(spanSource.EndCrossings, crossings) : 0;
+            rowBounds.AddDraw(tileY0, tileY1, areaWidthTiles, tiles, crossings, ptclWords, ptclWordsPerTile, crossingsPerRow, endCrossings);
+
+            // Binning emits one record per (draw, 16x16-tile bin) pair the draw's bounds touch. The
+            // EndClip of a clip or a layer bins again with the same bounds.
+            const int binSize = TileWidth * 16;
+            long bins = (long)(DivideRoundUp(clippedBounds.Right, binSize) - (clippedBounds.Left / binSize)) *
+                (DivideRoundUp(clippedBounds.Bottom, binSize) - (clippedBounds.Top / binSize));
+
+            this.estimatedBinFootprint += isClip ? bins * 2 : bins;
+
+            // A clip or a layer raises the blend depth of its tiles. Tiles past BlendStackSplit spill
+            // TileWidth * TileHeight slots for each level, so each depth keeps the union of the
+            // regions opened at it. Every depth is kept, not only the depths past BlendStackSplit.
+            // A retained scene read in place adds its depths to the depth of the outer clips and
+            // layers.
+            if (isClip)
+            {
+                this.AddBlendDepthRegion(this.blendDepth - 1, clippedBounds);
+            }
+        }
+
+        /// <summary>
+        /// Adds a region to the union region of one blend depth.
+        /// </summary>
+        /// <param name="index">The blend depth minus one.</param>
+        /// <param name="region">The region in tile-grid pixels of the current range.</param>
+        private void AddBlendDepthRegion(int index, Rectangle region)
+        {
+            List<Rectangle> levels = this.blendLevels ??= [];
+            while (levels.Count <= index)
+            {
+                levels.Add(Rectangle.Empty);
+            }
+
+            levels[index] = levels[index].IsEmpty ? region : Rectangle.Union(levels[index], region);
+        }
+
+        /// <summary>
+        /// Adds the blend depth regions of a retained scene read in place at the current depth.
+        /// </summary>
+        /// <param name="regions">The union region of each blend depth of the retained scene, in root-target-local pixels.</param>
+        private void AddRetainedBlendDepthRegions(Rectangle[] regions)
+        {
+            // The retained scene uses the root target coordinates. The regions of this encoding
+            // use the tile grid of the current range, which starts at the range target.
+            Rectangle rangeGrid = new(0, 0, this.rangeDataBounds.Width, this.rangeDataBounds.Height);
+            for (int i = 0; i < regions.Length; i++)
+            {
+                Rectangle region = regions[i];
+                region.Offset(-this.rangeDataBounds.X, -this.rangeDataBounds.Y);
+                region = Rectangle.Intersect(region, rangeGrid);
+                if (region.Width > 0 && region.Height > 0)
+                {
+                    this.AddBlendDepthRegion(this.blendDepth + i, region);
+                }
+            }
         }
 
         /// <summary>
@@ -3601,14 +4500,90 @@ internal static class WebGPUSceneEncoder
         /// </summary>
         private void AppendEndClip()
         {
-            // EndClip is fixed-size: one draw tag plus a zero-data path terminator. The canvas
-            // records balanced command ranges, so this method does not inspect local stack state.
+            // EndClip is fixed-size: one draw tag plus a zero-data path terminator. The blend depth
+            // counts across the ranges of this encoding, and a partition replays its seed clips, so
+            // every EndClip closes a depth that this encoding opened.
             ReserveEndLayerCapacity(ref this.PathTags, ref this.DrawTags);
+            this.blendDepth--;
             this.DrawTags.Add(GpuSceneDrawTag.EndClip);
             this.PathTags.Add(PackPathTag(PathTag.Path));
             this.PathCount++;
             this.ClipCount++;
         }
+    }
+
+    /// <summary>
+    /// The source segments of one draw for the row-span tile bound.
+    /// </summary>
+    private readonly struct RowSpanSource
+    {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="RowSpanSource"/> struct.
+        /// </summary>
+        /// <param name="geometry">The source geometry, or <see langword="null"/> for one segment.</param>
+        /// <param name="start">The segment start when <paramref name="geometry"/> is <see langword="null"/>.</param>
+        /// <param name="end">The segment end when <paramref name="geometry"/> is <see langword="null"/>.</param>
+        /// <param name="translate">The translation from source points to root-target-local device pixels.</param>
+        /// <param name="radius">The radius around the segments that contains the GPU lines.</param>
+        /// <param name="crossingsPerRow">An upper bound for the tile crossings of the GPU body lines in one tile row.</param>
+        /// <param name="endCrossings">The tile crossings of the other GPU lines, such as stroke joins and caps.</param>
+        public RowSpanSource(LinearGeometry? geometry, Vector2 start, Vector2 end, Vector2 translate, float radius, long crossingsPerRow, long endCrossings)
+        {
+            this.Geometry = geometry;
+            this.Start = start;
+            this.End = end;
+            this.Translate = translate;
+            this.Radius = radius;
+            this.CrossingsPerRow = crossingsPerRow;
+            this.EndCrossings = endCrossings;
+            this.IsValid = true;
+        }
+
+        /// <summary>
+        /// Gets a source that has no segments. The bound then uses the bounding box.
+        /// </summary>
+        public static RowSpanSource None => default;
+
+        /// <summary>
+        /// Gets the source geometry, or <see langword="null"/> for one segment.
+        /// </summary>
+        public LinearGeometry? Geometry { get; }
+
+        /// <summary>
+        /// Gets the segment start when <see cref="Geometry"/> is <see langword="null"/>.
+        /// </summary>
+        public Vector2 Start { get; }
+
+        /// <summary>
+        /// Gets the segment end when <see cref="Geometry"/> is <see langword="null"/>.
+        /// </summary>
+        public Vector2 End { get; }
+
+        /// <summary>
+        /// Gets the translation from source points to root-target-local device pixels.
+        /// </summary>
+        public Vector2 Translate { get; }
+
+        /// <summary>
+        /// Gets the radius around the segments that contains the GPU lines.
+        /// </summary>
+        public float Radius { get; }
+
+        /// <summary>
+        /// Gets an upper bound for the tile crossings of the GPU body lines in one tile row.
+        /// </summary>
+        public long CrossingsPerRow { get; }
+
+        /// <summary>
+        /// Gets the tile crossings of the other GPU lines, such as stroke joins and caps. They
+        /// are near the segment ends, so all of them can be in one row.
+        /// </summary>
+        public long EndCrossings { get; }
+
+        /// <summary>
+        /// Gets a value indicating whether the source has segments.
+        /// </summary>
+        public bool IsValid { get; }
     }
 
     /// <summary>
@@ -3858,6 +4833,26 @@ internal static class WebGPUSceneEncoder
         public long EstimatedBinFootprint { get; }
 
         /// <summary>
+        /// Gets the path-tile bound of the partition.
+        /// </summary>
+        public long EstimatedPathTiles { get; init; }
+
+        /// <summary>
+        /// Gets the union region of each clip and layer depth of the partition, starting at depth 1.
+        /// </summary>
+        public Rectangle[] BlendDepthRegions { get; init; } = [];
+
+        /// <summary>
+        /// Gets the row bounds of the partition, or <see langword="null"/> when it has no draws.
+        /// </summary>
+        public WebGPUSceneRowBounds? RowBounds { get; init; }
+
+        /// <summary>
+        /// Gets the row bounds instances that this partition disposes.
+        /// </summary>
+        public WebGPUSceneRowBounds[] OwnedRowBounds { get; init; } = [];
+
+        /// <summary>
         /// Gets the unpadded path-tag byte count.
         /// </summary>
         public int PathTagByteCount { get; }
@@ -3963,7 +4958,13 @@ internal static class WebGPUSceneEncoder
                 styleWordCount,
                 pathGradientDataWordCount,
                 encoding.ProfileStorage,
-                encoding.ProfileFills);
+                encoding.ProfileFills)
+            {
+                EstimatedPathTiles = encoding.EstimatedPathTiles,
+                BlendDepthRegions = encoding.BlendLevels is { } blendLevels ? [.. blendLevels] : [],
+                RowBounds = encoding.RowBounds,
+                OwnedRowBounds = encoding.DetachRowBounds()
+            };
         }
 
         /// <summary>
@@ -3986,6 +4987,10 @@ internal static class WebGPUSceneEncoder
             this.gradientPixelsOwner?.Dispose();
             this.pathGradientDataOwner?.Dispose();
             this.profileStorage?.Dispose();
+            for (int i = 0; i < this.OwnedRowBounds.Length; i++)
+            {
+                this.OwnedRowBounds[i].Dispose();
+            }
         }
     }
 
@@ -4045,12 +5050,61 @@ internal static class WebGPUSceneEncoder
                 sceneWordCount = checked(profileRecordsBase + 2 + ((xProfileCount + yProfileCount) * 3));
             }
 
+            // Retained scenes inside layers add their elements to the virtual streams, so the
+            // counts that size the dispatch are joined totals. The physical stream bases and
+            // extents above stay those of this scene. The segment table ends the scene data.
+            List<WebGPUSceneInsertion>? insertions = encoding.Insertions;
+            JoinedSceneCounts joined = new(ref encoding, drawTagCount, drawDataWordCount);
+            SceneSegmentTableWriter? segmentWriter = null;
+            int segmentCount = 0;
+            int segmentTableBase = 0;
+            int blockBrushDataWordCount = 0;
+            if (insertions is not null)
+            {
+                for (int i = 0; i < insertions.Count; i++)
+                {
+                    joined.Add(insertions[i].Scene.EncodedScene);
+                }
+
+                // A scene with no ordered operations renders as one dispatch, which reads one table
+                // for all its streams. Each range of an ordered scene is a dispatch of its own, so
+                // each range that reads retained scenes has a table of its own.
+                int tableEntryCount;
+                if (operations.Length == 0)
+                {
+                    segmentCount = SceneSegmentTableWriter.CountSegments(CollectionsMarshal.AsSpan(insertions));
+                    tableEntryCount = segmentCount;
+                }
+                else
+                {
+                    tableEntryCount = encoding.RangeSegmentEntryCount;
+                }
+
+                // The shaders pack the segment index and the draw object index into one word.
+                // TryAppendRetainedScene and the final checks of TryEncode and TryEncodeOrdered refuse
+                // a scene that exceeds these limits, so they hold here.
+                // A range has at most the segments and draw objects of the whole scene.
+                Debug.Assert(encoding.SegmentCount <= MaxSceneSegmentCount, "The segment count exceeds the coarse packing limit.");
+                Debug.Assert(joined.DrawTagCount < SegmentedDrawObjectLimit, "The draw-object count exceeds the coarse packing limit.");
+                segmentTableBase = AlignUp(sceneWordCount, 2);
+                sceneWordCount = checked(segmentTableBase + (tableEntryCount * SceneSegmentEntryWordCount));
+
+                // The blocks follow the scene data, and their gradient rows follow those of this
+                // scene. Each table places the brush data and atlas rows of the blocks.
+                segmentWriter = new SceneSegmentTableWriter(
+                    CollectionsMarshal.AsSpan(insertions),
+                    AlignUp(sceneWordCount, 2),
+                    encoding.GradientRowCount);
+
+                blockBrushDataWordCount = segmentWriter.BlockBrushDataWordCount;
+            }
+
             GpuSceneLayout layout = new(
-                (uint)drawTagCount,
-                (uint)encoding.PathCount,
-                (uint)encoding.ClipCount,
-                (uint)(encoding.InfoWordCount + pathGradientDataWordCount),
-                (uint)encoding.InfoWordCount,
+                (uint)joined.DrawTagCount,
+                (uint)joined.PathCount,
+                (uint)joined.ClipCount,
+                (uint)(joined.InfoWordCount + pathGradientDataWordCount + blockBrushDataWordCount),
+                (uint)joined.InfoWordCount,
                 0U,
                 0U,
                 (uint)pathTagWordCount,
@@ -4086,9 +5140,59 @@ internal static class WebGPUSceneEncoder
                         yProfileCount);
                 }
 
+                // The path-tag dispatch covers the virtual path-tag words, which the table defines.
+                int virtualPathTagByteCount = pathTagByteCount;
+                if (segmentWriter is not null)
+                {
+                    SceneSegmentSource source = new(
+                        new SceneStreamWindow(0, 0, pathTagWordCount),
+                        new SceneStreamWindow(pathTagWordCount, 0, pathDataWordCount),
+                        new SceneStreamWindow(transformBase, 0, transformWordCount),
+                        new SceneStreamWindow(styleBase, 0, styleWordCount),
+                        new SceneStreamWindow(drawTagBase, 0, drawTagCount),
+                        new SceneStreamWindow(drawDataBase, 0, drawDataWordCount),
+                        profileSlotsBase,
+                        profileRecordsBase);
+
+                    // The brush data of the blocks follows the info prefix and the brush data of
+                    // the dispatch. The atlas rows of the blocks follow the rows of its images.
+                    Span<uint> tables = sceneDataOwner.Memory.Span[segmentTableBase..sceneWordCount];
+                    ReadOnlySpan<WebGPUSceneInsertion> allInsertions = CollectionsMarshal.AsSpan(insertions);
+                    if (operations.Length == 0)
+                    {
+                        int virtualPathTagWordCount = segmentWriter.Write(
+                            tables,
+                            source,
+                            allInsertions,
+                            joined.InfoWordCount,
+                            joined.InfoWordCount + pathGradientDataWordCount,
+                            WebGPUSceneResources.GetImageAtlasHeight(encoding.Images, null));
+
+                        virtualPathTagByteCount = checked(virtualPathTagWordCount * 4);
+                    }
+                    else
+                    {
+                        // Every retained scene of an ordered scene is in a range, and the range
+                        // already holds its joined counts.
+                        foreach (WebGPUSceneRange range in encoding.SegmentedRanges!)
+                        {
+                            WebGPUSceneRangeSegments segments = range.Segments!;
+                            int virtualPathTagWordCount = segmentWriter.Write(
+                                tables.Slice(segments.SegmentEntryStart * SceneSegmentEntryWordCount, segments.SegmentCount * SceneSegmentEntryWordCount),
+                                source.Slice(range),
+                                allInsertions.Slice(segments.InsertionStart, segments.InsertionCount),
+                                range.InfoWordCount,
+                                range.InfoWordCount + pathGradientDataWordCount,
+                                WebGPUSceneResources.GetImageAtlasHeight(encoding.Images, range));
+
+                            Debug.Assert(virtualPathTagWordCount * 4 == range.PathTagByteCount, "The range path-tag count does not match its segment table.");
+                        }
+                    }
+                }
+
                 WebGPUEncodedScene resolvedScene = new(
                     targetBounds.Size,
-                    encoding.InfoWordCount,
+                    joined.InfoWordCount,
                     sceneDataOwner,
                     sceneWordCount,
                     DetachGradientPixels(ref encoding),
@@ -4100,33 +5204,642 @@ internal static class WebGPUSceneEncoder
                     encoding.GradientRamps,
                     encoding.GradientRowCount,
                     layout,
-                    encoding.FillCount,
-                    encoding.PathCount,
-                    encoding.LineCount,
-                    pathTagByteCount,
+                    joined.FillCount,
+                    joined.PathCount,
+                    joined.LineCount,
+                    virtualPathTagByteCount,
                     pathTagWordCount,
                     pathDataWordCount,
-                    drawTagCount,
-                    drawDataWordCount,
+                    joined.DrawTagCount,
+                    joined.DrawDataWordCount,
                     transformWordCount,
                     styleWordCount,
-                    encoding.ClipCount,
-                    encoding.FillCount,
-                    Math.Max(encoding.EstimatedPathRowCount, encoding.PathCount),
+                    joined.ClipCount,
+                    joined.FillCount,
+                    Math.Max(joined.EstimatedPathRowCount, joined.PathCount),
                     DivideRoundUp(targetBounds.Width, TileWidth),
                     DivideRoundUp(targetBounds.Height, TileHeight),
-                    encoding.EstimatedTileCrossings,
-                    encoding.EstimatedPtclWords,
-                    encoding.EstimatedBinFootprint,
+                    joined.EstimatedTileCrossings,
+                    joined.EstimatedPtclWords,
+                    joined.EstimatedBinFootprint,
                     operations);
 
                 resolvedScene.SetProfileRegions((uint)profileSlotsBase, (uint)profileRecordsBase);
+                resolvedScene.SetScratchBounds(
+                    joined.EstimatedPathTiles,
+                    WebGPUEncodedScene.GetBlendSpillSlots(CollectionsMarshal.AsSpan(encoding.BlendLevels), int.MinValue, int.MaxValue),
+                    encoding.BlendLevels is { } blendLevels ? [.. blendLevels] : []);
+
+                resolvedScene.SetRowBounds(encoding.RowBounds, encoding.DetachRowBounds());
+
+                if (segmentWriter is not null)
+                {
+                    resolvedScene.SetSegments(
+                        [.. insertions!],
+                        segmentWriter.Blocks,
+                        segmentCount,
+                        segmentTableBase,
+                        segmentWriter.SceneBufferWordCount,
+                        segmentWriter.BlockBrushDataWordCount,
+                        segmentWriter.BlockGradientRowCount);
+                }
+
                 return resolvedScene;
             }
             catch
             {
                 sceneDataOwner.Dispose();
                 throw;
+            }
+        }
+
+        /// <summary>
+        /// Holds the counts that size a dispatch: the counts of one encoding plus those of the
+        /// retained scenes that it reads in place.
+        /// </summary>
+        public struct JoinedSceneCounts
+        {
+            private bool hasInsertions;
+
+            /// <summary>
+            /// Initializes a new instance of the <see cref="JoinedSceneCounts"/> struct with the counts of one encoding.
+            /// </summary>
+            /// <param name="encoding">The encoding.</param>
+            /// <param name="drawTagCount">The draw-tag count of the encoding.</param>
+            /// <param name="drawDataWordCount">The draw-data word count of the encoding.</param>
+            public JoinedSceneCounts(ref SupportedSubsetSceneEncoding encoding, int drawTagCount, int drawDataWordCount)
+                : this(
+                    encoding.FillCount,
+                    encoding.PathCount,
+                    encoding.LineCount,
+                    encoding.ClipCount,
+                    encoding.InfoWordCount,
+                    drawTagCount,
+                    drawDataWordCount,
+                    encoding.EstimatedPathRowCount,
+                    encoding.EstimatedTileCrossings,
+                    encoding.EstimatedPtclWords,
+                    encoding.EstimatedBinFootprint,
+                    encoding.EstimatedPathTiles)
+            {
+            }
+
+            /// <summary>
+            /// Initializes a new instance of the <see cref="JoinedSceneCounts"/> struct with the own counts of one scene or range.
+            /// </summary>
+            /// <param name="fillCount">The fill count.</param>
+            /// <param name="pathCount">The path count.</param>
+            /// <param name="lineCount">The line count.</param>
+            /// <param name="clipCount">The clip record count.</param>
+            /// <param name="infoWordCount">The info word count.</param>
+            /// <param name="drawTagCount">The draw-tag count.</param>
+            /// <param name="drawDataWordCount">The draw-data word count.</param>
+            /// <param name="estimatedPathRowCount">The estimated path-row count.</param>
+            /// <param name="estimatedTileCrossings">The estimated tile-crossing count.</param>
+            /// <param name="estimatedPtclWords">The estimated dynamic PTCL word count.</param>
+            /// <param name="estimatedBinFootprint">The estimated binning record count.</param>
+            /// <param name="estimatedPathTiles">The path-tile bound.</param>
+            public JoinedSceneCounts(
+                int fillCount,
+                int pathCount,
+                int lineCount,
+                int clipCount,
+                int infoWordCount,
+                int drawTagCount,
+                int drawDataWordCount,
+                int estimatedPathRowCount,
+                long estimatedTileCrossings,
+                long estimatedPtclWords,
+                long estimatedBinFootprint,
+                long estimatedPathTiles)
+            {
+                this.hasInsertions = false;
+                this.FillCount = fillCount;
+                this.PathCount = pathCount;
+                this.LineCount = lineCount;
+                this.ClipCount = clipCount;
+                this.InfoWordCount = infoWordCount;
+                this.DrawTagCount = drawTagCount;
+                this.DrawDataWordCount = drawDataWordCount;
+                this.EstimatedPathRowCount = estimatedPathRowCount;
+                this.EstimatedTileCrossings = estimatedTileCrossings;
+                this.EstimatedPtclWords = estimatedPtclWords;
+                this.EstimatedBinFootprint = estimatedBinFootprint;
+                this.EstimatedPathTiles = estimatedPathTiles;
+            }
+
+            /// <summary>
+            /// Gets the fill count.
+            /// </summary>
+            public int FillCount { get; private set; }
+
+            /// <summary>
+            /// Gets the path count.
+            /// </summary>
+            public int PathCount { get; private set; }
+
+            /// <summary>
+            /// Gets the line count.
+            /// </summary>
+            public int LineCount { get; private set; }
+
+            /// <summary>
+            /// Gets the clip record count.
+            /// </summary>
+            public int ClipCount { get; private set; }
+
+            /// <summary>
+            /// Gets the info word count.
+            /// </summary>
+            public int InfoWordCount { get; private set; }
+
+            /// <summary>
+            /// Gets the draw-tag count.
+            /// </summary>
+            public int DrawTagCount { get; private set; }
+
+            /// <summary>
+            /// Gets the draw-data word count.
+            /// </summary>
+            public int DrawDataWordCount { get; private set; }
+
+            /// <summary>
+            /// Gets the estimated path-row count.
+            /// </summary>
+            public int EstimatedPathRowCount { get; private set; }
+
+            /// <summary>
+            /// Gets the estimated tile-crossing count.
+            /// </summary>
+            public long EstimatedTileCrossings { get; private set; }
+
+            /// <summary>
+            /// Gets the estimated dynamic PTCL word count.
+            /// </summary>
+            public long EstimatedPtclWords { get; private set; }
+
+            /// <summary>
+            /// Gets the estimated binning record count.
+            /// </summary>
+            public long EstimatedBinFootprint { get; private set; }
+
+            /// <summary>
+            /// Gets the path-tile bound.
+            /// </summary>
+            public long EstimatedPathTiles { get; private set; }
+
+            /// <summary>
+            /// Adds the counts of one retained scene. Its counts already include its own retained scenes.
+            /// </summary>
+            /// <param name="scene">The retained scene.</param>
+            public void Add(WebGPUEncodedScene scene)
+            {
+                // With a segment table, every aliased fill command follows a two-word
+                // CMD_PROFILE_TABLE (coarse.wgsl). Two words for each tile crossing bound these
+                // commands, for this encoding and for each retained scene.
+                if (!this.hasInsertions)
+                {
+                    this.hasInsertions = true;
+                    this.EstimatedPtclWords += 2 * this.EstimatedTileCrossings;
+                }
+
+                this.FillCount = checked(this.FillCount + scene.FillCount);
+                this.PathCount = checked(this.PathCount + scene.PathCount);
+                this.LineCount = checked(this.LineCount + scene.LineCount);
+                this.ClipCount = checked(this.ClipCount + scene.ClipCount);
+                this.InfoWordCount = checked(this.InfoWordCount + scene.InfoWordCount);
+                this.DrawTagCount = checked(this.DrawTagCount + scene.DrawTagCount);
+                this.DrawDataWordCount = checked(this.DrawDataWordCount + scene.DrawDataWordCount);
+                this.EstimatedPathRowCount = checked(this.EstimatedPathRowCount + scene.TotalPathRowCount);
+                this.EstimatedTileCrossings += scene.EstimatedTileCrossings;
+                this.EstimatedPtclWords += scene.EstimatedPtclWords + (2 * scene.EstimatedTileCrossings);
+                this.EstimatedBinFootprint += scene.EstimatedBinFootprint;
+                this.EstimatedPathTiles += scene.EstimatedPathTiles;
+            }
+        }
+
+        /// <summary>
+        /// Describes one physical stream window: where stream position zero is in the scene data,
+        /// and the stream positions that the window covers.
+        /// </summary>
+        public readonly struct SceneStreamWindow
+        {
+            /// <summary>
+            /// Initializes a new instance of the <see cref="SceneStreamWindow"/> struct.
+            /// </summary>
+            /// <param name="baseWord">The scene-data word of stream position zero.</param>
+            /// <param name="start">The stream position of the window start.</param>
+            /// <param name="end">The stream position of the window end.</param>
+            public SceneStreamWindow(int baseWord, int start, int end)
+            {
+                this.Base = baseWord;
+                this.Start = start;
+                this.End = end;
+            }
+
+            /// <summary>
+            /// Gets the scene-data word of stream position zero.
+            /// </summary>
+            public int Base { get; }
+
+            /// <summary>
+            /// Gets the stream position of the window start.
+            /// </summary>
+            public int Start { get; }
+
+            /// <summary>
+            /// Gets the stream position of the window end.
+            /// </summary>
+            public int End { get; }
+        }
+
+        /// <summary>
+        /// Describes the physical streams of one scene, or of one range of an ordered scene, in its
+        /// scene data. Stream positions are positions in the streams of the scene, the same as the
+        /// positions of its insertions.
+        /// </summary>
+        public readonly struct SceneSegmentSource
+        {
+            /// <summary>
+            /// Initializes a new instance of the <see cref="SceneSegmentSource"/> struct.
+            /// </summary>
+            /// <param name="pathTags">The path-tag word window. The path tags start at word zero.</param>
+            /// <param name="pathData">The path-data word window.</param>
+            /// <param name="transforms">The transform word window.</param>
+            /// <param name="styles">The style word window.</param>
+            /// <param name="drawTags">The draw-tag window.</param>
+            /// <param name="drawData">The draw-data word window.</param>
+            /// <param name="profileSlotsBase">The word offset of the profile slot table, or zero.</param>
+            /// <param name="profileRecordsBase">The word offset of the profile record table, or zero.</param>
+            public SceneSegmentSource(
+                in SceneStreamWindow pathTags,
+                in SceneStreamWindow pathData,
+                in SceneStreamWindow transforms,
+                in SceneStreamWindow styles,
+                in SceneStreamWindow drawTags,
+                in SceneStreamWindow drawData,
+                int profileSlotsBase,
+                int profileRecordsBase)
+            {
+                this.PathTags = pathTags;
+                this.PathData = pathData;
+                this.Transforms = transforms;
+                this.Styles = styles;
+                this.DrawTags = drawTags;
+                this.DrawData = drawData;
+                this.ProfileSlotsBase = profileSlotsBase;
+                this.ProfileRecordsBase = profileRecordsBase;
+            }
+
+            /// <summary>
+            /// Gets the path-tag word window. The path tags start at word zero.
+            /// </summary>
+            public SceneStreamWindow PathTags { get; }
+
+            /// <summary>
+            /// Gets the path-data word window.
+            /// </summary>
+            public SceneStreamWindow PathData { get; }
+
+            /// <summary>
+            /// Gets the transform word window.
+            /// </summary>
+            public SceneStreamWindow Transforms { get; }
+
+            /// <summary>
+            /// Gets the style word window.
+            /// </summary>
+            public SceneStreamWindow Styles { get; }
+
+            /// <summary>
+            /// Gets the draw-tag window.
+            /// </summary>
+            public SceneStreamWindow DrawTags { get; }
+
+            /// <summary>
+            /// Gets the draw-data word window.
+            /// </summary>
+            public SceneStreamWindow DrawData { get; }
+
+            /// <summary>
+            /// Gets the word offset of the profile slot table, or zero when the scene has none.
+            /// </summary>
+            public int ProfileSlotsBase { get; }
+
+            /// <summary>
+            /// Gets the word offset of the profile record table, or zero when the scene has none.
+            /// </summary>
+            public int ProfileRecordsBase { get; }
+
+            /// <summary>
+            /// Creates the source of every stream of an encoded scene. The draw-tag and draw-data
+            /// extents come from the layout, because the counts of a scene with retained scenes
+            /// are joined totals.
+            /// </summary>
+            /// <param name="scene">The encoded scene.</param>
+            /// <returns>The physical stream source.</returns>
+            public static SceneSegmentSource From(WebGPUEncodedScene scene)
+            {
+                GpuSceneLayout layout = scene.Layout;
+                return new SceneSegmentSource(
+                    new SceneStreamWindow(0, 0, scene.PathTagWordCount),
+                    new SceneStreamWindow((int)layout.PathDataBase, 0, scene.PathDataWordCount),
+                    new SceneStreamWindow((int)layout.TransformBase, 0, scene.TransformWordCount),
+                    new SceneStreamWindow((int)layout.StyleBase, 0, scene.StyleWordCount),
+                    new SceneStreamWindow((int)layout.DrawTagBase, 0, (int)(layout.DrawDataBase - layout.DrawTagBase)),
+                    new SceneStreamWindow((int)layout.DrawDataBase, 0, (int)(layout.TransformBase - layout.DrawDataBase)),
+                    (int)scene.ProfileSlotsBase,
+                    (int)scene.ProfileRecordsBase);
+            }
+
+            /// <summary>
+            /// Creates the source of the own streams of one range of this scene.
+            /// </summary>
+            /// <param name="range">The range. It reads retained scenes in place.</param>
+            /// <returns>The physical stream source of the range.</returns>
+            public SceneSegmentSource Slice(in WebGPUSceneRange range)
+            {
+                // The joined counts of the range size the dispatch. The own extents of the joined
+                // streams are in its segments.
+                WebGPUSceneRangeSegments segments = range.Segments!;
+                return new SceneSegmentSource(
+                    new SceneStreamWindow(this.PathTags.Base, range.PathTagWordStart, range.PathTagWordStart + segments.PathTagWordCount),
+                    new SceneStreamWindow(this.PathData.Base, range.PathDataWordStart, range.PathDataWordStart + range.PathDataWordCount),
+                    new SceneStreamWindow(this.Transforms.Base, range.TransformWordStart, range.TransformWordStart + range.TransformWordCount),
+                    new SceneStreamWindow(this.Styles.Base, range.StyleWordStart, range.StyleWordStart + range.StyleWordCount),
+                    new SceneStreamWindow(this.DrawTags.Base, range.DrawTagStart, range.DrawTagStart + segments.DrawTagCount),
+                    new SceneStreamWindow(this.DrawData.Base, range.DrawDataWordStart, range.DrawDataWordStart + segments.DrawDataWordCount),
+                    this.ProfileSlotsBase,
+                    this.ProfileRecordsBase);
+            }
+        }
+
+        /// <summary>
+        /// Builds the resident blocks and the scene segment tables of one scene that reads retained
+        /// scenes in place. scene_segment.wgsl reads the tables.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The segments are the pieces of every virtual stream, in stream order:
+        /// <list type="number">
+        /// <item><description>the outer elements before the first retained scene;</description></item>
+        /// <item><description>the retained scene, as its own pieces when it reads more retained scenes;</description></item>
+        /// <item><description>the next outer elements, and so on.</description></item>
+        /// </list>
+        /// Each entry stores the virtual start of its path tags and draw objects, and a wrapping bias
+        /// for each stream. A shader then reads scene[bias + virtual offset]. A retained scene drawn
+        /// several times has one block.
+        /// </para>
+        /// <para>
+        /// A scene with no ordered operations has one table for all its streams. An ordered scene has
+        /// one table for each range that reads retained scenes, because each dispatch reads one range.
+        /// The blocks are shared by all tables.
+        /// </para>
+        /// </remarks>
+        public sealed class SceneSegmentTableWriter
+        {
+            private readonly List<WebGPUSceneBlock> blocks = [];
+            private readonly int firstBlockGradientRow;
+            private int nextBlockWord;
+            private int nextBrushDataOffset;
+            private int nextGradientRow;
+            private int nextAtlasRowOffset;
+
+            // The bases of the block brush data and of the block atlas rows for the table that is
+            // written now. Each table has its own info prefix and its own atlas rows before them.
+            private int blockBrushDataBase;
+            private int blockAtlasYBase;
+
+            // The virtual start of the next segment in each stream. The transform cursor counts
+            // transform records, because the shaders index transforms by record.
+            private uint virtualPathTag;
+            private uint virtualPathData;
+            private uint virtualTransform;
+            private uint virtualStyle;
+            private uint virtualDrawTag;
+            private uint virtualDrawData;
+            private int entryIndex;
+
+            /// <summary>
+            /// Initializes a new instance of the <see cref="SceneSegmentTableWriter"/> class and
+            /// assigns one block to each distinct retained scene, in first-use order.
+            /// </summary>
+            /// <param name="insertions">The retained scenes of the root scene, in stream order.</param>
+            /// <param name="firstBlockWord">The scene-buffer word of the first block, after the root scene data.</param>
+            /// <param name="rootGradientRowCount">The root gradient-ramp row count.</param>
+            public SceneSegmentTableWriter(ReadOnlySpan<WebGPUSceneInsertion> insertions, int firstBlockWord, int rootGradientRowCount)
+            {
+                this.firstBlockGradientRow = rootGradientRowCount;
+                this.nextBlockWord = firstBlockWord;
+                this.nextGradientRow = rootGradientRowCount;
+                this.AddBlocks(insertions);
+                this.Blocks = [.. this.blocks];
+            }
+
+            /// <summary>
+            /// Gets the resident blocks, in scene-buffer order.
+            /// </summary>
+            public WebGPUSceneBlock[] Blocks { get; }
+
+            /// <summary>
+            /// Gets the word length of the scene buffer: the root scene data, then the blocks.
+            /// </summary>
+            public int SceneBufferWordCount => this.nextBlockWord;
+
+            /// <summary>
+            /// Gets the brush-data word count of the blocks.
+            /// </summary>
+            public int BlockBrushDataWordCount => this.nextBrushDataOffset;
+
+            /// <summary>
+            /// Gets the gradient-ramp row count of the blocks.
+            /// </summary>
+            public int BlockGradientRowCount => this.nextGradientRow - this.firstBlockGradientRow;
+
+            /// <summary>
+            /// Counts the segments of a scene or range that reads the given retained scenes in place.
+            /// </summary>
+            /// <param name="insertions">The retained scenes, in stream order.</param>
+            /// <returns>The segment count.</returns>
+            public static int CountSegments(ReadOnlySpan<WebGPUSceneInsertion> insertions)
+            {
+                // N retained scenes divide the outer streams into N + 1 pieces. Each retained
+                // scene adds its own pieces.
+                int count = insertions.Length + 1;
+                for (int i = 0; i < insertions.Length; i++)
+                {
+                    count = checked(count + CountSegments(insertions[i].Scene.EncodedScene.Insertions));
+                }
+
+                return count;
+            }
+
+            /// <summary>
+            /// Writes one table: the table of a scene, or the table of one range of an ordered scene.
+            /// </summary>
+            /// <param name="table">The table words, <see cref="SceneSegmentEntryWordCount"/> for each segment.</param>
+            /// <param name="source">The physical streams of the scene or range.</param>
+            /// <param name="insertions">The retained scenes of the scene or range, in stream order.</param>
+            /// <param name="brushDataBase">The info-buffer word of the brush data of the scene: the info word count of the dispatch.</param>
+            /// <param name="blockBrushDataBase">The info-buffer word of the brush data of the first block.</param>
+            /// <param name="blockAtlasYBase">The first image-atlas row of the first block.</param>
+            /// <returns>The virtual path-tag word count.</returns>
+            public int Write(
+                Span<uint> table,
+                in SceneSegmentSource source,
+                ReadOnlySpan<WebGPUSceneInsertion> insertions,
+                int brushDataBase,
+                int blockBrushDataBase,
+                int blockAtlasYBase)
+            {
+                // Each table indexes its virtual streams from zero, because each dispatch reads
+                // one scene or one range from its start.
+                this.virtualPathTag = 0;
+                this.virtualPathData = 0;
+                this.virtualTransform = 0;
+                this.virtualStyle = 0;
+                this.virtualDrawTag = 0;
+                this.virtualDrawData = 0;
+                this.entryIndex = 0;
+                this.blockBrushDataBase = blockBrushDataBase;
+                this.blockAtlasYBase = blockAtlasYBase;
+                this.WriteScene(table, source, 0, brushDataBase, 0, 0, insertions);
+                return checked((int)this.virtualPathTag);
+            }
+
+            /// <summary>
+            /// Assigns a block to each distinct retained scene that is not yet in a block, depth first.
+            /// </summary>
+            /// <param name="insertions">The retained scenes, in stream order.</param>
+            private void AddBlocks(ReadOnlySpan<WebGPUSceneInsertion> insertions)
+            {
+                for (int i = 0; i < insertions.Length; i++)
+                {
+                    WebGPUEncodedScene scene = insertions[i].Scene.EncodedScene;
+                    if (this.FindBlock(scene) < 0)
+                    {
+                        // Even block offsets keep half the block offset exact in the profile slot
+                        // origin (SCENE_SEGMENT_PROFILE_SLOTS).
+                        int offset = AlignUp(this.nextBlockWord, 2);
+                        this.blocks.Add(new WebGPUSceneBlock(scene, offset, this.nextBrushDataOffset, this.nextGradientRow, this.nextAtlasRowOffset));
+                        this.nextBlockWord = checked(offset + scene.SceneWordCount);
+                        this.nextBrushDataOffset = checked(this.nextBrushDataOffset + scene.PathGradientDataWordCount);
+                        this.nextGradientRow = checked(this.nextGradientRow + scene.GradientRowCount);
+                        this.nextAtlasRowOffset = checked(this.nextAtlasRowOffset + WebGPUSceneResources.GetImageAtlasHeight(scene.Images, null));
+                    }
+
+                    this.AddBlocks(scene.Insertions);
+                }
+            }
+
+            /// <summary>
+            /// Gets the block index of a retained scene, or -1 when it has no block.
+            /// </summary>
+            /// <param name="scene">The retained scene.</param>
+            /// <returns>The block index.</returns>
+            private int FindBlock(WebGPUEncodedScene scene)
+            {
+                for (int i = 0; i < this.blocks.Count; i++)
+                {
+                    if (ReferenceEquals(this.blocks[i].Scene, scene))
+                    {
+                        return i;
+                    }
+                }
+
+                return -1;
+            }
+
+            /// <summary>
+            /// Writes the entries of one scene or range: one for each piece of its own streams, and
+            /// the entries of each retained scene between them.
+            /// </summary>
+            /// <param name="table">The table words.</param>
+            /// <param name="source">The physical streams of the scene or range.</param>
+            /// <param name="blockWord">The scene-buffer word of the scene data.</param>
+            /// <param name="brushDataBase">The info-buffer word of the scene brush data.</param>
+            /// <param name="gradientRowBase">The first gradient-ramp row of the scene.</param>
+            /// <param name="atlasYBase">The first image-atlas row of the scene.</param>
+            /// <param name="insertions">The retained scenes of the scene or range, in stream order.</param>
+            private void WriteScene(
+                Span<uint> table,
+                in SceneSegmentSource source,
+                int blockWord,
+                int brushDataBase,
+                int gradientRowBase,
+                int atlasYBase,
+                ReadOnlySpan<WebGPUSceneInsertion> insertions)
+            {
+                // The start of the next piece in the scene's own streams.
+                int pathTag = source.PathTags.Start;
+                int pathData = source.PathData.Start;
+                int transform = source.Transforms.Start;
+                int style = source.Styles.Start;
+                int drawTag = source.DrawTags.Start;
+                int drawData = source.DrawData.Start;
+
+                // The extra iteration writes the piece after the last retained scene.
+                for (int i = 0; i <= insertions.Length; i++)
+                {
+                    bool isTail = i == insertions.Length;
+                    WebGPUSceneInsertion insertion = isTail ? default : insertions[i];
+                    int pathTagEnd = isTail ? source.PathTags.End : insertion.PathTagWord;
+                    int pathDataEnd = isTail ? source.PathData.End : insertion.PathDataWord;
+                    int transformEnd = isTail ? source.Transforms.End : insertion.TransformWord;
+                    int styleEnd = isTail ? source.Styles.End : insertion.StyleWord;
+                    int drawTagEnd = isTail ? source.DrawTags.End : insertion.DrawTag;
+                    int drawDataEnd = isTail ? source.DrawData.End : insertion.DrawDataWord;
+
+                    // Each bias is the physical start minus the virtual start, in wrapping arithmetic.
+                    Span<uint> entry = table.Slice(this.entryIndex * SceneSegmentEntryWordCount, SceneSegmentEntryWordCount);
+                    entry[0] = this.virtualPathTag;
+                    entry[1] = unchecked((uint)(blockWord + source.PathTags.Base + pathTag) - this.virtualPathTag);
+                    entry[2] = unchecked((uint)(blockWord + source.PathData.Base + pathData) - this.virtualPathData);
+                    entry[3] = unchecked((uint)(blockWord + source.Styles.Base + style) - this.virtualStyle);
+                    entry[4] = unchecked((uint)(blockWord + source.Transforms.Base + transform) - (this.virtualTransform * TransformWordCount));
+                    entry[5] = this.virtualDrawTag;
+                    entry[6] = unchecked((uint)(blockWord + source.DrawTags.Base + drawTag) - this.virtualDrawTag);
+                    entry[7] = unchecked((uint)(blockWord + source.DrawData.Base + drawData) - this.virtualDrawData);
+                    entry[8] = (uint)brushDataBase;
+                    entry[9] = (uint)gradientRowBase;
+                    entry[10] = (uint)atlasYBase;
+
+                    // The profile slot of a line is the slot base plus half its path-data word in
+                    // the scene's own data. In the scene buffer that word moves by blockWord, so the
+                    // origin moves by half of it. blockWord is even.
+                    entry[11] = source.ProfileSlotsBase == 0 ? 0U : (uint)(source.ProfileSlotsBase + (blockWord / 2));
+                    entry[12] = source.ProfileRecordsBase == 0 ? 0U : (uint)(blockWord + source.ProfileRecordsBase);
+                    this.entryIndex++;
+
+                    this.virtualPathTag += (uint)(pathTagEnd - pathTag);
+                    this.virtualPathData += (uint)(pathDataEnd - pathData);
+                    this.virtualTransform += (uint)((transformEnd - transform) / TransformWordCount);
+                    this.virtualStyle += (uint)(styleEnd - style);
+                    this.virtualDrawTag += (uint)(drawTagEnd - drawTag);
+                    this.virtualDrawData += (uint)(drawDataEnd - drawData);
+                    pathTag = pathTagEnd;
+                    pathData = pathDataEnd;
+                    transform = transformEnd;
+                    style = styleEnd;
+                    drawTag = drawTagEnd;
+                    drawData = drawDataEnd;
+
+                    if (!isTail)
+                    {
+                        // The block bases of this table place the brush data and atlas rows of the
+                        // block after the info prefix and atlas rows of the dispatch.
+                        WebGPUEncodedScene scene = insertion.Scene.EncodedScene;
+                        WebGPUSceneBlock block = this.blocks[this.FindBlock(scene)];
+                        this.WriteScene(
+                            table,
+                            SceneSegmentSource.From(scene),
+                            block.SceneWordOffset,
+                            this.blockBrushDataBase + block.BrushDataOffset,
+                            block.GradientRowBase,
+                            this.blockAtlasYBase + block.AtlasYOffset,
+                            scene.Insertions);
+                    }
+                }
             }
         }
 
@@ -4506,6 +6219,8 @@ internal static class WebGPUSceneEncoder
             long estimatedTileCrossings = 0;
             long estimatedPtclWords = 0;
             long estimatedBinFootprint = 0;
+            long estimatedPathTiles = 0;
+            List<Rectangle> blendDepthRegions = [];
 
             for (int i = 0; i < partitions.Length; i++)
             {
@@ -4532,6 +6247,25 @@ internal static class WebGPUSceneEncoder
                 estimatedTileCrossings += partition.EstimatedTileCrossings;
                 estimatedPtclWords += partition.EstimatedPtclWords;
                 estimatedBinFootprint += partition.EstimatedBinFootprint;
+                estimatedPathTiles += partition.EstimatedPathTiles;
+
+                // Partitions do not cut through layers, and each partition replays the clips open
+                // at its boundary, so each partition counts the true depth of its clips. All
+                // partitions use the same tile grid, so the regions of one depth join by union.
+                Rectangle[] partitionRegions = partition.BlendDepthRegions;
+                for (int depth = 0; depth < partitionRegions.Length; depth++)
+                {
+                    if (blendDepthRegions.Count <= depth)
+                    {
+                        blendDepthRegions.Add(partitionRegions[depth]);
+                    }
+                    else if (!partitionRegions[depth].IsEmpty)
+                    {
+                        blendDepthRegions[depth] = blendDepthRegions[depth].IsEmpty
+                            ? partitionRegions[depth]
+                            : Rectangle.Union(blendDepthRegions[depth], partitionRegions[depth]);
+                    }
+                }
             }
 
             // Path tags are reduced in 256-word scan segments (pathtag_reduce WG_SIZE), so the
@@ -4726,6 +6460,22 @@ internal static class WebGPUSceneEncoder
                     []);
 
                 resolved.SetProfileRegions((uint)profileSlotsBase, (uint)profileRecordsBase);
+                resolved.SetScratchBounds(
+                    estimatedPathTiles,
+                    WebGPUEncodedScene.GetBlendSpillSlots(CollectionsMarshal.AsSpan(blendDepthRegions), int.MinValue, int.MaxValue),
+                    [.. blendDepthRegions]);
+
+                // All partitions use the grid of the whole target, so their row bounds add.
+                WebGPUSceneRowBounds rowBounds = new(DivideRoundUp(targetBounds.Height, TileHeight), 0);
+                for (int i = 0; i < partitions.Length; i++)
+                {
+                    if (partitions[i]!.RowBounds is { } partitionRowBounds)
+                    {
+                        rowBounds.Add(partitionRowBounds);
+                    }
+                }
+
+                resolved.SetRowBounds(rowBounds, [rowBounds]);
                 sceneDataOwner = null;
                 gradientPixelsOwner = null;
                 pathGradientDataOwner = null;
@@ -5350,6 +7100,7 @@ internal static class WebGPUSceneEncoder
     /// Receives the summed conservative tile-crossing bound over every encoded segment, used to seed the
     /// segment and path-tile scratch buffers far more tightly than the draw's bounding-box diagonal.
     /// </param>
+    /// <param name="rowCrossings">Receives an upper bound for the tile crossings of the segments in one tile row.</param>
     /// <returns>The number of encoded path objects: 1, or 0 when the geometry has no segments.</returns>
     private static int EncodePath(
         Point destinationOffset,
@@ -5358,11 +7109,13 @@ internal static class WebGPUSceneEncoder
         ref OwnedStream<byte> pathTags,
         ref OwnedStream<uint> pathData,
         out int lineCount,
-        out long tileCrossings)
+        out long tileCrossings,
+        out long rowCrossings)
     {
         Vector2 translate = new(destinationOffset.X - rootTargetBounds.X, destinationOffset.Y - rootTargetBounds.Y);
         lineCount = 0;
         tileCrossings = 0;
+        rowCrossings = 0;
 
         for (int i = 0; i < geometry.Contours.Count; i++)
         {
@@ -5389,12 +7142,19 @@ internal static class WebGPUSceneEncoder
                 contourData[dataIndex++] = BitcastSingle(end.X);
                 contourData[dataIndex++] = BitcastSingle(end.Y);
                 contourTags[j] = PackPathTag(PathTag.LineToF32);
-                if (end.Y != current.Y)
+
+                // path_lowering takes a line slot for every segment of nonzero length,
+                // horizontal ones too, so all of them count toward the line bound.
+                tileCrossings += CountLineTileCrossings(current, end, out long columnCrossings);
+                if (end != current)
                 {
+                    // In one tile row a segment visits at most all of its tile columns. One more
+                    // column covers a translation of the tile alignment, and one more the f32
+                    // rounding of the GPU walk. This bound needs no division in this loop.
                     lineCount++;
+                    rowCrossings += columnCrossings + 3;
                 }
 
-                tileCrossings += CountLineTileCrossings(current, end);
                 current = end;
             }
 
@@ -5424,13 +7184,221 @@ internal static class WebGPUSceneEncoder
     /// </summary>
     /// <param name="start">The segment start point in pixels.</param>
     /// <param name="end">The segment end point in pixels.</param>
+    /// <param name="columnCrossings">Receives the tile column boundaries crossed between the two endpoints.</param>
     /// <returns>The number of tiles the segment covers.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static long CountLineTileCrossings(Vector2 start, Vector2 end)
+    private static long CountLineTileCrossings(Vector2 start, Vector2 end, out long columnCrossings)
     {
         Vector2 tileSize = new(TileWidth, TileHeight);
         Vector2 spanned = Vector2.Abs(Floor(end / tileSize) - Floor(start / tileSize));
+        columnCrossings = (long)spanned.X;
         return 1 + (long)Sum(spanned);
+    }
+
+    /// <summary>
+    /// Returns an upper bound for the tiles that one straight segment visits in a single tile row.
+    /// </summary>
+    /// <remarks>
+    /// In a 16-pixel row band a segment spans at most min(|dx|, 16 |dx| / |dy|) pixels horizontally,
+    /// and a span of w pixels touches at most floor(w / 16) + 2 tile columns at any alignment. One
+    /// more tile absorbs the f32 rounding of the GPU walk.
+    /// </remarks>
+    /// <param name="start">The segment start in pixels.</param>
+    /// <param name="end">The segment end in pixels.</param>
+    /// <returns>The tile bound for one tile row.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static long GetRowTileCrossings(Vector2 start, Vector2 end)
+    {
+        // A horizontal segment divides by zero, which gives +Infinity, so Min keeps the |dx| term.
+        Vector2 delta = Vector2.Abs(end - start);
+        return (long)(MathF.Min(delta.X / TileWidth, delta.X / delta.Y) + 3F);
+    }
+
+    /// <summary>
+    /// Returns an upper bound for the tile span of the stroke of one segment in a single tile row.
+    /// </summary>
+    /// <remarks>
+    /// The stroke lies inside the capsule of the segment with the outline radius. The capsule part
+    /// in one 16-pixel row band comes from the centerline part in that band widened by the radius
+    /// on both sides, which spans at most min(|dx|, (16 + 2r) |dx| / |dy|) pixels horizontally.
+    /// Widened by 2r, that span touches at most its width / 16 + 2 tile columns, and one more tile
+    /// covers the backdrop tile at x + 1 and the f32 rounding of the GPU walk.
+    /// </remarks>
+    /// <param name="start">The segment start in pixels.</param>
+    /// <param name="end">The segment end in pixels.</param>
+    /// <param name="radius">The outline radius in pixels.</param>
+    /// <returns>The tile span bound for one tile row.</returns>
+    private static int GetSegmentRowSpanTiles(Vector2 start, Vector2 end, float radius)
+    {
+        // A horizontal segment divides by zero, which gives +Infinity, so Min keeps the |dx| term.
+        Vector2 delta = Vector2.Abs(end - start);
+        float centerlineWidth = MathF.Min(delta.X, (TileHeight + (2F * radius)) * delta.X / delta.Y);
+        return (int)MathF.Min(((centerlineWidth + (2F * radius)) / TileWidth) + 3F, int.MaxValue);
+    }
+
+    /// <summary>
+    /// Returns an upper bound for the path tiles that tile_alloc allocates for one draw.
+    /// </summary>
+    /// <remarks>
+    /// path_row_span gives each tile row the span from the first to the last tile that a line
+    /// touches. When a line passes outside the clipped bbox on one side, the span widens to that bbox
+    /// edge. The lines of a draw lie inside the capsules of its source segments with the stroke
+    /// radius, so the hull of the capsule extents in each row bounds that span. One extra tile on each side
+    /// covers the top-edge backdrop tile at x + 1 and the f32 rounding of the GPU walk.
+    /// </remarks>
+    /// <param name="source">The source segments of the draw.</param>
+    /// <param name="gridTranslate">The translation from source points to tile-grid pixels.</param>
+    /// <param name="tileX0">The first tile column of the clipped bounds.</param>
+    /// <param name="tileX1">The tile column after the clipped bounds.</param>
+    /// <param name="tileY0">The first tile row of the clipped bounds.</param>
+    /// <param name="tileY1">The tile row after the clipped bounds.</param>
+    /// <param name="rowBounds">The row bounds that receive the span of each row.</param>
+    /// <param name="ptclWordsPerTile">The largest PTCL word count that the draw writes in one tile.</param>
+    /// <returns>The sum of the row-span tiles.</returns>
+    private static long BoundRowSpanTiles(
+        in RowSpanSource source,
+        Vector2 gridTranslate,
+        int tileX0,
+        int tileX1,
+        int tileY0,
+        int tileY1,
+        WebGPUSceneRowBounds rowBounds,
+        int ptclWordsPerTile)
+    {
+        int rowCount = tileY1 - tileY0;
+        int[]? rented = null;
+        Span<int> spans = rowCount <= 256
+            ? stackalloc int[512]
+            : (rented = ArrayPool<int>.Shared.Rent(rowCount * 2));
+
+        // Each row keeps its first and last tile column in two adjacent slots.
+        spans = spans[..(rowCount * 2)];
+        for (int i = 0; i < rowCount; i++)
+        {
+            spans[i * 2] = int.MaxValue;
+            spans[(i * 2) + 1] = int.MinValue;
+        }
+
+        if (source.Geometry is LinearGeometry geometry)
+        {
+            IReadOnlyList<LinearContour> contours = geometry.Contours;
+            IReadOnlyList<PointF> points = geometry.Points;
+            for (int i = 0; i < contours.Count; i++)
+            {
+                LinearContour contour = contours[i];
+                if (contour.PointCount == 0)
+                {
+                    continue;
+                }
+
+                // The segment walk matches EncodePath: a closed contour ends at its first point.
+                Vector2 current = (Vector2)points[contour.PointStart] + gridTranslate;
+                for (int j = 0; j < contour.SegmentCount; j++)
+                {
+                    int endPointIndex = contour.PointStart + ((j + 1) == contour.PointCount ? 0 : j + 1);
+                    Vector2 end = (Vector2)points[endPointIndex] + gridTranslate;
+                    AccumulateSegmentRowSpans(spans, current, end, source.Radius, tileX0, tileX1, tileY0, tileY1);
+                    current = end;
+                }
+
+                if (contour.SegmentCount == 0)
+                {
+                    AccumulateSegmentRowSpans(spans, current, current, source.Radius, tileX0, tileX1, tileY0, tileY1);
+                }
+            }
+        }
+        else
+        {
+            AccumulateSegmentRowSpans(spans, source.Start + gridTranslate, source.End + gridTranslate, source.Radius, tileX0, tileX1, tileY0, tileY1);
+        }
+
+        // Each row span also goes to the row bounds, so a chunk window gets the spans of its rows.
+        long tiles = 0;
+        for (int i = 0; i < rowCount; i++)
+        {
+            int first = spans[i * 2];
+            int last = spans[(i * 2) + 1];
+            if (last >= first)
+            {
+                int rowTiles = last - first + 1;
+                tiles += rowTiles;
+                rowBounds.AddRowTiles(tileY0 + i, rowTiles, (long)rowTiles * ptclWordsPerTile);
+            }
+        }
+
+        if (rented is not null)
+        {
+            ArrayPool<int>.Shared.Return(rented);
+        }
+
+        return tiles;
+    }
+
+    /// <summary>
+    /// Widens the row spans with the capsule of one segment.
+    /// </summary>
+    /// <param name="spans">The first and last tile column of each row, in adjacent slots.</param>
+    /// <param name="a">The segment start in tile-grid pixels.</param>
+    /// <param name="b">The segment end in tile-grid pixels.</param>
+    /// <param name="radius">The capsule radius in pixels.</param>
+    /// <param name="tileX0">The first tile column of the clipped bounds.</param>
+    /// <param name="tileX1">The tile column after the clipped bounds.</param>
+    /// <param name="tileY0">The first tile row of the clipped bounds.</param>
+    /// <param name="tileY1">The tile row after the clipped bounds.</param>
+    private static void AccumulateSegmentRowSpans(Span<int> spans, Vector2 a, Vector2 b, float radius, int tileX0, int tileX1, int tileY0, int tileY1)
+    {
+        float yMin = MathF.Min(a.Y, b.Y);
+        float yMax = MathF.Max(a.Y, b.Y);
+        int rowFirst = Math.Max((int)MathF.Floor((yMin - radius) / TileHeight), tileY0);
+        int rowLast = Math.Min((int)MathF.Floor((yMax + radius) / TileHeight), tileY1 - 1);
+        if (rowFirst > rowLast)
+        {
+            return;
+        }
+
+        float dy = b.Y - a.Y;
+        bool flat = MathF.Abs(dy) < 1E-6F;
+        float inverseDy = flat ? 0F : (b.X - a.X) / dy;
+        for (int row = rowFirst; row <= rowLast; row++)
+        {
+            // The part of the segment whose capsule reaches this row lies between the row band
+            // widened by the radius, clamped to the y range of the segment.
+            float xa;
+            float xb;
+            if (flat)
+            {
+                xa = MathF.Min(a.X, b.X);
+                xb = MathF.Max(a.X, b.X);
+            }
+            else
+            {
+                float ya = Math.Clamp((row * TileHeight) - radius, yMin, yMax);
+                float yb = Math.Clamp(((row + 1) * TileHeight) + radius, yMin, yMax);
+                float x0 = a.X + ((ya - a.Y) * inverseDy);
+                float x1 = a.X + ((yb - a.Y) * inverseDy);
+                xa = MathF.Min(x0, x1);
+                xb = MathF.Max(x0, x1);
+            }
+
+            int first = Math.Clamp((int)MathF.Floor((xa - radius) / TileWidth) - 1, tileX0, tileX1 - 1);
+            int last = Math.Clamp((int)MathF.Floor((xb + radius) / TileWidth) + 1, tileX0, tileX1 - 1);
+            int slot = (row - tileY0) * 2;
+            spans[slot] = Math.Min(spans[slot], first);
+            spans[slot + 1] = Math.Max(spans[slot + 1], last);
+        }
+    }
+
+    /// <summary>
+    /// Returns the radius around the stroke centerline that contains the GPU stroke outline: the
+    /// outline radius of the pen plus one pixel.
+    /// </summary>
+    /// <param name="pen">The pen that defines stroke width, joins, and caps.</param>
+    /// <param name="widthScale">The transform-derived scale applied to the stroke width.</param>
+    /// <returns>The radius in pixels.</returns>
+    private static float GetStrokeOutlineRadius(Pen pen, float widthScale)
+    {
+        // One pixel absorbs the f32 differences of the GPU stroker.
+        return pen.GetOutlineRadius(widthScale) + 1F;
     }
 
     /// <summary>
@@ -5469,6 +7437,8 @@ internal static class WebGPUSceneEncoder
     /// <param name="pathData">The path-data stream.</param>
     /// <param name="lineCount">Receives the estimated final line workload for the stroke.</param>
     /// <param name="tileCrossings">Receives the bound on the tile crossings of the emitted stroke lines.</param>
+    /// <param name="rowCrossings">Receives an upper bound for the tile crossings of the emitted body lines in one tile row.</param>
+    /// <param name="endCrossings">Receives the tile crossings of the emitted join and cap lines.</param>
     /// <returns>The number of encoded path objects: 1, or 0 when no contour survived preprocessing.</returns>
     private static int EncodeStrokePath(
         LinearGeometry geometry,
@@ -5480,8 +7450,12 @@ internal static class WebGPUSceneEncoder
         ref OwnedStream<byte> pathTags,
         ref OwnedStream<uint> pathData,
         out int lineCount,
-        out long tileCrossings)
+        out long tileCrossings,
+        out long rowCrossings,
+        out long endCrossings)
     {
+        long bodyRowCrossings = 0;
+        int bodySegmentCount = 0;
         float pointTranslateX = destinationOffset.X - rootTargetBounds.X;
         float pointTranslateY = destinationOffset.Y - rootTargetBounds.Y;
         lineCount = EstimateStrokeLineCount(geometry, pen, widthScale);
@@ -5530,6 +7504,8 @@ internal static class WebGPUSceneEncoder
                 float segmentLength = segment.Length();
                 Vector2 direction = segment / segmentLength;
                 contourOutlineLength += 2D * segmentLength;
+                bodyRowCrossings += 2L * GetRowTileCrossings(segmentStart, point);
+                bodySegmentCount++;
                 if (keptCount == 1)
                 {
                     secondPoint = point;
@@ -5594,6 +7570,8 @@ internal static class WebGPUSceneEncoder
 
                 if (closingSegment && !duplicateClosingPoint)
                 {
+                    bodyRowCrossings += 2L * GetRowTileCrossings(lastKept, firstPoint);
+                    bodySegmentCount++;
                     Vector2 closingVector = (Vector2)firstPoint - (Vector2)lastKept;
                     float closingLength = closingVector.Length();
                     Vector2 closingDirection = closingVector / closingLength;
@@ -5685,6 +7663,8 @@ internal static class WebGPUSceneEncoder
         }
 
         tileCrossings = BoundStrokeTileCrossings(outlineLength, residualStretch, lineCount);
+        rowCrossings = bodyRowCrossings;
+        endCrossings = GetStrokeEndTileCrossings(lineCount, bodySegmentCount, pen, widthScale);
         if (encodedContourCount == 0)
         {
             return 0;
@@ -5832,6 +7812,8 @@ internal static class WebGPUSceneEncoder
     /// <param name="pathData">The path-data stream.</param>
     /// <param name="lineCount">Receives the estimated final line workload for the stroke.</param>
     /// <param name="tileCrossings">Receives the bound on the tile crossings of the emitted stroke lines.</param>
+    /// <param name="rowCrossings">Receives an upper bound for the tile crossings of the emitted body lines in one tile row.</param>
+    /// <param name="endCrossings">Receives the tile crossings of the emitted join and cap lines.</param>
     /// <returns>The number of encoded path objects; always 1.</returns>
     private static int EncodeOpenSegmentStrokePath(
         PointF start,
@@ -5844,7 +7826,9 @@ internal static class WebGPUSceneEncoder
         ref OwnedStream<byte> pathTags,
         ref OwnedStream<uint> pathData,
         out int lineCount,
-        out long tileCrossings)
+        out long tileCrossings,
+        out long rowCrossings,
+        out long endCrossings)
     {
         float pointTranslateX = destinationOffset.X - rootTargetBounds.X;
         float pointTranslateY = destinationOffset.Y - rootTargetBounds.Y;
@@ -5856,7 +7840,30 @@ internal static class WebGPUSceneEncoder
         float halfWidth = pen.StrokeWidth * widthScale * 0.5F;
         double outlineLength = (2D * Vector2.Distance(start, end)) + (2D * GetStrokeCapChainLength(pen, halfWidth));
         tileCrossings = BoundStrokeTileCrossings(outlineLength, residualStretch, lineCount);
+        rowCrossings = 2L * GetRowTileCrossings(start, end);
+        endCrossings = GetStrokeEndTileCrossings(lineCount, 1, pen, widthScale);
         return 1;
+    }
+
+    /// <summary>
+    /// Returns an upper bound for the tile crossings of the join and cap lines of a stroke.
+    /// </summary>
+    /// <remarks>
+    /// Each body of a centerline segment is two lines parallel to it, which the per-row bound of
+    /// the segment covers. The other lines are joins and caps. Each fits in a square of twice the
+    /// outline radius r. It crosses at most 2r / 16 + 1 tile boundaries on each axis, so it visits at
+    /// most 4r / 16 + 3 tiles. They are near the segment ends, so all of them can be in one tile row.
+    /// </remarks>
+    /// <param name="lineCount">The estimated GPU line count of the stroke.</param>
+    /// <param name="segmentCount">The number of centerline segments with a body.</param>
+    /// <param name="pen">The pen that defines stroke width, joins, and caps.</param>
+    /// <param name="widthScale">The transform-derived scale applied to the stroke width.</param>
+    /// <returns>The tile-crossing bound of the join and cap lines.</returns>
+    private static long GetStrokeEndTileCrossings(int lineCount, int segmentCount, Pen pen, float widthScale)
+    {
+        long otherLines = Math.Max(lineCount - (2L * segmentCount), 0L);
+        long otherLineCrossings = (long)(4F * GetStrokeOutlineRadius(pen, widthScale) / TileWidth) + 3L;
+        return otherLines * otherLineCrossings;
     }
 
     /// <summary>
@@ -5963,7 +7970,7 @@ internal static class WebGPUSceneEncoder
 
         pathData.Advance(data.Length);
         pathTags.Advance(tags.Length);
-        lineCount = 2;
+        lineCount = 4;
         return 1;
     }
 
@@ -6010,7 +8017,7 @@ internal static class WebGPUSceneEncoder
                 if (descriptor.Rectangle.Width > 0 && descriptor.Rectangle.Height > 0)
                 {
                     AppendRectangleContour(descriptor.Rectangle, translateX, translateY, ref pathTags, ref pathData);
-                    lineCount = 2;
+                    lineCount = 4;
                 }
 
                 break;
@@ -6034,7 +8041,7 @@ internal static class WebGPUSceneEncoder
                         ref pathTags,
                         ref pathData);
 
-                    lineCount += 2;
+                    lineCount += 4;
                 }
 
                 break;
@@ -6052,7 +8059,7 @@ internal static class WebGPUSceneEncoder
                     }
 
                     AppendRectangleContour(rectangle, translateX, translateY, ref pathTags, ref pathData);
-                    lineCount += 2;
+                    lineCount += 4;
                 }
 
                 break;
@@ -6368,16 +8375,11 @@ internal static class WebGPUSceneEncoder
         {
             LinearContour contour = geometry.Contours[i];
 
-            total += contour.SegmentCount * 2;
-            if (contour.IsClosed)
-            {
-                total += contour.SegmentCount * joinCost;
-            }
-            else
-            {
-                total += Math.Max(contour.SegmentCount - 1, 0) * joinCost;
-                total += capCost * 2;
-            }
+            // The stroke encoder can close an open contour whose ends meet, which adds one body
+            // and one join, and it draws a two-point closed contour as a capped open segment. So
+            // every contour gets the closing body, a join for each body and two caps.
+            int bodies = contour.IsClosed ? contour.SegmentCount : contour.SegmentCount + 1;
+            total += (bodies * 2) + (bodies * joinCost) + (capCost * 2);
         }
 
         return Math.Max(total, 1);
@@ -6474,15 +8476,15 @@ internal static class WebGPUSceneEncoder
     private static int GetStrokeJoinLineCost(Pen pen, float widthScale)
     {
         float halfWidth = pen.StrokeWidth * widthScale * 0.5F;
-        int outerCost = pen.StrokeOptions.LineJoin switch
+
+        // The GPU stroker writes at most 2 inner points, 2 outer points for bevel and miter joins
+        // or the arc points plus 2 for round joins, and one connector on each side. At a reversal
+        // both sides are outer.
+        return pen.StrokeOptions.LineJoin switch
         {
-            LineJoin.Miter => 3,
-            LineJoin.MiterRound => GetStrokeArcLineCost(halfWidth, MathF.PI, pen.StrokeOptions.ArcDetailScale),
-            LineJoin.MiterRevert => 2,
-            LineJoin.Round => GetStrokeArcLineCost(halfWidth, MathF.PI, pen.StrokeOptions.ArcDetailScale),
-            _ => 2
+            LineJoin.Round or LineJoin.MiterRound => (2 * (GetStrokeArcLineCost(halfWidth, MathF.PI, pen.StrokeOptions.ArcDetailScale) + 1)) + 4,
+            _ => 6
         };
-        return outerCost + 2;
     }
 
     /// <summary>
@@ -6495,10 +8497,12 @@ internal static class WebGPUSceneEncoder
     private static int GetStrokeCapLineCost(Pen pen, float widthScale)
     {
         float halfWidth = pen.StrokeWidth * widthScale * 0.5F;
+
+        // A round cap writes the arc points plus one. One more point absorbs f32 differences in acos.
         return pen.StrokeOptions.LineCap switch
         {
             LineCap.Square => 3,
-            LineCap.Round => GetStrokeArcLineCost(halfWidth, MathF.PI, pen.StrokeOptions.ArcDetailScale),
+            LineCap.Round => GetStrokeArcLineCost(halfWidth, MathF.PI, pen.StrokeOptions.ArcDetailScale) + 2,
             _ => 1
         };
     }
@@ -6891,7 +8895,7 @@ internal static class WebGPUSceneEncoder
     /// <param name="divisor">The divisor.</param>
     /// <returns>The quotient rounded toward positive infinity.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int DivideRoundUp(int value, int divisor)
+    public static int DivideRoundUp(int value, int divisor)
         => (value + divisor - 1) / divisor;
 
     /// <summary>
@@ -7521,6 +9525,138 @@ internal static class WebGPUSceneEncoder
 }
 
 /// <summary>
+/// One retained scene that an encoded scene reads in place, at one position inside a layer.
+/// </summary>
+/// <remarks>
+/// The positions are the counts of the outer stream elements before the retained scene. The
+/// shaders read the retained streams through the scene segment table (see scene_segment.wgsl).
+/// </remarks>
+internal readonly struct WebGPUSceneInsertion
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebGPUSceneInsertion"/> struct.
+    /// </summary>
+    /// <param name="scene">The retained scene.</param>
+    /// <param name="pathTagWord">The number of outer path-tag words before the retained scene.</param>
+    /// <param name="pathDataWord">The number of outer path-data words before the retained scene.</param>
+    /// <param name="transformWord">The number of outer transform words before the retained scene.</param>
+    /// <param name="styleWord">The number of outer style words before the retained scene.</param>
+    /// <param name="drawTag">The number of outer draw tags before the retained scene.</param>
+    /// <param name="drawDataWord">The number of outer draw-data words before the retained scene.</param>
+    public WebGPUSceneInsertion(
+        WebGPUDrawingBackendScene scene,
+        int pathTagWord,
+        int pathDataWord,
+        int transformWord,
+        int styleWord,
+        int drawTag,
+        int drawDataWord)
+    {
+        this.Scene = scene;
+        this.PathTagWord = pathTagWord;
+        this.PathDataWord = pathDataWord;
+        this.TransformWord = transformWord;
+        this.StyleWord = styleWord;
+        this.DrawTag = drawTag;
+        this.DrawDataWord = drawDataWord;
+    }
+
+    /// <summary>
+    /// Gets the retained scene.
+    /// </summary>
+    public WebGPUDrawingBackendScene Scene { get; }
+
+    /// <summary>
+    /// Gets the number of outer path-tag words before the retained scene.
+    /// </summary>
+    public int PathTagWord { get; }
+
+    /// <summary>
+    /// Gets the number of outer path-data words before the retained scene.
+    /// </summary>
+    public int PathDataWord { get; }
+
+    /// <summary>
+    /// Gets the number of outer transform words before the retained scene.
+    /// </summary>
+    public int TransformWord { get; }
+
+    /// <summary>
+    /// Gets the number of outer style words before the retained scene.
+    /// </summary>
+    public int StyleWord { get; }
+
+    /// <summary>
+    /// Gets the number of outer draw tags before the retained scene.
+    /// </summary>
+    public int DrawTag { get; }
+
+    /// <summary>
+    /// Gets the number of outer draw-data words before the retained scene.
+    /// </summary>
+    public int DrawDataWord { get; }
+}
+
+/// <summary>
+/// One retained scene stored as a resident block in the scene buffer of a dispatch.
+/// </summary>
+/// <remarks>
+/// A retained scene drawn several times has one block. The scene data and gradient rows of the
+/// blocks follow those of the outer scene. The brush data and atlas rows of the blocks follow the
+/// info prefix and atlas rows of each dispatch. Those change from range to range, so the block
+/// stores offsets in those block areas.
+/// </remarks>
+internal readonly struct WebGPUSceneBlock
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebGPUSceneBlock"/> struct.
+    /// </summary>
+    /// <param name="scene">The retained scene.</param>
+    /// <param name="sceneWordOffset">The word offset of the scene data in the scene buffer.</param>
+    /// <param name="brushDataOffset">The word offset of the brush data in the brush data of the blocks.</param>
+    /// <param name="gradientRowBase">The first gradient-ramp row.</param>
+    /// <param name="atlasYOffset">The first image-atlas row in the atlas rows of the blocks.</param>
+    public WebGPUSceneBlock(
+        WebGPUEncodedScene scene,
+        int sceneWordOffset,
+        int brushDataOffset,
+        int gradientRowBase,
+        int atlasYOffset)
+    {
+        this.Scene = scene;
+        this.SceneWordOffset = sceneWordOffset;
+        this.BrushDataOffset = brushDataOffset;
+        this.GradientRowBase = gradientRowBase;
+        this.AtlasYOffset = atlasYOffset;
+    }
+
+    /// <summary>
+    /// Gets the retained scene.
+    /// </summary>
+    public WebGPUEncodedScene Scene { get; }
+
+    /// <summary>
+    /// Gets the word offset of the scene data in the scene buffer.
+    /// </summary>
+    public int SceneWordOffset { get; }
+
+    /// <summary>
+    /// Gets the word offset of the brush data in the brush data of the blocks.
+    /// </summary>
+    public int BrushDataOffset { get; }
+
+    /// <summary>
+    /// Gets the first gradient-ramp row.
+    /// </summary>
+    public int GradientRowBase { get; }
+
+    /// <summary>
+    /// Gets the first image-atlas row in the atlas rows of the blocks.
+    /// </summary>
+    public int AtlasYOffset { get; }
+}
+
+/// <summary>
 /// Flush-scoped encoded scene payload.
 /// </summary>
 internal sealed class WebGPUEncodedScene : IDisposable
@@ -7544,6 +9680,161 @@ internal sealed class WebGPUEncodedScene : IDisposable
     {
         this.ProfileSlotsBase = slotsBase;
         this.ProfileRecordsBase = recordsBase;
+    }
+
+    /// <summary>
+    /// Gets the path-tile bound of a dispatch of the whole scene.
+    /// </summary>
+    public long EstimatedPathTiles { get; private set; }
+
+    /// <summary>
+    /// Gets the blend-spill slot bound of a dispatch of the whole scene.
+    /// </summary>
+    public long EstimatedBlendSpillSlots { get; private set; }
+
+    /// <summary>
+    /// Gets the union region of each clip and layer depth of the scene, starting at depth 1, in
+    /// root-target-local pixels. An encoding that reads this scene in place adds these depths to
+    /// its own depth at that position.
+    /// </summary>
+    public Rectangle[] BlendDepthRegions { get; private set; } = [];
+
+    /// <summary>
+    /// Sets the scratch bounds that the counts of the scene do not carry.
+    /// </summary>
+    /// <param name="pathTiles">The path-tile bound.</param>
+    /// <param name="blendSpillSlots">The blend-spill slot bound.</param>
+    /// <param name="blendDepthRegions">The union region of each clip and layer depth, starting at depth 1.</param>
+    public void SetScratchBounds(long pathTiles, long blendSpillSlots, Rectangle[] blendDepthRegions)
+    {
+        this.EstimatedPathTiles = pathTiles;
+        this.EstimatedBlendSpillSlots = blendSpillSlots;
+        this.BlendDepthRegions = blendDepthRegions;
+    }
+
+    /// <summary>
+    /// Gets the row bounds of a dispatch of the whole scene, or <see langword="null"/> when the
+    /// scene has no draws outside its ranges.
+    /// </summary>
+    public WebGPUSceneRowBounds? RowBounds { get; private set; }
+
+    /// <summary>
+    /// Gets the blend-spill slot bound of the tiles in a root-target-local row interval.
+    /// </summary>
+    /// <param name="y0">The top of the interval in pixels.</param>
+    /// <param name="y1">The bottom of the interval in pixels.</param>
+    /// <returns>The blend-spill slot bound.</returns>
+    public long GetBlendSpillSlots(int y0, int y1) => GetBlendSpillSlots(this.BlendDepthRegions, y0, y1);
+
+    /// <summary>
+    /// Gets the blend-spill slot bound of the tiles of blend depth regions in a row interval.
+    /// </summary>
+    /// <param name="regions">The union region of each blend depth in tile-grid pixels, starting at depth 1.</param>
+    /// <param name="y0">The top of the interval in pixels.</param>
+    /// <param name="y1">The bottom of the interval in pixels.</param>
+    /// <returns>The blend-spill slot bound.</returns>
+    public static long GetBlendSpillSlots(ReadOnlySpan<Rectangle> regions, int y0, int y1)
+    {
+        // Only the depths past the blend stack split spill: index i is depth i + 1.
+        long slots = 0;
+        for (int i = WebGPUSceneEncoder.BlendStackSplit; i < regions.Length; i++)
+        {
+            Rectangle region = regions[i];
+            int top = Math.Max(region.Top, y0);
+            int bottom = Math.Min(region.Bottom, y1);
+            if (region.Width > 0 && bottom > top)
+            {
+                long columns = WebGPUSceneEncoder.DivideRoundUp(region.Right, WebGPUSceneEncoder.TileWidth) - (region.Left / WebGPUSceneEncoder.TileWidth);
+                long rows = WebGPUSceneEncoder.DivideRoundUp(bottom, WebGPUSceneEncoder.TileHeight) - (top / WebGPUSceneEncoder.TileHeight);
+                slots += columns * rows * WebGPUSceneEncoder.TileWidth * WebGPUSceneEncoder.TileHeight;
+            }
+        }
+
+        return slots;
+    }
+
+    /// <summary>
+    /// Sets the row bounds of the scene and takes ownership of every row bounds instance that its
+    /// encoding created, including those of its ranges. Each instance is sealed for queries.
+    /// </summary>
+    /// <param name="rowBounds">The row bounds of a dispatch of the whole scene.</param>
+    /// <param name="ownedRowBounds">The instances that this scene disposes.</param>
+    public void SetRowBounds(WebGPUSceneRowBounds? rowBounds, WebGPUSceneRowBounds[] ownedRowBounds)
+    {
+        for (int i = 0; i < ownedRowBounds.Length; i++)
+        {
+            ownedRowBounds[i].Seal();
+        }
+
+        this.RowBounds = rowBounds;
+        this.ownedRowBounds = ownedRowBounds;
+    }
+
+    /// <summary>
+    /// Gets the retained scenes that this scene reads in place inside its layers, in stream order.
+    /// </summary>
+    public ReadOnlySpan<WebGPUSceneInsertion> Insertions => this.insertions;
+
+    /// <summary>
+    /// Gets the resident blocks of the retained scenes, in scene-buffer order. A nested retained
+    /// scene has its own block.
+    /// </summary>
+    public ReadOnlySpan<WebGPUSceneBlock> Blocks => this.blocks;
+
+    /// <summary>
+    /// Gets the number of entries of the scene segment table of all streams, or zero when the scene
+    /// has no such table. An ordered scene has no such table: each of its ranges that reads retained
+    /// scenes has a table of its own (see <see cref="WebGPUSceneRangeSegments"/>).
+    /// </summary>
+    public int SegmentCount { get; private set; }
+
+    /// <summary>
+    /// Gets the word offset of the scene segment tables. The tables are the end of <see cref="SceneData"/>.
+    /// </summary>
+    public int SegmentTableBase { get; private set; }
+
+    /// <summary>
+    /// Gets the word length of the scene buffer: <see cref="SceneData"/>, then the resident blocks.
+    /// </summary>
+    public int SceneBufferWordCount => this.blocks.Length == 0 ? this.SceneWordCount : this.sceneBufferWordCount;
+
+    /// <summary>
+    /// Gets the brush-data word count of the resident blocks, which follows the brush data of this scene.
+    /// </summary>
+    public int BlockBrushDataWordCount { get; private set; }
+
+    /// <summary>
+    /// Gets the gradient-ramp row count of the resident blocks, which follows the rows of this scene.
+    /// </summary>
+    public int BlockGradientRowCount { get; private set; }
+
+    /// <summary>
+    /// Records the retained scenes that this scene reads in place, and the scene buffer layout of
+    /// their blocks and segment table.
+    /// </summary>
+    /// <param name="insertions">The retained scenes, in stream order.</param>
+    /// <param name="blocks">The resident blocks, in scene-buffer order.</param>
+    /// <param name="segmentCount">The number of entries of the table of all streams, or zero for an ordered scene.</param>
+    /// <param name="segmentTableBase">The word offset of the segment tables in <see cref="SceneData"/>.</param>
+    /// <param name="sceneBufferWordCount">The word length of the scene buffer.</param>
+    /// <param name="blockBrushDataWordCount">The brush-data word count of the blocks.</param>
+    /// <param name="blockGradientRowCount">The gradient-ramp row count of the blocks.</param>
+    public void SetSegments(
+        WebGPUSceneInsertion[] insertions,
+        WebGPUSceneBlock[] blocks,
+        int segmentCount,
+        int segmentTableBase,
+        int sceneBufferWordCount,
+        int blockBrushDataWordCount,
+        int blockGradientRowCount)
+    {
+        this.insertions = insertions;
+        this.blocks = blocks;
+        this.SegmentCount = segmentCount;
+        this.SegmentTableBase = segmentTableBase;
+        this.sceneBufferWordCount = sceneBufferWordCount;
+        this.BlockBrushDataWordCount = blockBrushDataWordCount;
+        this.BlockGradientRowCount = blockGradientRowCount;
     }
 
     /// <summary>
@@ -7591,6 +9882,10 @@ internal sealed class WebGPUEncodedScene : IDisposable
     private readonly List<GpuSolidColorDescriptor> solidColors;
     private readonly List<GpuGradientRampDescriptor> gradientRamps;
     private readonly WebGPUSceneOperation[] operations;
+    private WebGPUSceneInsertion[] insertions = [];
+    private WebGPUSceneBlock[] blocks = [];
+    private int sceneBufferWordCount;
+    private WebGPUSceneRowBounds[] ownedRowBounds = [];
     private bool disposed;
 
     /// <summary>
@@ -7830,7 +10125,7 @@ internal sealed class WebGPUEncodedScene : IDisposable
     /// <summary>
     /// Gets the combined info/path-gradient prefix word count before dynamic bin data.
     /// </summary>
-    public int InfoBufferWordCount => this.InfoWordCount + this.PathGradientDataWordCount;
+    public int InfoBufferWordCount => this.InfoWordCount + this.PathGradientDataWordCount + this.BlockBrushDataWordCount;
 
     /// <summary>
     /// Gets the deferred image descriptors that must be patched after atlas creation.
@@ -7951,6 +10246,13 @@ internal sealed class WebGPUEncodedScene : IDisposable
     /// Gets the padded path-tag word count.
     /// </summary>
     public int PathTagWordCount { get; }
+
+    /// <summary>
+    /// Gets the path-tag word count that this scene adds to the virtual stream of a scene that reads
+    /// it in place: its padded words, or the virtual words of its own segment table when it reads
+    /// retained scenes in place.
+    /// </summary>
+    public int VirtualPathTagWordCount => this.insertions.Length == 0 ? this.PathTagWordCount : this.PathTagByteCount / 4;
 
     /// <summary>
     /// Gets the path-data word count.
@@ -8193,6 +10495,10 @@ internal sealed class WebGPUEncodedScene : IDisposable
         this.sceneDataOwner?.Dispose();
         this.gradientPixelsOwner?.Dispose();
         this.pathGradientDataOwner?.Dispose();
+        for (int i = 0; i < this.ownedRowBounds.Length; i++)
+        {
+            this.ownedRowBounds[i].Dispose();
+        }
     }
 }
 

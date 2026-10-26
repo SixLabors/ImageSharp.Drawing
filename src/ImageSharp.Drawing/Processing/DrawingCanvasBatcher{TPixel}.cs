@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
+using System.Runtime.InteropServices;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
@@ -13,9 +14,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// <remarks>
 /// The batcher owns command buffering and replay ordering only; it does not rasterize or composite.
 /// Draw commands are stored in the command buffer until a timeline command-range entry references
-/// them. Existing retained scenes passed through <see cref="DrawingCanvas.RenderScene"/> are stored
-/// separately and referenced by timeline entry index. During disposal replay, command ranges are
-/// lowered to short-lived backend scenes at the position where the canvas recorded the range.
+/// them. Existing retained scenes passed through <see cref="DrawingCanvas.RenderScene"/> are scene
+/// commands in the same buffer. During disposal replay, command ranges are lowered to short-lived
+/// backend scenes at the position where the canvas recorded the range.
 /// </remarks>
 /// <typeparam name="TPixel">The pixel format.</typeparam>
 internal sealed class DrawingCanvasBatcher<TPixel>
@@ -37,6 +38,8 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     private int sealedApplyCommandCount;
     private int clipCommandCount;
     private int sealedClipCommandCount;
+    private int sceneCommandCount;
+    private int sealedSceneCommandCount;
 
     // Dash and brush-transform flags gate whole-buffer command preparation; prepared commands
     // remain in the same command buffer until replay consumes it.
@@ -48,14 +51,18 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     // drawing moves to a differently-offset context (for example a child region).
     private readonly List<(DrawingClipDescriptor Descriptor, Point AnchorOffset)> openClips = [];
 
-    // Timeline entries keep compact indexes into the command and retained
-    // scene buffers while preserving the order recorded by the canvas.
-    private DrawingCanvasTimelineEntry[] entries;
+    // Mirrors the physical begin/end-layer command stream. ClipDepth is the open clip count when
+    // the layer began, so the clips opened inside each layer are known. Every canvas that shares
+    // this batcher records into the same stream, so this is the one source of the open layers.
+    private readonly List<(Rectangle Bounds, DrawingCanvasLayer Layer, int ClipDepth)> openLayers = [];
 
-    // These are existing retained scenes recorded through RenderScene, not scenes
-    // produced later from this batcher's own command ranges.
-    private DrawingBackendScene[] insertedScenes;
-    private int insertedSceneCount;
+    // The command index and the kind counters when the outermost open layer began. The commands
+    // from that index are the content of the open layers (see DetachOpenLayerCommands).
+    private CommandCounts outerLayerStart;
+
+    // Timeline entries keep compact indexes into the command buffer, and keep the order that the
+    // canvas recorded.
+    private DrawingCanvasTimelineEntry[] entries;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DrawingCanvasBatcher{TPixel}"/> class.
@@ -66,7 +73,6 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         this.configuration = configuration;
         this.commands = [];
         this.entries = [];
-        this.insertedScenes = [];
     }
 
     /// <summary>
@@ -78,10 +84,14 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     /// Gets the number of ordered replay items recorded in the canvas timeline.
     /// </summary>
     /// <remarks>
-    /// This is not a draw-command count. A single entry can represent a contiguous command range,
-    /// an apply barrier, or an inserted retained scene.
+    /// This is not a draw-command count. A single entry represents a contiguous command range.
     /// </remarks>
     public int TimelineEntryCount { get; private set; }
+
+    /// <summary>
+    /// Gets the number of layers that are open in the recorded command stream.
+    /// </summary>
+    public int OpenLayerCount => this.openLayers.Count;
 
     /// <summary>
     /// Appends one normalized composition command to the pending queue.
@@ -101,6 +111,19 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                     this.openClips.RemoveAt(this.openClips.Count - 1);
                 }
 
+                break;
+
+            case CompositionCommandKind.BeginLayer:
+                if (this.openLayers.Count == 0)
+                {
+                    this.outerLayerStart = this.CaptureCounts();
+                }
+
+                this.openLayers.Add((composition.LayerBounds, composition.Layer, this.openClips.Count));
+                break;
+
+            case CompositionCommandKind.EndLayer:
+                this.openLayers.RemoveAt(this.openLayers.Count - 1);
                 break;
 
             default:
@@ -226,17 +249,19 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         }
 
         this.EnsureEntryCapacity(this.TimelineEntryCount + 1);
-        this.entries[this.TimelineEntryCount++] = DrawingCanvasTimelineEntry.CreateCommandRange(
+        this.entries[this.TimelineEntryCount++] = new DrawingCanvasTimelineEntry(
             this.sealedCommandCount,
             count,
             this.layerCommandCount != this.sealedLayerCommandCount,
             this.applyCommandCount != this.sealedApplyCommandCount,
-            this.clipCommandCount != this.sealedClipCommandCount);
+            this.clipCommandCount != this.sealedClipCommandCount,
+            this.sceneCommandCount != this.sealedSceneCommandCount);
 
         this.sealedCommandCount = this.commandCount;
         this.sealedLayerCommandCount = this.layerCommandCount;
         this.sealedApplyCommandCount = this.applyCommandCount;
         this.sealedClipCommandCount = this.clipCommandCount;
+        this.sealedSceneCommandCount = this.sceneCommandCount;
     }
 
     /// <summary>
@@ -251,23 +276,239 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     }
 
     /// <summary>
-    /// Records an existing retained scene in the replay timeline after sealing queued commands.
+    /// Appends a scene command that renders an existing retained scene at this point in the stream.
     /// </summary>
     /// <remarks>
-    /// This stores only scenes passed to <see cref="DrawingCanvas.RenderScene"/>. Scenes produced
+    /// <para>
+    /// This records only scenes passed to <see cref="DrawingCanvas.RenderScene"/>. Scenes produced
     /// from this canvas's own command ranges are created later by the backend from command batches.
+    /// The command does not seal the range, so an open layer stays one layer around the scene.
+    /// </para>
+    /// <para>
+    /// Canvas clips do not apply to a retained scene, so the open clips close before the command and
+    /// open again after it. Inside a layer, only the clips opened in the innermost layer close. A clip
+    /// opened before that layer stays open, because the stream must stay nested.
+    /// </para>
     /// </remarks>
-    /// <param name="scene">The retained scene to render at this point in the timeline.</param>
+    /// <param name="scene">The retained scene to render at this point in the stream.</param>
     public void AddScene(DrawingBackendScene scene)
     {
-        this.SealCommands();
-        this.EnsureInsertedSceneCapacity(this.insertedSceneCount + 1);
+        int layerCount = this.openLayers.Count;
+        (DrawingClipDescriptor Descriptor, Point AnchorOffset)[] clips = this.CloseInnermostLayerClips();
 
-        int sceneIndex = this.insertedSceneCount;
-        this.insertedScenes[this.insertedSceneCount++] = scene;
-        this.EnsureEntryCapacity(this.TimelineEntryCount + 1);
-        this.entries[this.TimelineEntryCount++] = DrawingCanvasTimelineEntry.CreateScene(sceneIndex);
+        // Outside every layer the command holds the target bounds of the scene, which the backend
+        // requires to match its target. Inside a layer it holds the innermost layer bounds, which
+        // limit the rows that the scene can write, the same as for a fill in that layer.
+        Rectangle targetBounds = layerCount == 0 ? scene.Bounds : this.openLayers[layerCount - 1].Bounds;
+        this.EnsureCommandCapacity(this.commandCount + 1);
+        this.commands[this.commandCount++] = new RetainedSceneCompositionSceneCommand(scene, targetBounds, layerCount != 0);
+        this.sceneCommandCount++;
+
+        this.ReopenClips(clips);
     }
+
+    /// <summary>
+    /// Appends one composition command outside the open clips of the innermost layer.
+    /// </summary>
+    /// <remarks>
+    /// The open clips close before the command and open again after it, as for
+    /// <see cref="AddScene"/>. Outside every layer, no clip applies to the command. Inside a layer,
+    /// only the clips opened in the innermost layer close, and clips opened before that layer apply.
+    /// </remarks>
+    /// <param name="composition">The command to queue.</param>
+    public void AddUnclippedComposition(in CompositionCommand composition)
+    {
+        (DrawingClipDescriptor Descriptor, Point AnchorOffset)[] clips = this.CloseInnermostLayerClips();
+        this.AddComposition(composition);
+        this.ReopenClips(clips);
+    }
+
+    /// <summary>
+    /// Closes the clips opened in the innermost open layer, or every open clip when no layer is open.
+    /// </summary>
+    /// <remarks>
+    /// A clip opened before the innermost layer stays open, because the stream must stay nested.
+    /// </remarks>
+    /// <returns>The closed clips, outermost first, for <see cref="ReopenClips"/>.</returns>
+    private (DrawingClipDescriptor Descriptor, Point AnchorOffset)[] CloseInnermostLayerClips()
+    {
+        int layerCount = this.openLayers.Count;
+        int clipStart = layerCount == 0 ? 0 : this.openLayers[layerCount - 1].ClipDepth;
+        (DrawingClipDescriptor Descriptor, Point AnchorOffset)[] clips = this.openClips.Count == clipStart
+            ? []
+            : CollectionsMarshal.AsSpan(this.openClips)[clipStart..].ToArray();
+
+        for (int i = 0; i < clips.Length; i++)
+        {
+            this.AddComposition(CompositionCommand.CreateEndClip());
+        }
+
+        return clips;
+    }
+
+    /// <summary>
+    /// Opens the clips that <see cref="CloseInnermostLayerClips"/> closed again, with the same anchors.
+    /// </summary>
+    /// <param name="clips">The closed clips, outermost first.</param>
+    private void ReopenClips((DrawingClipDescriptor Descriptor, Point AnchorOffset)[] clips)
+    {
+        for (int i = 0; i < clips.Length; i++)
+        {
+            this.AddComposition(CompositionCommand.CreateBeginClip(clips[i].Descriptor, clips[i].AnchorOffset));
+        }
+    }
+
+    /// <summary>
+    /// Closes every open clip and layer in the stream, innermost first.
+    /// </summary>
+    /// <remarks>
+    /// The returned scopes are passed to <see cref="ReopenScopes"/> after <see cref="ClearCommandBatch"/>
+    /// to open the same clips and layers again, in the same nesting order.
+    /// </remarks>
+    /// <returns>The open clips and layers, outermost first.</returns>
+    public OpenScopes CloseOpenScopes()
+    {
+        (DrawingClipDescriptor Descriptor, Point AnchorOffset)[] clips = [.. this.openClips];
+        (Rectangle Bounds, DrawingCanvasLayer Layer, int ClipDepth)[] layers = [.. this.openLayers];
+
+        // Each layer closes after the clips opened inside it, so the stream stays nested.
+        for (int i = layers.Length - 1; i >= 0; i--)
+        {
+            while (this.openClips.Count > layers[i].ClipDepth)
+            {
+                this.AddComposition(CompositionCommand.CreateEndClip());
+            }
+
+            this.AddComposition(CompositionCommand.CreateEndLayer(layers[i].Bounds, layers[i].Layer));
+        }
+
+        while (this.openClips.Count > 0)
+        {
+            this.AddComposition(CompositionCommand.CreateEndClip());
+        }
+
+        return new OpenScopes(clips, layers);
+    }
+
+    /// <summary>
+    /// Opens the clips and layers closed by <see cref="CloseOpenScopes"/> again, outermost first.
+    /// </summary>
+    /// <param name="scopes">The open clips and layers, outermost first.</param>
+    public void ReopenScopes(OpenScopes scopes)
+    {
+        int clipIndex = 0;
+        for (int i = 0; i < scopes.Layers.Length; i++)
+        {
+            for (; clipIndex < scopes.Layers[i].ClipDepth; clipIndex++)
+            {
+                this.AddComposition(CompositionCommand.CreateBeginClip(scopes.Clips[clipIndex].Descriptor, scopes.Clips[clipIndex].AnchorOffset));
+            }
+
+            this.AddComposition(CompositionCommand.CreateBeginLayer(scopes.Layers[i].Bounds, scopes.Layers[i].Layer));
+        }
+
+        for (; clipIndex < scopes.Clips.Length; clipIndex++)
+        {
+            this.AddComposition(CompositionCommand.CreateBeginClip(scopes.Clips[clipIndex].Descriptor, scopes.Clips[clipIndex].AnchorOffset));
+        }
+    }
+
+    /// <summary>
+    /// Takes the content of the open layers out of the stream, so the commands before the outermost
+    /// open layer can render alone.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The content of a layer reaches the target only when the layer closes, so the commands before
+    /// the outermost open layer are all the commands that can render now. This method then closes
+    /// the clips that were open when that layer began, so the remaining stream is balanced.
+    /// <see cref="AttachCommands"/> puts the detached commands back after the remaining stream
+    /// renders and <see cref="ClearCommandBatch"/> runs.
+    /// </para>
+    /// <para>
+    /// Nothing seals the stream while a layer is open, so every detached command is unsealed. The
+    /// detached commands are not prepared yet, so a later preparation prepares each of them once.
+    /// </para>
+    /// </remarks>
+    /// <returns>The detached commands and the stream state that they need.</returns>
+    public DetachedCommands DetachOpenLayerCommands()
+    {
+        CommandCounts start = this.outerLayerStart;
+        int clipDepth = this.openLayers[0].ClipDepth;
+        DetachedCommands detached = new(
+            this.commands[start.CommandIndex..this.commandCount],
+            [.. this.openClips],
+            [.. this.openLayers],
+            this.layerCommandCount - start.LayerCommandCount,
+            this.applyCommandCount - start.ApplyCommandCount,
+            this.clipCommandCount - start.ClipCommandCount,
+            this.sceneCommandCount - start.SceneCommandCount,
+            this.hasDashes,
+            this.hasBrushTransforms);
+
+        Array.Clear(this.commands, start.CommandIndex, this.commandCount - start.CommandIndex);
+        this.commandCount = start.CommandIndex;
+        this.layerCommandCount = start.LayerCommandCount;
+        this.applyCommandCount = start.ApplyCommandCount;
+        this.clipCommandCount = start.ClipCommandCount;
+        this.sceneCommandCount = start.SceneCommandCount;
+
+        // The mirrors return to the state at the start of the outermost layer. Then the clips
+        // that were open there close, so the remaining stream is balanced.
+        this.openLayers.Clear();
+        this.openClips.RemoveRange(clipDepth, this.openClips.Count - clipDepth);
+        for (int i = 0; i < clipDepth; i++)
+        {
+            this.AddComposition(CompositionCommand.CreateEndClip());
+        }
+
+        return detached;
+    }
+
+    /// <summary>
+    /// Puts commands taken out by <see cref="DetachOpenLayerCommands"/> back at the end of the stream.
+    /// </summary>
+    /// <remarks>
+    /// The clips that were open when the outermost layer began open again first, with the same
+    /// anchors. Then the stream and its mirrors are the same as before the detach.
+    /// </remarks>
+    /// <param name="detached">The detached commands.</param>
+    public void AttachCommands(DetachedCommands detached)
+    {
+        int clipDepth = detached.Layers[0].ClipDepth;
+        for (int i = 0; i < clipDepth; i++)
+        {
+            this.AddComposition(CompositionCommand.CreateBeginClip(detached.Clips[i].Descriptor, detached.Clips[i].AnchorOffset));
+        }
+
+        this.outerLayerStart = this.CaptureCounts();
+        this.EnsureCommandCapacity(this.commandCount + detached.Commands.Length);
+        detached.Commands.CopyTo(this.commands, this.commandCount);
+        this.commandCount += detached.Commands.Length;
+        this.layerCommandCount += detached.LayerCommandCount;
+        this.applyCommandCount += detached.ApplyCommandCount;
+        this.clipCommandCount += detached.ClipCommandCount;
+        this.sceneCommandCount += detached.SceneCommandCount;
+
+        // The flags are those of the whole buffer at the detach, so they include the detached
+        // commands. When only rendered commands set a flag, the next preparation scans commands
+        // that need no change. The detached commands were never prepared, so none is prepared two
+        // times.
+        this.hasDashes |= detached.HasDashes;
+        this.hasBrushTransforms |= detached.HasBrushTransforms;
+
+        this.openClips.Clear();
+        this.openClips.AddRange(detached.Clips);
+        this.openLayers.Clear();
+        this.openLayers.AddRange(detached.Layers);
+    }
+
+    /// <summary>
+    /// Captures the command index and the kind counters at the end of the stream.
+    /// </summary>
+    /// <returns>The captured counts.</returns>
+    private CommandCounts CaptureCounts()
+        => new(this.commandCount, this.layerCommandCount, this.applyCommandCount, this.clipCommandCount, this.sceneCommandCount);
 
     /// <summary>
     /// Creates a retained backend scene from the recorded timeline.
@@ -288,12 +529,14 @@ internal sealed class DrawingCanvasBatcher<TPixel>
 
         this.SealAndPrepareCommands();
 
+        // Sealed command ranges are contiguous in the command buffer, so one batch covers them all.
         DrawingCommandBatch commandBatch = this.CreatePreparedCommandBatch(
             0,
             this.commandCount,
             this.layerCommandCount > 0,
             this.applyCommandCount > 0,
-            this.clipCommandCount > 0);
+            this.clipCommandCount > 0,
+            this.sceneCommandCount > 0);
 
         return backend.CreateScene(this.configuration, targetBounds, commandBatch, ownedResources);
     }
@@ -319,7 +562,8 @@ internal sealed class DrawingCanvasBatcher<TPixel>
             entry.Count,
             entry.HasLayers,
             entry.HasApply,
-            entry.HasClipControls);
+            entry.HasClipControls,
+            entry.HasScenes);
 
     /// <summary>
     /// Creates a command batch over a contiguous range of the shared command buffer.
@@ -329,14 +573,16 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     /// <param name="hasLayers">Indicates whether the range contains layer boundary commands.</param>
     /// <param name="hasApply">Indicates whether the range contains apply barriers.</param>
     /// <param name="hasClipControls">Indicates whether the range contains ordered clip-control commands.</param>
+    /// <param name="hasScenes">Indicates whether the range contains retained scene commands.</param>
     /// <returns>The command batch.</returns>
     private DrawingCommandBatch CreatePreparedCommandBatch(
         int startIndex,
         int commandCount,
         bool hasLayers,
         bool hasApply,
-        bool hasClipControls)
-        => new(this.commands, startIndex, commandCount, hasLayers, hasApply, hasClipControls);
+        bool hasClipControls,
+        bool hasScenes)
+        => new(this.commands, startIndex, commandCount, hasLayers, hasApply, hasClipControls, hasScenes);
 
     /// <summary>
     /// Gets one recorded timeline entry.
@@ -347,21 +593,12 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         => this.entries[index];
 
     /// <summary>
-    /// Gets one retained scene reference recorded through <see cref="DrawingCanvas.RenderScene"/>.
-    /// </summary>
-    /// <param name="index">The retained-scene reference index.</param>
-    /// <returns>The retained scene to render at the timeline entry.</returns>
-    public DrawingBackendScene GetInsertedScene(int index)
-        => this.insertedScenes[index];
-
-    /// <summary>
     /// Clears command references after a prepared batch has been consumed.
     /// </summary>
     public void ClearCommandBatch()
     {
         Array.Clear(this.commands, 0, this.commandCount);
         Array.Clear(this.entries, 0, this.TimelineEntryCount);
-        Array.Clear(this.insertedScenes, 0, this.insertedSceneCount);
         this.commandCount = 0;
         this.sealedCommandCount = 0;
         this.layerCommandCount = 0;
@@ -370,14 +607,16 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         this.sealedApplyCommandCount = 0;
         this.clipCommandCount = 0;
         this.sealedClipCommandCount = 0;
+        this.sceneCommandCount = 0;
+        this.sealedSceneCommandCount = 0;
         this.TimelineEntryCount = 0;
-        this.insertedSceneCount = 0;
         this.hasDashes = false;
         this.hasBrushTransforms = false;
 
-        // The canvas re-opens its active clip state after clearing, so the mirrored
-        // physical clip stream starts empty alongside the new command buffer.
+        // The canvas re-opens its active clip and layer state after clearing, so the mirrored
+        // physical clip and layer streams start empty alongside the new command buffer.
         this.openClips.Clear();
+        this.openLayers.Clear();
     }
 
     /// <summary>
@@ -418,26 +657,6 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         }
 
         Array.Resize(ref this.entries, nextCapacity);
-    }
-
-    /// <summary>
-    /// Ensures that the inserted-scene buffer can store the requested scene count without reallocating.
-    /// </summary>
-    /// <param name="requiredCapacity">The required scene capacity.</param>
-    private void EnsureInsertedSceneCapacity(int requiredCapacity)
-    {
-        if (requiredCapacity <= this.insertedScenes.Length)
-        {
-            return;
-        }
-
-        int nextCapacity = this.insertedScenes.Length == 0 ? 2 : this.insertedScenes.Length * 2;
-        if (nextCapacity < requiredCapacity)
-        {
-            nextCapacity = requiredCapacity;
-        }
-
-        Array.Resize(ref this.insertedScenes, nextCapacity);
     }
 
     /// <summary>
@@ -625,5 +844,168 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Holds the clips and layers that were open in the stream, outermost first.
+    /// </summary>
+    public readonly struct OpenScopes
+    {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="OpenScopes"/> struct.
+        /// </summary>
+        /// <param name="clips">The open clips, outermost first.</param>
+        /// <param name="layers">The open layers, outermost first, with the open clip count when each layer began.</param>
+        public OpenScopes(
+            (DrawingClipDescriptor Descriptor, Point AnchorOffset)[] clips,
+            (Rectangle Bounds, DrawingCanvasLayer Layer, int ClipDepth)[] layers)
+        {
+            this.Clips = clips;
+            this.Layers = layers;
+        }
+
+        /// <summary>
+        /// Gets the open clips, outermost first.
+        /// </summary>
+        public (DrawingClipDescriptor Descriptor, Point AnchorOffset)[] Clips { get; }
+
+        /// <summary>
+        /// Gets the open layers, outermost first, with the open clip count when each layer began.
+        /// </summary>
+        public (Rectangle Bounds, DrawingCanvasLayer Layer, int ClipDepth)[] Layers { get; }
+    }
+
+    /// <summary>
+    /// Holds a command index and the kind counters of the stream at that index.
+    /// </summary>
+    private readonly struct CommandCounts
+    {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="CommandCounts"/> struct.
+        /// </summary>
+        /// <param name="commandIndex">The command index.</param>
+        /// <param name="layerCommandCount">The layer command count before the index.</param>
+        /// <param name="applyCommandCount">The apply command count before the index.</param>
+        /// <param name="clipCommandCount">The clip command count before the index.</param>
+        /// <param name="sceneCommandCount">The scene command count before the index.</param>
+        public CommandCounts(int commandIndex, int layerCommandCount, int applyCommandCount, int clipCommandCount, int sceneCommandCount)
+        {
+            this.CommandIndex = commandIndex;
+            this.LayerCommandCount = layerCommandCount;
+            this.ApplyCommandCount = applyCommandCount;
+            this.ClipCommandCount = clipCommandCount;
+            this.SceneCommandCount = sceneCommandCount;
+        }
+
+        /// <summary>
+        /// Gets the command index.
+        /// </summary>
+        public int CommandIndex { get; }
+
+        /// <summary>
+        /// Gets the layer command count before the index.
+        /// </summary>
+        public int LayerCommandCount { get; }
+
+        /// <summary>
+        /// Gets the apply command count before the index.
+        /// </summary>
+        public int ApplyCommandCount { get; }
+
+        /// <summary>
+        /// Gets the clip command count before the index.
+        /// </summary>
+        public int ClipCommandCount { get; }
+
+        /// <summary>
+        /// Gets the scene command count before the index.
+        /// </summary>
+        public int SceneCommandCount { get; }
+    }
+
+    /// <summary>
+    /// Holds the content of the open layers that <see cref="DetachOpenLayerCommands"/> took out of
+    /// the stream, with the stream state that <see cref="AttachCommands"/> restores.
+    /// </summary>
+    public sealed class DetachedCommands
+    {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="DetachedCommands"/> class.
+        /// </summary>
+        /// <param name="commands">The detached commands, in stream order.</param>
+        /// <param name="clips">The open clips at the detach, outermost first.</param>
+        /// <param name="layers">The open layers at the detach, outermost first.</param>
+        /// <param name="layerCommandCount">The layer command count of the detached commands.</param>
+        /// <param name="applyCommandCount">The apply command count of the detached commands.</param>
+        /// <param name="clipCommandCount">The clip command count of the detached commands.</param>
+        /// <param name="sceneCommandCount">The scene command count of the detached commands.</param>
+        /// <param name="hasDashes">Whether the buffer had dashed strokes to prepare at the detach.</param>
+        /// <param name="hasBrushTransforms">Whether the buffer had brush transforms to prepare at the detach.</param>
+        public DetachedCommands(
+            CompositionSceneCommand[] commands,
+            (DrawingClipDescriptor Descriptor, Point AnchorOffset)[] clips,
+            (Rectangle Bounds, DrawingCanvasLayer Layer, int ClipDepth)[] layers,
+            int layerCommandCount,
+            int applyCommandCount,
+            int clipCommandCount,
+            int sceneCommandCount,
+            bool hasDashes,
+            bool hasBrushTransforms)
+        {
+            this.Commands = commands;
+            this.Clips = clips;
+            this.Layers = layers;
+            this.LayerCommandCount = layerCommandCount;
+            this.ApplyCommandCount = applyCommandCount;
+            this.ClipCommandCount = clipCommandCount;
+            this.SceneCommandCount = sceneCommandCount;
+            this.HasDashes = hasDashes;
+            this.HasBrushTransforms = hasBrushTransforms;
+        }
+
+        /// <summary>
+        /// Gets the detached commands, in stream order.
+        /// </summary>
+        public CompositionSceneCommand[] Commands { get; }
+
+        /// <summary>
+        /// Gets the open clips at the detach, outermost first.
+        /// </summary>
+        public (DrawingClipDescriptor Descriptor, Point AnchorOffset)[] Clips { get; }
+
+        /// <summary>
+        /// Gets the open layers at the detach, outermost first.
+        /// </summary>
+        public (Rectangle Bounds, DrawingCanvasLayer Layer, int ClipDepth)[] Layers { get; }
+
+        /// <summary>
+        /// Gets the layer command count of the detached commands.
+        /// </summary>
+        public int LayerCommandCount { get; }
+
+        /// <summary>
+        /// Gets the apply command count of the detached commands.
+        /// </summary>
+        public int ApplyCommandCount { get; }
+
+        /// <summary>
+        /// Gets the clip command count of the detached commands.
+        /// </summary>
+        public int ClipCommandCount { get; }
+
+        /// <summary>
+        /// Gets the scene command count of the detached commands.
+        /// </summary>
+        public int SceneCommandCount { get; }
+
+        /// <summary>
+        /// Gets a value indicating whether the buffer had dashed strokes to prepare at the detach.
+        /// </summary>
+        public bool HasDashes { get; }
+
+        /// <summary>
+        /// Gets a value indicating whether the buffer had brush transforms to prepare at the detach.
+        /// </summary>
+        public bool HasBrushTransforms { get; }
     }
 }

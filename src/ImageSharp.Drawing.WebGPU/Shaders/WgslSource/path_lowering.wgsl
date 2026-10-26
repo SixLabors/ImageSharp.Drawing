@@ -14,6 +14,7 @@
 #import pathtag
 #import segment
 #import bump
+#import scene_segment
 
 @group(0) @binding(0)
 var<uniform> config: Config;
@@ -426,7 +427,7 @@ struct PathTagData {
 // prefix from tag_monoids (produced by pathtag_reduce/scan) with a local reduction of the
 // preceding bytes in the same tag word.
 fn compute_tag_monoid(ix: u32) -> PathTagData {
-    let tag_word = scene[config.pathtag_base + (ix >> 2u)];
+    let tag_word = scene[pathtag_base + (ix >> 2u)];
     let shift = (ix & 3u) * 8u;
     var tm = reduce_tag(tag_word & ((1u << shift) - 1u));
     // TODO: this can be a read buf overflow. Conditionalize by tag byte?
@@ -499,8 +500,10 @@ fn snap_to_pixel_grid(p: vec2f) -> vec2f {
 // invocation's running bbox. Out-of-range writes are dropped (the bump counter may legitimately
 // exceed the buffer size).
 fn write_line(line_ix: u32, path_ix: u32, p0: vec2f, p1: vec2f) {
-    let s0 = snap_to_pixel_grid(p0);
-    let s1 = snap_to_pixel_grid(p1);
+    // Snap in data space, then move into target space. The origin is a whole pixel, so the move
+    // keeps the snapped values exact.
+    let s0 = snap_to_pixel_grid(p0) - target_origin;
+    let s1 = snap_to_pixel_grid(p1) - target_origin;
     bbox = vec4(min(bbox.xy, min(s0, s1)), max(bbox.zw, max(s0, s1)));
 
     if line_ix < config.lines_size {
@@ -557,8 +560,19 @@ fn read_neighboring_segment(ix: u32) -> NeighboringSegment {
     return NeighboringSegment(do_join, length(tangent), tangent);
 }
 
-// `pathdata_base` is decoded once and reused by helpers above.
+// The stream bases are decoded once and reused by the helpers above. With a scene segment
+// table they are the biases of the segment that holds this invocation's path tag, so the
+// virtual monoid offsets index the segment's physical words (see scene_segment.wgsl). A path and
+// the tag that follows it in a stroke are always in the same segment.
+var<private> pathtag_base: u32;
 var<private> pathdata_base: u32;
+var<private> style_base: u32;
+var<private> transform_base: u32;
+var<private> profile_slots_base: u32;
+
+// The position of the target in data coordinates, unpacked from config.target_origin. It is zero
+// for the root target, and the layer position for a scoped layer target.
+var<private> target_origin: vec2f;
 
 // X and Y profile identifiers for the current fill segment. Stroke segments and fills without
 // profile data use the all-ones sentinel.
@@ -576,7 +590,21 @@ fn main(
     @builtin(local_invocation_id) local_id: vec3<u32>,
 ) {
     let ix = global_id.x;
+    pathtag_base = config.pathtag_base;
     pathdata_base = config.pathdata_base;
+    style_base = config.style_base;
+    transform_base = config.transform_base;
+    profile_slots_base = config.profile_slots_base;
+    if config.segment_count != 0u {
+        let segment = find_scene_segment(SCENE_SEGMENT_PATHTAG_START, ix >> 2u);
+        pathtag_base = scene[segment + SCENE_SEGMENT_PATHTAG_BIAS];
+        pathdata_base = scene[segment + SCENE_SEGMENT_PATHDATA_BIAS];
+        style_base = scene[segment + SCENE_SEGMENT_STYLE_BIAS];
+        transform_base = scene[segment + SCENE_SEGMENT_TRANSFORM_BIAS];
+        profile_slots_base = scene[segment + SCENE_SEGMENT_PROFILE_SLOTS];
+    }
+
+    target_origin = vec2f(f32(config.target_origin & 0xffffu), f32(config.target_origin >> 16u));
     bbox = vec4(1e31, 1e31, -1e31, -1e31);
 
     let tag = compute_tag_monoid(ix);
@@ -587,14 +615,15 @@ fn main(
     let out = &path_bboxes[path_ix];
     // Style stream layout (words): 0 flags, 1 line width, 2 draw flags, 3 miter limit,
     // 4 arc detail scale, 5 antialiased coverage adjustment, 6..9 interest rect.
-    let style_flags = scene[config.style_base + style_ix];
-    let style_draw_flags = scene[config.style_base + style_ix + 2u];
-    let coverage_data = bitcast<f32>(scene[config.style_base + style_ix + 5u]);
+    let style_flags = scene[style_base + style_ix];
+    let style_draw_flags = scene[style_base + style_ix + 2u];
+    let coverage_data = bitcast<f32>(scene[style_base + style_ix + 5u]);
+    // The interest rectangle is in data space, like the lines, so it moves into target space too.
     let style_interest = vec4<f32>(
-        bitcast<f32>(scene[config.style_base + style_ix + 6u]),
-        bitcast<f32>(scene[config.style_base + style_ix + 7u]),
-        bitcast<f32>(scene[config.style_base + style_ix + 8u]),
-        bitcast<f32>(scene[config.style_base + style_ix + 9u]));
+        bitcast<f32>(scene[style_base + style_ix + 6u]),
+        bitcast<f32>(scene[style_base + style_ix + 7u]),
+        bitcast<f32>(scene[style_base + style_ix + 8u]),
+        bitcast<f32>(scene[style_base + style_ix + 9u])) - vec4f(target_origin, target_origin);
     // The fill bit is always zero for strokes, which selects the non-zero fill rule.
     let fill_rule = select(DRAW_INFO_FLAGS_FILL_RULE_BIT, 0u, (style_flags & STYLE_FLAGS_FILL) == 0u);
     let draw_flags = style_draw_flags | fill_rule;
@@ -608,14 +637,14 @@ fn main(
     let seg_type = tag.tag_byte & PATH_TAG_SEG_TYPE;
     if seg_type != 0u {
         let is_stroke = (style_flags & STYLE_FLAGS_STYLE) != 0u;
-        let transform = read_transform(config.transform_base, trans_ix);
+        let transform = read_transform(transform_base, trans_ix);
         let pts = read_path_segment(tag, is_stroke);
 
         if is_stroke {
-            let linewidth = bitcast<f32>(scene[config.style_base + style_ix + 1u]);
+            let linewidth = bitcast<f32>(scene[style_base + style_ix + 1u]);
             let half_width = 0.5 * linewidth;
-            let miter_limit = bitcast<f32>(scene[config.style_base + style_ix + 3u]);
-            let arc_detail_scale = bitcast<f32>(scene[config.style_base + style_ix + 4u]);
+            let miter_limit = bitcast<f32>(scene[style_base + style_ix + 3u]);
+            let arc_detail_scale = bitcast<f32>(scene[style_base + style_ix + 4u]);
 
             let is_open = (tag.tag_byte & PATH_TAG_SEG_TYPE) != PATH_TAG_LINETO;
             let is_stroke_cap_marker = (tag.tag_byte & PATH_TAG_SUBPATH_END) != 0u;
@@ -672,9 +701,11 @@ fn main(
         } else {
             // Each final fill segment starts at one pair of path-data words. The same pair index
             // selects its profile tag. Add pathdata_base because a large scene can dispatch only a
-            // range of its path tags while all ranges still share one profile-tag table.
-            if config.profile_slots_base != 0u {
-                let slot = config.profile_slots_base + ((config.pathdata_base + tag.monoid.pathseg_offset) >> 1u);
+            // range of its path tags while all ranges still share one profile-tag table. With a
+            // segment table, the sum is the physical word and the slot base of the segment
+            // already removes half the start of its retained block.
+            if profile_slots_base != 0u {
+                let slot = profile_slots_base + ((pathdata_base + tag.monoid.pathseg_offset) >> 1u);
                 profile_tag = scene[slot];
             }
 

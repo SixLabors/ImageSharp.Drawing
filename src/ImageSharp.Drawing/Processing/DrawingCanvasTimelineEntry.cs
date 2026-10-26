@@ -4,68 +4,47 @@
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
-/// Identifies the kind of replay item stored in a drawing canvas timeline.
-/// </summary>
-internal enum DrawingCanvasTimelineEntryKind
-{
-    /// <summary>
-    /// A contiguous range of draw commands.
-    /// </summary>
-    CommandRange,
-
-    /// <summary>
-    /// An existing retained scene recorded through <see cref="DrawingCanvas.RenderScene"/>.
-    /// </summary>
-    Scene
-}
-
-/// <summary>
-/// Represents one ordered item in the canvas replay timeline.
+/// Represents one ordered command range in the canvas replay timeline.
 /// </summary>
 /// <remarks>
-/// Command ranges reference contiguous draw commands; they are not backend scene objects yet.
-/// Retained scene references point into a side buffer by index, keeping this type compact while
-/// preserving the exact order in which the canvas recorded replay work.
+/// Command ranges reference contiguous draw commands. They are not backend scene objects yet.
+/// Retained scenes recorded through <see cref="DrawingCanvas.RenderScene"/> are commands inside
+/// a range. This type therefore stays compact and keeps the exact order that the canvas recorded.
 /// </remarks>
 internal readonly struct DrawingCanvasTimelineEntry
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="DrawingCanvasTimelineEntry"/> struct.
     /// </summary>
-    /// <param name="kind">The kind of replay item.</param>
-    /// <param name="index">The command start index for command ranges, or the retained-scene buffer index for scene entries.</param>
-    /// <param name="count">The number of commands for command-range entries.</param>
+    /// <param name="index">The command start index.</param>
+    /// <param name="count">The number of commands.</param>
     /// <param name="hasLayers">Indicates whether the command range contains layer boundary commands.</param>
     /// <param name="hasApply">Indicates whether the command range contains apply barriers.</param>
     /// <param name="hasClipControls">Indicates whether the command range contains ordered clip-control commands.</param>
-    private DrawingCanvasTimelineEntry(
-        DrawingCanvasTimelineEntryKind kind,
+    /// <param name="hasScenes">Indicates whether the command range contains retained scene commands.</param>
+    public DrawingCanvasTimelineEntry(
         int index,
         int count,
         bool hasLayers,
         bool hasApply,
-        bool hasClipControls)
+        bool hasClipControls,
+        bool hasScenes)
     {
-        this.Kind = kind;
         this.Index = index;
         this.Count = count;
         this.HasLayers = hasLayers;
         this.HasApply = hasApply;
         this.HasClipControls = hasClipControls;
+        this.HasScenes = hasScenes;
     }
 
     /// <summary>
-    /// Gets the kind of replay item represented by this entry.
-    /// </summary>
-    public DrawingCanvasTimelineEntryKind Kind { get; }
-
-    /// <summary>
-    /// Gets the command start index for command ranges, or the retained-scene buffer index for scene entries.
+    /// Gets the command start index.
     /// </summary>
     public int Index { get; }
 
     /// <summary>
-    /// Gets the number of commands represented by a command-range entry.
+    /// Gets the number of commands represented by the entry.
     /// </summary>
     public int Count { get; }
 
@@ -85,27 +64,7 @@ internal readonly struct DrawingCanvasTimelineEntry
     public bool HasClipControls { get; }
 
     /// <summary>
-    /// Creates a command-range entry.
+    /// Gets a value indicating whether the command range contains retained scene commands.
     /// </summary>
-    /// <param name="startIndex">The first command index.</param>
-    /// <param name="count">The command count.</param>
-    /// <param name="hasLayers">Indicates whether the command range contains layer boundary commands.</param>
-    /// <param name="hasApply">Indicates whether the command range contains apply barriers.</param>
-    /// <param name="hasClipControls">Indicates whether the command range contains ordered clip-control commands.</param>
-    /// <returns>The command-range entry.</returns>
-    public static DrawingCanvasTimelineEntry CreateCommandRange(
-        int startIndex,
-        int count,
-        bool hasLayers,
-        bool hasApply,
-        bool hasClipControls)
-        => new(DrawingCanvasTimelineEntryKind.CommandRange, startIndex, count, hasLayers, hasApply, hasClipControls);
-
-    /// <summary>
-    /// Creates an entry for an existing retained scene recorded through <see cref="DrawingCanvas.RenderScene"/>.
-    /// </summary>
-    /// <param name="index">The retained-scene reference index.</param>
-    /// <returns>The retained-scene entry.</returns>
-    public static DrawingCanvasTimelineEntry CreateScene(int index)
-        => new(DrawingCanvasTimelineEntryKind.Scene, index, 0, false, false, false);
+    public bool HasScenes { get; }
 }

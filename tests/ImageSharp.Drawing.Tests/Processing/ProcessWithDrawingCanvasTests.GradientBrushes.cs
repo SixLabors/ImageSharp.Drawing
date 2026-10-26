@@ -296,6 +296,44 @@ public partial class ProcessWithDrawingCanvasTests
         Assert.NotEqual(upright[250, 150], skewed[250, 150]);
     }
 
+    [Theory]
+    [WithBlankImage(300, 10, PixelTypes.Rgba32, GradientRepetitionMode.Repeat)]
+    [WithBlankImage(300, 10, PixelTypes.Rgba32, GradientRepetitionMode.Reflect)]
+    public void FillLinearGradientBrushRepeatsBeforeTheStartPoint<TPixel>(
+        TestImageProvider<TPixel> provider,
+        GradientRepetitionMode repetitionMode)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        // The axis runs from x = 100 to x = 200, so columns 0 to 99 lie before the start point.
+        LinearGradientBrush brush = new(
+            new PointF(100, 0),
+            new PointF(200, 0),
+            repetitionMode,
+            new ColorStop(0, Color.Red),
+            new ColorStop(1, Color.Blue));
+
+        using Image<TPixel> image = provider.GetImage();
+        image.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
+        image.DebugSave(provider, $"{repetitionMode}", appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+
+        // Repeat gives columns 0 to 99 the colors of the first period, columns 100 to 199. Reflect
+        // mirrors the first period about the start point. Neither mode pads with the first stop.
+        using Image<TPixel> beforeStart = image.Clone(ctx => ctx.Crop(new Rectangle(0, 0, 100, 10)));
+        using Image<TPixel> firstPeriod = image.Clone(ctx => ctx.Crop(new Rectangle(100, 0, 100, 10)));
+        if (repetitionMode == GradientRepetitionMode.Reflect)
+        {
+            firstPeriod.Mutate(ctx => ctx.Flip(FlipMode.Horizontal));
+        }
+
+        LinearGradientTolerantComparer.VerifySimilarity(firstPeriod, beforeStart);
+        image.CompareToReferenceOutput(
+            LinearGradientTolerantComparer,
+            provider,
+            $"{repetitionMode}",
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
+    }
+
     [Fact]
     public void EllipticGradientBrush_Transform_ComposesTheGradientTransform()
     {

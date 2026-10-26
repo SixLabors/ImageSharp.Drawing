@@ -25,6 +25,8 @@
 #import config
 #import drawtag
 #import tile
+#import blend
+#import ptcl
 
 // Scene configuration: target dimensions, tile counts, and the chunk window.
 @group(0) @binding(0)
@@ -33,9 +35,6 @@ var<uniform> config: Config;
 // Tile-relative line segments referenced by CMD_FILL commands.
 @group(0) @binding(1)
 var<storage> segments: array<Segment>;
-
-#import blend
-#import ptcl
 
 // Width in texels of each gradient ramp row.
 const GRADIENT_WIDTH = 512;
@@ -83,6 +82,18 @@ var<storage> scene_data: array<u32>;
 // the exact half-pixel crossing halo.
 @group(0) @binding(10)
 var<storage> path_tiles: array<Tile>;
+
+// Word offset of the profile record table of the current fill. main sets the scene table.
+// CMD_PROFILE_TABLE sets the table of the scene segment of the next fill. Only aliased fills read
+// it. With a segment table, coarse writes a CMD_PROFILE_TABLE before every aliased fill, so a fill
+// never reads a table that belongs to another segment.
+var<private> fill_profile_records: u32;
+
+// The position of the target in data coordinates, unpacked from config.target_origin. Coverage
+// is in target space, because path_lowering moved the lines. Brushes and profile records are in
+// data space, so their sample positions add this value. It is zero for the root target, and the
+// layer position for a scoped layer target.
+var<private> data_origin: vec2<f32>;
 
 // Decodes a CMD_FILL payload: packed segment-count/fill-rule word, segment
 // base index, backdrop winding, coverage data, and the raster interest
@@ -334,23 +345,22 @@ const EXTEND_REPEAT: u32 = 1u;
 const EXTEND_REFLECT: u32 = 2u;
 const EXTEND_DECAL: u32 = 3u;
 // Maps a gradient parameter t into [0, 1] according to the extend mode.
-// Negative-t handling deliberately matches the CPU gradient brushes; see the
-// per-case notes.
+// Repeat and reflect wrap in both directions, before the start point and after
+// the end point, matching the CPU gradient brushes.
 fn extend_mode_normalized(t: f32, mode: u32) -> f32 {
     switch mode {
         case EXTEND_PAD: {
             return clamp(t, 0.0, 1.0);
         }
         case EXTEND_REPEAT: {
-            // The CPU gradient brushes do not wrap values before the first stop.
-            // They hold the first stop for t < 0 and only repeat for t >= 0.
-            return select(fract(t), 0.0, t < 0.0);
+            // fract(t) is t - floor(t), which is in [0, 1) for negative t as well.
+            return fract(t);
         }
         case EXTEND_REFLECT: {
-            // Likewise, CPU reflection clamps negative values to the first stop
-            // and only reflects once the parameter moves forward beyond 0.
-            let clamped = max(t, 0.0);
-            return abs(clamped - 2.0 * round(0.5 * clamped));
+            // t - 2 * round(t / 2) is the signed distance to the nearest even
+            // integer, in [-1, 1]. Its magnitude is a triangle wave that is
+            // symmetric about 0, so negative t reflects like positive t.
+            return abs(t - 2.0 * round(0.5 * t));
         }
         case EXTEND_DECAL, default: {
             // DontFill contributes no color outside the finite gradient interval. A negative
@@ -587,13 +597,13 @@ const PIXELS_PER_THREAD = 4u;
 fn profile_is_stub(x_axis: bool, a: u32, b: u32, centre_px: f32, span_px: f32) -> bool {
     // A sentinel identifier or an absent record table means the interval cannot be classified as
     // a terminating tip. Keep its midpoint pixel.
-    if a == PROFILE_ID_SENTINEL || b == PROFILE_ID_SENTINEL || config.profile_records_base == 0u {
+    if a == PROFILE_ID_SENTINEL || b == PROFILE_ID_SENTINEL || fill_profile_records == 0u {
         return false;
     }
 
     // The record region starts with the X and Y counts. Each following record has three words:
     // minimum, maximum, and adjacency link.
-    let records = config.profile_records_base;
+    let records = fill_profile_records;
     let x_count = scene_data[records];
     let y_count = scene_data[records + 1u];
     var base = records + 2u;
@@ -964,7 +974,7 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
             let midpoint_pixel = ((interval_start_fixed >> 1) + (position_fixed >> 1)) >> 8;
             let local = midpoint_pixel - i32(xy.x);
             if local >= 0 && local < i32(PIXELS_PER_THREAD) && !lit[u32(local)]
-                && !profile_is_stub(false, enter_id, packed & PROFILE_ID_MASK, global_xy.y + 0.5, position - interval_start) {
+                && !profile_is_stub(false, enter_id, packed & PROFILE_ID_MASK, global_xy.y + data_origin.y + 0.5, position - interval_start) {
                 lit[u32(local)] = true;
             }
         }
@@ -1019,7 +1029,7 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
             let position_fixed = i32(round(position * 256.0));
             let midpoint_row = ((interval_start_fixed >> 1) + (position_fixed >> 1)) >> 8;
             if midpoint_row == i32(xy.y)
-                && !profile_is_stub(true, enter_id, packed & PROFILE_ID_MASK, global_xy.x + f32(i) + 0.5, position - interval_start) {
+                && !profile_is_stub(true, enter_id, packed & PROFILE_ID_MASK, global_xy.x + data_origin.x + f32(i) + 0.5, position - interval_start) {
                 lit[i] = true;
             }
         }
@@ -1041,6 +1051,19 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
     *result = area;
 }
 
+// Fixed-point units for one full pixel of area in fill_path. 2^18 units keep each rounded
+// contribution within 2^-19 of its f32 value, far below one 8-bit or binary16 coverage step,
+// and an i32 sum holds +-8192 full pixels of contributions.
+const AREA_FIXED_SCALE: f32 = 262144.0;
+
+// Adding 1.5 * 2^23 to an f32 whose magnitude is below 2^22 gives a sum in [2^23, 2^24), where
+// one unit in the last place is 1. The add therefore rounds the value to the nearest integer
+// (ties to even). That integer is the bit pattern of the sum minus the bit pattern of the
+// constant. Both scaled contributions stay within +-2^18, so the identity holds. fma applies
+// the scale and the rounding in one operation, with no round or float-to-integer conversion.
+const AREA_ROUND_BIAS: f32 = 12582912.0;
+const AREA_ROUND_BIAS_BITS: u32 = 0x4b400000u;
+
 // Computes per-pixel coverage for a CMD_FILL using analytic area
 // anti-aliasing. Signed winding is accumulated from the backdrop and every
 // segment in the tile, the fill rule is applied, and coverage outside the
@@ -1060,11 +1083,23 @@ fn fill_path(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result: ptr<fun
         return;
     }
 
+    // path_count gives each segment its slot in the tile with atomicAdd, so the segment order
+    // changes from one dispatch to the next. An f32 sum of the contributions depends on that
+    // order, and a pixel with no coverage can then get exact 0 in one frame and a residue such
+    // as 1e-8 in the next. Each contribution is therefore rounded to fixed point first. The
+    // rounding of one contribution does not depend on the order, and integer addition is
+    // associative, so the sum is the same in every dispatch.
+    //
+    // area_bits holds the biased bit patterns of the per-pixel contributions. shared_fixed holds
+    // what is the same for every pixel of this thread: the y_edge winding of each segment and
+    // minus one bias pattern for each biased contribution. The sums use u32 so that they wrap.
+    // The final two's-complement value is exact because the true sum is far inside i32.
     var area: array<f32, PIXELS_PER_THREAD>;
-    let backdrop_f = f32(fill.backdrop);
+    var area_bits: array<u32, PIXELS_PER_THREAD>;
     for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
-        area[i] = backdrop_f;
+        area_bits[i] = 0u;
     }
+    var shared_fixed = 0u;
     for (var i = 0u; i < n_segs; i++) {
         let seg_off = fill.seg_data + i;
         let segment = segments[seg_off];
@@ -1088,6 +1123,9 @@ fn fill_path(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result: ptr<fun
             let x1 = startx + t1 * delta.x;
             let xmin0 = min(x0, x1);
             let xmax0 = max(x0, x1);
+            // The fixed-point scale is applied once for each segment, not for each pixel.
+            let dy_fixed = dy * AREA_FIXED_SCALE;
+            shared_fixed -= AREA_ROUND_BIAS_BITS;
             for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
                 let i_f = f32(i);
                 let xmin = min(xmin0 - i_f, 1.0) - 1.0e-6;
@@ -1096,14 +1134,19 @@ fn fill_path(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result: ptr<fun
                 let c = max(b, 0.0);
                 let d = max(xmin, 0.0);
                 let a = (b + 0.5 * (d * d - c * c) - xmin) / (xmax - xmin);
-                area[i] += a * dy;
+                area_bits[i] += bitcast<u32>(fma(a, dy_fixed, AREA_ROUND_BIAS));
             }
         }
-        // Winding contribution from segments crossing the tile's left edge.
+        // Winding contribution from segments crossing the tile's left edge. It is the same for
+        // every pixel of this thread.
         let y_edge = sign(delta.x) * clamp(xy.y - segment.y_edge + 1.0, 0.0, 1.0);
-        for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
-            area[i] += y_edge;
-        }
+        shared_fixed += bitcast<u32>(fma(y_edge, AREA_FIXED_SCALE, AREA_ROUND_BIAS)) - AREA_ROUND_BIAS_BITS;
+    }
+    // The backdrop is an integer winding, so it is added after the fixed-point sum.
+    let backdrop_f = f32(fill.backdrop);
+    for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
+        let area_fixed = bitcast<i32>(area_bits[i] + shared_fixed);
+        area[i] = backdrop_f + f32(area_fixed) * (1.0 / AREA_FIXED_SCALE);
     }
     if even_odd {
         // even-odd winding rule
@@ -1156,12 +1199,26 @@ fn main(
     if ptcl[0] == ~0u {
         // An earlier stage has failed, don't try to render.
         // We use ptcl[0] for this so we don't use up a binding for bump.
+        // The output texture can hold texels of an earlier flush. A deferred presentation flush
+        // copies it to the target before the failure is known. This path therefore writes the raw
+        // backdrop texels, so the copy leaves the target pixels unchanged.
+        let failed_xy = vec2<u32>(global_id.x * PIXELS_PER_THREAD, config.chunk_tile_y_start * TILE_HEIGHT + global_id.y);
+        for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
+            let coords = failed_xy + vec2(i, 0u);
+            if coords.x < config.target_width && coords.y < config.target_height {
+                textureStore(output, vec2<i32>(coords), textureLoad(backdrop_texture, vec2<i32>(coords), 0));
+            }
+        }
         return;
     }
     let tile_ix = wg_id.y * config.width_in_tiles + wg_id.x;
+    fill_profile_records = config.profile_records_base;
+    data_origin = vec2<f32>(f32(config.target_origin & 0xffffu), f32(config.target_origin >> 16u));
     // Full-target pixel position; y is offset by the chunk's starting tile row
     // so oversized scenes render correctly in tile-row windows.
     let xy = vec2(f32(global_id.x * PIXELS_PER_THREAD), f32(config.chunk_tile_y_start * TILE_HEIGHT + global_id.y));
+    // The same pixel position in data space, where the brush payloads are defined.
+    let paint_xy = xy + data_origin;
     let xy_uint = vec2<u32>(xy);
     let local_xy = vec2(f32(local_id.x * PIXELS_PER_THREAD), f32(local_id.y));
     var rgba: array<vec4<f32>, PIXELS_PER_THREAD>;
@@ -1196,9 +1253,15 @@ fn main(
         }
         switch tag {
             case CMD_FILL: {
+                // This is the only fill_path call site. Each call site inlines a copy of the fill
+                // rasterizer, so one call site keeps the shader small and fast.
                 let fill = read_fill(cmd_ix);
                 fill_path(fill, local_xy, xy, &area);
                 cmd_ix += 6u;
+            }
+            case CMD_PROFILE_TABLE: {
+                fill_profile_records = ptcl[cmd_ix + 1u];
+                cmd_ix += 2u;
             }
             case CMD_SOLID: {
                 // Full coverage, restricted to the command's raster interest
@@ -1344,7 +1407,7 @@ fn main(
                 // The draw-flags word sits immediately before the brush data
                 // in the info stream (same layout for all gradient commands).
                 let draw_flags = info[ptcl[cmd_ix + 2u] - 1u];
-                let d = lin.line_x * (xy.x + 0.5) + lin.line_y * (xy.y + 0.5) + lin.line_c;
+                let d = lin.line_x * (paint_xy.x + 0.5) + lin.line_y * (paint_xy.y + 0.5) + lin.line_c;
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
                     paint_coverage[i] = area[i];
                     if area[i] != 0.0 {
@@ -1382,7 +1445,7 @@ fn main(
                 let less_scale = select(1.0, -1.0, is_swapped || (1.0 - focal_x) < 0.0);
                 let t_sign = sign(1.0 - focal_x);
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
-                    let my_xy = vec2(xy.x + f32(i) + 0.5, xy.y + 0.5);
+                    let my_xy = vec2(paint_xy.x + f32(i) + 0.5, paint_xy.y + 0.5);
                     let local_xy = rad.matrx.xy * my_xy.x + rad.matrx.zw * my_xy.y + rad.xlat;
                     let x = local_xy.x;
                     let y = local_xy.y;
@@ -1433,7 +1496,7 @@ fn main(
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
                     paint_coverage[i] = area[i];
                     if area[i] != 0.0 {
-                        let my_xy = vec2(xy.x + f32(i) + 0.5, xy.y + 0.5);
+                        let my_xy = vec2(paint_xy.x + f32(i) + 0.5, paint_xy.y + 0.5);
                         if elliptic.kind == ELLIPTIC_GRAD_KIND_NORMAL {
                             let local_xy = elliptic.matrx.xy * my_xy.x + elliptic.matrx.zw * my_xy.y + elliptic.xlat;
                             let radius = length(local_xy);
@@ -1484,7 +1547,7 @@ fn main(
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
                     paint_coverage[i] = area[i];
                     if area[i] != 0.0 {
-                        let my_xy = vec2(xy.x + f32(i) + 0.5, xy.y + 0.5);
+                        let my_xy = vec2(paint_xy.x + f32(i) + 0.5, paint_xy.y + 0.5);
                         let local_xy = sweep.matrx.xy * my_xy.x + sweep.matrx.zw * my_xy.y + sweep.xlat;
                         let x = local_xy.x;
                         let y = local_xy.y;
@@ -1532,7 +1595,7 @@ fn main(
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
                     paint_coverage[i] = area[i];
                     if area[i] != 0.0 {
-                        let my_xy = vec2(xy.x + f32(i) + 0.5, xy.y + 0.5);
+                        let my_xy = vec2(paint_xy.x + f32(i) + 0.5, paint_xy.y + 0.5);
                         paint_color[i] = evaluate_path_gradient(path_grad, my_xy);
                     }
                 }
@@ -1547,7 +1610,7 @@ fn main(
                     paint_coverage[i] = 0.0;
                     // We only need to load from the textures if the value will be used.
                     if area[i] != 0.0 {
-                        let my_xy = vec2(xy.x + f32(i), xy.y);
+                        let my_xy = vec2(paint_xy.x + f32(i), paint_xy.y);
                         var atlas_uv = image.matrx.xy * my_xy.x + image.matrx.zw * my_xy.y + image.xlat;
                         let atlas_ix = image_extend_mode_i32(atlas_uv.x, image.x_extend_mode, i32(image.extents.x));
                         let atlas_iy = image_extend_mode_i32(atlas_uv.y, image.y_extend_mode, i32(image.extents.y));

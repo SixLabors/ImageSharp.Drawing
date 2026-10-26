@@ -149,8 +149,14 @@ internal static unsafe class WebGPUSceneResources
 
         // The retained solid color words and ramp texels specialize to the target pixel type
         // before any upload below reads them, so the snapped values ride the ordinary scene
-        // upload and ramp texture write with no per-word GPU patching.
+        // upload and ramp texture write with no per-word GPU patching. A retained scene read in
+        // place has its own words and texels, which specialize the same way.
         scene.SpecializeBrushColors<TPixel>();
+        ReadOnlySpan<WebGPUSceneBlock> blocks = scene.Blocks;
+        for (int i = 0; i < blocks.Length; i++)
+        {
+            blocks[i].Scene.SpecializeBrushColors<TPixel>();
+        }
 
         // Textures are scene-dependent and not pooled.
         if (!TryCreateGradientTexture(flushContext, scene, out WGPUTextureViewImpl* gradientTextureView, out error))
@@ -174,11 +180,11 @@ internal static unsafe class WebGPUSceneResources
         // info/bin-data buffer is laid out as [info | brush data | bin data | bin headers],
         // matching config.bin_data_start and config.brush_data_base in Shared/config.wgsl.
         nuint infoBinDataByteLength = checked(
-            GetBindingByteLength<uint>(infoWordCount + scene.PathGradientDataWordCount) +
+            GetBindingByteLength<uint>(infoWordCount + scene.PathGradientDataWordCount + scene.BlockBrushDataWordCount) +
             config.BufferSizes.BinData.ByteLength +
             config.BufferSizes.BinHeaders.ByteLength);
 
-        nuint sceneByteLength = GetBindingByteLength<uint>(scene.SceneWordCount);
+        nuint sceneByteLength = GetBindingByteLength<uint>(scene.SceneBufferWordCount);
 
         // Reuse arena buffers if all capacities fit this scene.
         if (arena is not null && arena.CanReuse(flushContext, config.BufferSizes, infoBinDataByteLength, sceneByteLength))
@@ -193,7 +199,8 @@ internal static unsafe class WebGPUSceneResources
             // re-uploads only the mutated span. Queue ordering already ran the resident upload
             // before any command submitted afterwards can read the buffer.
             ReadOnlySpan<uint> sceneData = scene.SceneData.Span;
-            if (!ReferenceEquals(arena.UploadedScene, scene))
+            bool sceneChanged = !ReferenceEquals(arena.UploadedScene, scene);
+            if (sceneChanged)
             {
                 fixed (uint* sceneDataPtr = sceneData)
                 {
@@ -217,6 +224,14 @@ internal static unsafe class WebGPUSceneResources
                         (nuint)(mutatedLength * sizeof(uint)));
                 }
             }
+
+            // A new root scene overwrites the words where earlier blocks were resident.
+            arena.UploadedBlockVersions = UploadSceneBlocks(
+                flushContext,
+                reuseQueue,
+                arena.SceneBuffer,
+                scene,
+                sceneChanged ? null : arena.UploadedBlockVersions);
 
             GpuSceneConfig header = range.HasValue
                 ? CreateHeader(scene, range.Value, config, baseColor)
@@ -382,6 +397,16 @@ internal static unsafe class WebGPUSceneResources
             throw;
         }
 
+        using (WebGPUHandle.HandleReference missQueueReference = flushContext.QueueHandle.AcquireReference())
+        {
+            arena.UploadedBlockVersions = UploadSceneBlocks(
+                flushContext,
+                (WGPUQueueImpl*)missQueueReference.Handle,
+                sceneBuffer,
+                scene,
+                null);
+        }
+
         arena.UploadedScene = scene;
         arena.UploadedSceneVersion = scene.SceneDataVersion;
         arena.UploadedBrushInfoWordCount = infoWordCount;
@@ -410,6 +435,57 @@ internal static unsafe class WebGPUSceneResources
 
         error = null;
         return true;
+    }
+
+    /// <summary>
+    /// Uploads the blocks of the retained scenes that a scene reads in place, after its own data in
+    /// the scene buffer. A block whose content is already resident is not uploaded again.
+    /// </summary>
+    /// <param name="flushContext">The active WebGPU flush context.</param>
+    /// <param name="queue">The queue that receives the writes.</param>
+    /// <param name="sceneBuffer">The scene buffer.</param>
+    /// <param name="scene">The root encoded scene.</param>
+    /// <param name="residentVersions">The resident block versions of this root scene, or <see langword="null"/> when no block is resident.</param>
+    /// <returns>The resident block versions after the upload, or <see langword="null"/> when the scene has no blocks.</returns>
+    private static int[]? UploadSceneBlocks(
+        WebGPUFlushContext flushContext,
+        WGPUQueueImpl* queue,
+        WGPUBufferImpl* sceneBuffer,
+        WebGPUEncodedScene scene,
+        int[]? residentVersions)
+    {
+        ReadOnlySpan<WebGPUSceneBlock> blocks = scene.Blocks;
+        if (blocks.IsEmpty)
+        {
+            return null;
+        }
+
+        int[] versions = residentVersions ?? new int[blocks.Length];
+        for (int i = 0; i < blocks.Length; i++)
+        {
+            WebGPUEncodedScene blockScene = blocks[i].Scene;
+
+            // A block is uploaded one time, then again only when its tracked words change, for
+            // example after a different pixel type specializes its colors. This is the same rule
+            // as the residency of the root scene data.
+            if (residentVersions is null || residentVersions[i] != blockScene.SceneDataVersion)
+            {
+                ReadOnlySpan<uint> blockData = blockScene.SceneData.Span;
+                fixed (uint* blockDataPtr = blockData)
+                {
+                    flushContext.Api.QueueWriteBuffer(
+                        queue,
+                        sceneBuffer,
+                        checked((ulong)blocks[i].SceneWordOffset * sizeof(uint)),
+                        blockDataPtr,
+                        (nuint)(blockData.Length * sizeof(uint)));
+                }
+            }
+
+            versions[i] = blockScene.SceneDataVersion;
+        }
+
+        return versions;
     }
 
     /// <summary>
@@ -492,7 +568,10 @@ internal static unsafe class WebGPUSceneResources
             config.BumpSizes.BlendSpill,
             config.BumpSizes.Ptcl,
             scene.ProfileSlotsBase,
-            scene.ProfileRecordsBase);
+            scene.ProfileRecordsBase,
+            (uint)scene.SegmentCount,
+            (uint)scene.SegmentTableBase,
+            Point.Empty);
     }
 
     /// <summary>
@@ -511,14 +590,15 @@ internal static unsafe class WebGPUSceneResources
 
         // The combined info/bin-data buffer is [info | path-gradient | bin data | bin headers],
         // so bin data starts after both ranges and the gradient data starts after the info
-        // words. The ptcl_dyn_start value (sixth layout argument) marks where the
+        // words. The brush data of resident blocks, when the scene has them, follows the scene's
+        // own brush data. The ptcl_dyn_start value (sixth layout argument) marks where the
         // bump-allocated ptcl tail begins: after the fixed 64-word
         // (WebGPUSceneDispatch.PtclInitialAlloc) reservation for every tile slot.
         GpuSceneLayout layout = new(
             checked((uint)range.DrawTagCount),
             checked((uint)range.PathCount),
             checked((uint)range.ClipCount),
-            checked((uint)(range.InfoWordCount + scene.PathGradientDataWordCount)),
+            checked((uint)(range.InfoWordCount + scene.PathGradientDataWordCount + scene.BlockBrushDataWordCount)),
             checked((uint)range.InfoWordCount),
             checked((uint)tileCountX * config.ChunkWindow.TileBufferHeight * 64U),
             checked(scene.Layout.PathTagBase + (uint)range.PathTagWordStart),
@@ -527,6 +607,23 @@ internal static unsafe class WebGPUSceneResources
             checked(scene.Layout.DrawDataBase + (uint)range.DrawDataWordStart),
             checked(scene.Layout.TransformBase + (uint)range.TransformWordStart),
             checked(scene.Layout.StyleBase + (uint)range.StyleWordStart));
+
+        // A whole-scene range reads the table of the whole scene: the table maps the virtual
+        // streams of the whole scene, and the starts of such a range are zero. A range of an
+        // ordered scene that reads retained scenes reads its own table, with virtual starts
+        // relative to the range starts.
+        uint segmentCount = 0;
+        uint segmentTableBase = 0;
+        if (range.IsWholeScene)
+        {
+            segmentCount = (uint)scene.SegmentCount;
+            segmentTableBase = (uint)scene.SegmentTableBase;
+        }
+        else if (range.Segments is WebGPUSceneRangeSegments segments)
+        {
+            segmentCount = (uint)segments.SegmentCount;
+            segmentTableBase = checked((uint)(scene.SegmentTableBase + (segments.SegmentEntryStart * WebGPUSceneEncoder.SceneSegmentEntryWordCount)));
+        }
 
         return new GpuSceneConfig(
             checked((uint)tileCountX),
@@ -546,7 +643,10 @@ internal static unsafe class WebGPUSceneResources
             config.BumpSizes.BlendSpill,
             config.BumpSizes.Ptcl,
             scene.ProfileSlotsBase,
-            scene.ProfileRecordsBase);
+            scene.ProfileRecordsBase,
+            segmentCount,
+            segmentTableBase,
+            range.Origin);
     }
 
     /// <summary>
@@ -610,14 +710,19 @@ internal static unsafe class WebGPUSceneResources
             return true;
         }
 
+        // The images of the resident blocks follow the images of the scene or range, at the block
+        // offsets that its segment table uses. Only a dispatch that reads retained scenes in place
+        // reads the blocks.
+        bool readsSegmentTable = !range.HasValue || range.Value.IsWholeScene || range.Value.Segments is not null;
+        ReadOnlySpan<WebGPUSceneBlock> blocks = readsSegmentTable ? scene.Blocks : [];
         int imageCount = 0;
-        foreach (GpuImageDescriptor descriptor in scene.Images)
+        int atlasWidth = 1;
+        int atlasHeight = 0;
+        MeasureSceneImages(scene, range, ref imageCount, ref atlasWidth, ref atlasHeight);
+        int blockAtlasYBase = atlasHeight;
+        for (int i = 0; i < blocks.Length; i++)
         {
-            if (IsImageDescriptorInRange(descriptor, range) &&
-                descriptor.Source.Brush is ImageBrush or PatternBrush)
-            {
-                imageCount++;
-            }
+            MeasureSceneImages(blocks[i].Scene, null, ref imageCount, ref atlasWidth, ref atlasHeight);
         }
 
         if (imageCount == 0)
@@ -630,32 +735,93 @@ internal static unsafe class WebGPUSceneResources
             return TryCreateSinglePixelSampledTexture(flushContext, textureFormat, transparentPixel, out _, out textureView, out error);
         }
 
-        int atlasWidth = 1;
-        int atlasHeight = 0;
-        foreach (GpuImageDescriptor descriptor in scene.Images)
-        {
-            if (!IsImageDescriptorInRange(descriptor, range) ||
-                descriptor.Source.Brush is not (ImageBrush or PatternBrush))
-            {
-                continue;
-            }
-
-            GetImageEntrySize(descriptor.Source.Brush, out int width, out int height);
-            atlasWidth = Math.Max(atlasWidth, width);
-            atlasHeight += height;
-        }
-
         if (!TryCreateTexture(flushContext, textureFormat, atlasWidth, atlasHeight, "image atlas", out WGPUTextureImpl* texture, out textureView, out error))
         {
             return false;
         }
 
         TPixel[] rowBuffer = GC.AllocateUninitializedArray<TPixel>(atlasWidth);
-        int atlasY = 0;
+        if (!TryUploadSceneImages(flushContext, texture, scene, range, 0, rowBuffer, pixelNumericEncoding, out error))
+        {
+            return false;
+        }
+
+        for (int i = 0; i < blocks.Length; i++)
+        {
+            int atlasYBase = blockAtlasYBase + blocks[i].AtlasYOffset;
+            if (!TryUploadSceneImages(flushContext, texture, blocks[i].Scene, null, atlasYBase, rowBuffer, pixelNumericEncoding, out error))
+            {
+                return false;
+            }
+        }
+
+        error = null;
+        return true;
+    }
+
+    /// <summary>
+    /// Adds the sampled image and pattern brush entries of one scene to the atlas measurements.
+    /// </summary>
+    /// <param name="scene">The encoded scene containing image descriptors.</param>
+    /// <param name="range">The scene range to stage, or <see langword="null"/> for the full scene.</param>
+    /// <param name="imageCount">The running entry count.</param>
+    /// <param name="atlasWidth">The running atlas width: the widest entry.</param>
+    /// <param name="atlasHeight">The running atlas height: the sum of the entry heights.</param>
+    private static void MeasureSceneImages(
+        WebGPUEncodedScene scene,
+        WebGPUSceneRange? range,
+        ref int imageCount,
+        ref int atlasWidth,
+        ref int atlasHeight)
+    {
         foreach (GpuImageDescriptor descriptor in scene.Images)
         {
-            if (!IsImageDescriptorInRange(descriptor, range) ||
-                descriptor.Source.Brush is not (ImageBrush or PatternBrush))
+            if (!TryGetAtlasBrush(descriptor, range, out Brush? brush))
+            {
+                continue;
+            }
+
+            GetImageEntrySize(brush, out int width, out int height);
+            imageCount++;
+            atlasWidth = Math.Max(atlasWidth, width);
+            atlasHeight += height;
+        }
+    }
+
+    /// <summary>
+    /// Uploads the sampled image and pattern brush entries of one scene into the atlas, from row
+    /// <paramref name="atlasYBase"/>, and patches each image's draw-data words.
+    /// </summary>
+    /// <remarks>
+    /// The patched atlas row is relative to <paramref name="atlasYBase"/>. A retained scene read in
+    /// place therefore keeps the words that it has when it renders alone, and draw_leaf.wgsl adds
+    /// the row base of its segment.
+    /// </remarks>
+    /// <typeparam name="TPixel">The pixel format of the target and of any sampled image brushes.</typeparam>
+    /// <param name="flushContext">The active WebGPU flush context.</param>
+    /// <param name="texture">The atlas texture.</param>
+    /// <param name="scene">The encoded scene containing image descriptors.</param>
+    /// <param name="range">The scene range to stage, or <see langword="null"/> for the full scene.</param>
+    /// <param name="atlasYBase">The first atlas row of the scene.</param>
+    /// <param name="rowBuffer">The scratch row buffer used to convert pattern colors.</param>
+    /// <param name="pixelNumericEncoding">The numeric encoding of the atlas texels.</param>
+    /// <param name="error">The error message when an upload fails.</param>
+    /// <returns><see langword="true"/> when every entry was uploaded.</returns>
+    private static bool TryUploadSceneImages<TPixel>(
+        WebGPUFlushContext flushContext,
+        WGPUTextureImpl* texture,
+        WebGPUEncodedScene scene,
+        WebGPUSceneRange? range,
+        int atlasYBase,
+        TPixel[] rowBuffer,
+        WebGPUTargetNumericEncoding pixelNumericEncoding,
+        out string? error)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        int atlasY = atlasYBase;
+        foreach (GpuImageDescriptor descriptor in scene.Images)
+        {
+            if (!TryGetAtlasBrush(descriptor, range, out Brush? brush))
             {
                 continue;
             }
@@ -663,7 +829,7 @@ internal static unsafe class WebGPUSceneResources
             if (!TryUploadImageEntry(
                 flushContext,
                 texture,
-                descriptor.Source.Brush,
+                brush,
                 atlasY,
                 rowBuffer,
                 out int entryWidth,
@@ -675,14 +841,14 @@ internal static unsafe class WebGPUSceneResources
 
             WrapMode wrapX = WrapMode.Repeat;
             WrapMode wrapY = WrapMode.Repeat;
-            if (descriptor.Source.Brush is ImageBrush imageBrush)
+            if (brush is ImageBrush imageBrush)
             {
                 wrapX = imageBrush.WrapX;
                 wrapY = imageBrush.WrapY;
             }
 
             int sceneIndex = (int)scene.Layout.DrawDataBase + descriptor.DrawDataWordOffset;
-            scene.SetSceneWord(sceneIndex, PackImageAtlasOffset(0, atlasY));
+            scene.SetSceneWord(sceneIndex, PackImageAtlasOffset(0, atlasY - atlasYBase));
             scene.SetSceneWord(sceneIndex + 1, PackImageExtents(entryWidth, entryHeight));
             scene.SetSceneWord(
                 sceneIndex + 2,
@@ -711,9 +877,12 @@ internal static unsafe class WebGPUSceneResources
             return true;
         }
 
+        // The draw-data count of a range that reads retained scenes is a joined total. Its own
+        // draw data, which holds its own images, is in its segments.
         WebGPUSceneRange value = range.Value;
+        int drawDataWordCount = value.Segments?.DrawDataWordCount ?? value.DrawDataWordCount;
         return descriptor.DrawDataWordOffset >= value.DrawDataWordStart &&
-            descriptor.DrawDataWordOffset < value.DrawDataWordStart + value.DrawDataWordCount;
+            descriptor.DrawDataWordOffset < value.DrawDataWordStart + drawDataWordCount;
     }
 
     /// <summary>
@@ -733,7 +902,10 @@ internal static unsafe class WebGPUSceneResources
         out WGPUTextureViewImpl* textureView,
         out string? error)
     {
-        if (scene.GradientRowCount == 0)
+        // The rows of the resident blocks follow the scene's own rows, at the row base that each
+        // block segment publishes.
+        int rowCount = scene.GradientRowCount + scene.BlockGradientRowCount;
+        if (rowCount == 0)
         {
             // Gradient rows contain associated binary16 components, for which physical zero is transparent.
             ulong transparentPixel = 0;
@@ -756,7 +928,7 @@ internal static unsafe class WebGPUSceneResources
                 WGPUTextureFormat.RGBA16Float,
                 (ulong)usage,
                 512,
-                (uint)scene.GradientRowCount,
+                (uint)rowCount,
                 out WGPUTextureImpl* texture,
                 out textureView,
                 out uint rentedWidth,
@@ -772,7 +944,7 @@ internal static unsafe class WebGPUSceneResources
                 dimension = WGPUTextureDimension._2D,
 
                 // 512 must match GRADIENT_WIDTH in fine.wgsl and the encoder's ramp width.
-                size = new WGPUExtent3D(512, (uint)scene.GradientRowCount, 1),
+                size = new WGPUExtent3D(512, (uint)rowCount, 1),
                 format = WGPUTextureFormat.RGBA16Float,
                 mipLevelCount = 1,
                 sampleCount = 1
@@ -810,7 +982,44 @@ internal static unsafe class WebGPUSceneResources
             }
 
             // Returned to the device pool with the flush so later flushes rent instead of recreating.
-            flushContext.TrackPooledTexture(texture, textureView, WGPUTextureFormat.RGBA16Float, (ulong)usage, 512, (uint)scene.GradientRowCount);
+            flushContext.TrackPooledTexture(texture, textureView, WGPUTextureFormat.RGBA16Float, (ulong)usage, 512, (uint)rowCount);
+        }
+
+        using (WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference())
+        {
+            WGPUQueueImpl* queue = (WGPUQueueImpl*)queueReference.Handle;
+            WriteGradientRows(flushContext, queue, texture, scene, 0);
+
+            ReadOnlySpan<WebGPUSceneBlock> blocks = scene.Blocks;
+            for (int i = 0; i < blocks.Length; i++)
+            {
+                WriteGradientRows(flushContext, queue, texture, blocks[i].Scene, blocks[i].GradientRowBase);
+            }
+        }
+
+        flushContext.CacheGradientTextureView(scene, textureView);
+        error = null;
+        return true;
+    }
+
+    /// <summary>
+    /// Writes the gradient-ramp rows of one scene into the gradient texture, from one row.
+    /// </summary>
+    /// <param name="flushContext">The active WebGPU flush context.</param>
+    /// <param name="queue">The queue that receives the write.</param>
+    /// <param name="texture">The gradient texture.</param>
+    /// <param name="scene">The encoded scene supplying the rows.</param>
+    /// <param name="firstRow">The first texture row of the scene.</param>
+    private static void WriteGradientRows(
+        WebGPUFlushContext flushContext,
+        WGPUQueueImpl* queue,
+        WGPUTextureImpl* texture,
+        WebGPUEncodedScene scene,
+        int firstRow)
+    {
+        if (scene.GradientRowCount == 0)
+        {
+            return;
         }
 
         WGPUTexelCopyBufferLayout layout = new()
@@ -824,26 +1033,63 @@ internal static unsafe class WebGPUSceneResources
         {
             texture = texture,
             mipLevel = 0,
-            origin = new WGPUOrigin3D(0, 0, 0),
+            origin = new WGPUOrigin3D(0, (uint)firstRow, 0),
             aspect = WGPUTextureAspect.All
         };
 
         fixed (uint* pixelPtr = scene.GradientPixels.Span)
         {
             WGPUExtent3D extent = new(512, (uint)scene.GradientRowCount, 1);
-            using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
             flushContext.Api.QueueWriteTexture(
-                (WGPUQueueImpl*)queueReference.Handle,
+                queue,
                 in destination,
                 pixelPtr,
                 (nuint)(scene.GradientPixels.Length * sizeof(uint)),
                 in layout,
                 in extent);
         }
+    }
 
-        flushContext.CacheGradientTextureView(scene, textureView);
-        error = null;
-        return true;
+    /// <summary>
+    /// Gets the image-atlas row count of the sampled brush entries of one scene or range.
+    /// </summary>
+    /// <remarks>
+    /// The atlas stacks these entries in one column, in descriptor order, the same as
+    /// <see cref="TryCreateImageAtlasTexture{TPixel}"/> lays out a scene or range.
+    /// </remarks>
+    /// <param name="images">The image descriptors of the scene.</param>
+    /// <param name="range">The scene range, or <see langword="null"/> for the full scene.</param>
+    /// <returns>The atlas row count.</returns>
+    public static int GetImageAtlasHeight(IReadOnlyList<GpuImageDescriptor> images, WebGPUSceneRange? range)
+    {
+        int height = 0;
+        for (int i = 0; i < images.Count; i++)
+        {
+            if (TryGetAtlasBrush(images[i], range, out Brush? brush))
+            {
+                GetImageEntrySize(brush, out _, out int entryHeight);
+                height += entryHeight;
+            }
+        }
+
+        return height;
+    }
+
+    /// <summary>
+    /// Gets the brush of an image descriptor that has an atlas entry in the staged scene or range.
+    /// </summary>
+    /// <remarks>
+    /// External textures are bound directly, so they have no atlas entry.
+    /// </remarks>
+    /// <param name="descriptor">The image descriptor.</param>
+    /// <param name="range">The scene range to stage, or <see langword="null"/> for the full scene.</param>
+    /// <param name="brush">Receives the sampled brush.</param>
+    /// <returns><see langword="true"/> when the descriptor has an atlas entry.</returns>
+    private static bool TryGetAtlasBrush(GpuImageDescriptor descriptor, WebGPUSceneRange? range, [NotNullWhen(true)] out Brush? brush)
+    {
+        brush = descriptor.Source.Brush;
+        return brush is ImageBrush or PatternBrush &&
+            IsImageDescriptorInRange(descriptor, range);
     }
 
     /// <summary>
@@ -1010,7 +1256,7 @@ internal static unsafe class WebGPUSceneResources
         where TPixel : unmanaged, IPixel<TPixel>
     {
         ReadOnlySpan<uint> brushData = scene.PathGradientData.Span;
-        nuint infoByteLength = checked((nuint)(infoWordCount + brushData.Length) * (nuint)Unsafe.SizeOf<uint>());
+        nuint infoByteLength = checked((nuint)(infoWordCount + brushData.Length + scene.BlockBrushDataWordCount) * (nuint)Unsafe.SizeOf<uint>());
         nuint totalByteLength = Math.Max(checked(infoByteLength + dynamicBinByteLength), minimumTotalByteLength);
         if (totalByteLength == 0)
         {
@@ -1032,6 +1278,7 @@ internal static unsafe class WebGPUSceneResources
     /// <summary>
     /// Writes auxiliary brush data immediately after the info region, at the
     /// word offset published as <c>config.brush_data_base</c> in Shared/config.wgsl.
+    /// The brush data of each resident block follows, at the base its segment publishes.
     /// </summary>
     /// <param name="flushContext">The active WebGPU flush context.</param>
     /// <param name="buffer">The combined info/bin-data buffer.</param>
@@ -1044,17 +1291,45 @@ internal static unsafe class WebGPUSceneResources
         WebGPUEncodedScene scene)
         where TPixel : unmanaged, IPixel<TPixel>
     {
+        using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
+        WGPUQueueImpl* queue = (WGPUQueueImpl*)queueReference.Handle;
+        UploadSceneBrushData<TPixel>(flushContext, queue, buffer, infoWordCount, scene);
+
+        // The segment tables place the brush data of the blocks after the info prefix and the
+        // brush data of the dispatch. The words are few, so they are written for every dispatch.
+        ReadOnlySpan<WebGPUSceneBlock> blocks = scene.Blocks;
+        int blockBrushDataBase = infoWordCount + scene.PathGradientDataWordCount;
+        for (int i = 0; i < blocks.Length; i++)
+        {
+            UploadSceneBrushData<TPixel>(flushContext, queue, buffer, blockBrushDataBase + blocks[i].BrushDataOffset, blocks[i].Scene);
+        }
+    }
+
+    /// <summary>
+    /// Writes the auxiliary brush data of one scene at one word offset of the combined info buffer.
+    /// </summary>
+    /// <param name="flushContext">The active WebGPU flush context.</param>
+    /// <param name="queue">The queue that receives the writes.</param>
+    /// <param name="buffer">The combined info/bin-data buffer.</param>
+    /// <param name="brushDataBase">The word offset of the brush data.</param>
+    /// <param name="scene">The encoded scene supplying static and target-specialized brush data.</param>
+    private static void UploadSceneBrushData<TPixel>(
+        WebGPUFlushContext flushContext,
+        WGPUQueueImpl* queue,
+        WGPUBufferImpl* buffer,
+        int brushDataBase,
+        WebGPUEncodedScene scene)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
         ReadOnlySpan<uint> brushData = scene.PathGradientData.Span;
         if (brushData.IsEmpty)
         {
             return;
         }
 
-        nuint offset = checked((nuint)infoWordCount * (nuint)Unsafe.SizeOf<uint>());
+        nuint offset = checked((nuint)brushDataBase * (nuint)Unsafe.SizeOf<uint>());
         nuint byteLength = checked((nuint)brushData.Length * (nuint)Unsafe.SizeOf<uint>());
 
-        using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
-        WGPUQueueImpl* queue = (WGPUQueueImpl*)queueReference.Handle;
         fixed (uint* dataPtr = brushData)
         {
             flushContext.Api.QueueWriteBuffer(queue, buffer, offset, dataPtr, byteLength);
@@ -1083,7 +1358,7 @@ internal static unsafe class WebGPUSceneResources
             payload[7] = BitConverter.SingleToUInt32Bits(target.W);
             payload[8] = BitConverter.SingleToUInt32Bits(descriptor.Threshold);
 
-            nuint payloadOffset = checked((nuint)(infoWordCount + descriptor.BrushDataWordOffset) * (nuint)Unsafe.SizeOf<uint>());
+            nuint payloadOffset = checked((nuint)(brushDataBase + descriptor.BrushDataWordOffset) * (nuint)Unsafe.SizeOf<uint>());
             fixed (uint* payloadPtr = payload)
             {
                 flushContext.Api.QueueWriteBuffer(queue, buffer, payloadOffset, payloadPtr, 9U * (nuint)Unsafe.SizeOf<uint>());
@@ -1803,6 +2078,16 @@ internal sealed unsafe class WebGPUSceneResourceArena
     public int UploadedSceneVersion { get; set; }
 
     /// <summary>
+    /// Gets or sets the <see cref="WebGPUEncodedScene.SceneDataVersion"/> of each resident block of
+    /// <see cref="UploadedScene"/>, by block index, or <see langword="null"/> when no block is resident.
+    /// </summary>
+    /// <remarks>
+    /// The blocks of an encoded scene never change, so the identity of <see cref="UploadedScene"/>
+    /// proves the block set and these versions prove the content of each block.
+    /// </remarks>
+    public int[]? UploadedBlockVersions { get; set; }
+
+    /// <summary>
     /// Gets or sets the info-word prefix length used by the resident brush upload. Brush words
     /// start immediately after this prefix, so a different prefix relocates them.
     /// </summary>
@@ -2434,6 +2719,9 @@ internal readonly struct GpuSceneConfig
     /// <param name="ptclSize">The PTCL buffer capacity in words.</param>
     /// <param name="profileSlotsBase">The word offset of the segment-to-profile table, or zero when absent.</param>
     /// <param name="profileRecordsBase">The word offset of the profile range and contour-link table, or zero when absent.</param>
+    /// <param name="segmentCount">The number of scene segment table entries, or zero when the scene has no table.</param>
+    /// <param name="segmentTableBase">The word offset of the scene segment table in the scene buffer.</param>
+    /// <param name="targetOrigin">The position of the target in the coordinates of the encoded data.</param>
     public GpuSceneConfig(
         uint widthInTiles,
         uint heightInTiles,
@@ -2452,13 +2740,18 @@ internal readonly struct GpuSceneConfig
         uint blendSize,
         uint ptclSize,
         uint profileSlotsBase,
-        uint profileRecordsBase)
+        uint profileRecordsBase,
+        uint segmentCount,
+        uint segmentTableBase,
+        Point targetOrigin)
     {
         this.ProfileSlotsBase = profileSlotsBase;
         this.ProfileRecordsBase = profileRecordsBase;
-        this.profilePad0 = 0;
-        this.profilePad1 = 0;
-        this.profilePad2 = 0;
+        this.SegmentCount = segmentCount;
+        this.SegmentTableBase = segmentTableBase;
+
+        // config.wgsl unpacks x from the low 16 bits and y from the high 16 bits.
+        this.TargetOrigin = (uint)targetOrigin.X | ((uint)targetOrigin.Y << 16);
         this.WidthInTiles = widthInTiles;
         this.HeightInTiles = heightInTiles;
         this.TargetWidth = targetWidth;
@@ -2567,11 +2860,20 @@ internal readonly struct GpuSceneConfig
     /// </summary>
     public uint ProfileRecordsBase { get; }
 
-    // Config in config.wgsl declares three final pad words so its size is a multiple of 16 bytes.
-    // Declare the same words after the auto-properties to preserve the uniform buffer layout.
-    private readonly uint profilePad0;
-    private readonly uint profilePad1;
-    private readonly uint profilePad2;
+    /// <summary>
+    /// Gets the number of scene segment table entries, or zero when the scene has no table.
+    /// </summary>
+    public uint SegmentCount { get; }
+
+    /// <summary>
+    /// Gets the word offset of the scene segment table in the scene buffer.
+    /// </summary>
+    public uint SegmentTableBase { get; }
+
+    /// <summary>
+    /// Gets the position of the target in the coordinates of the encoded data, packed as x | (y &lt;&lt; 16).
+    /// </summary>
+    public uint TargetOrigin { get; }
 }
 
 /// <summary>
