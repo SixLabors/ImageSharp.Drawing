@@ -175,8 +175,22 @@ fn main(
         }
     }
 
+    // The clip indices come from rounded f32 formulas with one correction step, so a large error
+    // can leave them too wide. Index count and above are not crossings of the line. The row of
+    // crossing i is y0 + i - floor(a * i + b), which does not decrease with i, so stepping each end
+    // until its row is inside the bbox makes the y clip exact. Then each line adds at most count
+    // segments, the CPU crossing bound of the line, and every row index below is inside the bbox.
+    // The loops usually run zero or one time.
+    imin = min(imin, count);
+    imax = clamp(imax, imin, count);
+    while imin < imax && i32(y0 + f32(imin) - floor(a * f32(imin) + b)) < bbox.y {
+        imin += 1u;
+    }
+    while imax > imin && i32(y0 + f32(imax - 1u) - floor(a * f32(imax - 1u) + b)) >= bbox.w {
+        imax -= 1u;
+    }
+
     let delta = select(1, -1, is_down);
-    imax = max(imin, imax);
     var last_z = floor(a * (f32(imin) - 1.0) + b);
     let seg_base = atomicAdd(&bump.seg_counts, imax - imin);
     for (var i = imin; i < imax; i += 1u) {

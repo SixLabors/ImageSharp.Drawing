@@ -159,41 +159,27 @@ public partial class WebGPUDrawingBackendTests
     }
 
     // 100k random stroked lines, the same scene as the 100k run of the DrawingBackendBenchmark sample,
-    // need more scratch memory than the first render has. At the 128 MiB default binding limit they
-    // also render in tile-row chunks. An offscreen render must return complete pixels: it grows the
-    // memory and renders again before it returns. The GPU copy reads the target as the render left
-    // it, before any readback, and must equal a second render that starts with the grown sizes.
+    // render in tile-row chunks at the 128 MiB default binding limit. One bin of 16 tile rows does
+    // not fit the limit, so the chunks are 12 and 4 rows. Each chunk must be sized from the draws in
+    // its own rows: a share of the bin is too small, and the render does not read its status, so an
+    // overflow would leave the target unchanged. The chunked image must equal the image rendered
+    // without the limit.
     [WebGPUFact]
-    public void FillManyLines_FirstRenderOverflows_ReturnsCompletePixels()
+    public void FillManyLines_ChunksSmallerThanOneBin_MatchUnchunkedRender()
     {
         const int width = 1600;
         const int height = 1100;
         (PointF Start, PointF End, Color Color, float Width)[] lines = CreateRandomLines(width, height, 100_000);
         Brush background = Brushes.Solid(Color.ParseHex("#003366"));
-        Rectangle bounds = new(0, 0, width, height);
+        using Image<Rgba32> expected = RenderManyLinesToImage(width, height, background, lines, passes: 1);
 
         using WebGPURenderTarget target = new(WebGPUTextureFormat.Bgra8Unorm, width, height);
-        using WebGPURenderTarget copy = target.CreateRenderTarget(width, height);
         target.Backend.ScratchBufferBindingSizeLimit = 128U * 1024U * 1024U;
-
         DrawLines(target, background, lines);
-        int overflowCount = target.Backend.DiagnosticScratchOverflowCount;
-        bool chunked = target.Backend.DiagnosticLastFlushUsedChunking;
+        using Image<Rgba32> chunked = target.ReadbackImage().CloneAs<Rgba32>();
 
-        using (DrawingCanvas source = target.CreateCanvas())
-        using (DrawingCanvas destination = copy.CreateCanvas())
-        {
-            destination.CopyPixelsFrom(source, bounds, Point.Empty);
-        }
-
-        DrawLines(target, background, lines);
-        using Image<Rgba32> copied = copy.ReadbackImage().CloneAs<Rgba32>();
-        using Image<Rgba32> expected = target.ReadbackImage().CloneAs<Rgba32>();
-
-        Assert.True(overflowCount > 0, "The first render must overflow, or this test does not run the retry.");
-        Assert.True(chunked, "The first render must use tile-row chunks.");
-        Assert.Equal(overflowCount, target.Backend.DiagnosticScratchOverflowCount);
-        Assert.Equal(0, CountDifferingPixels(expected, copied));
+        Assert.True(target.Backend.DiagnosticLastFlushUsedChunking, "The binding limit must force chunked rendering.");
+        Assert.Equal(0, CountDifferingPixels(expected, chunked));
     }
 
     // A correctly seeded scene renders fully on its first flush. An under-seeded scratch estimate (for
@@ -220,26 +206,45 @@ public partial class WebGPUDrawingBackendTests
 
     // Nine nested full-target layers put every tile at blend depth 9, so fine spills five levels of
     // 256 slots for each of the 1024 tiles. That is more than the initial blend-spill buffer, and
-    // the scratch bounds must size it before the first render.
+    // the scratch bounds must size it before the first render. The render does not read its status,
+    // so an overflow would leave the target unchanged, and the pixels must match the CPU pixels.
     [WebGPUFact]
     public void FirstRender_NineNestedLayers_DoesNotOverflowScratch()
     {
+        using Image<Rgba32> expected = RenderWithCpuCanvas(512, 512, static canvas => DrawNestedLayers(canvas, 9, 512));
+
         using WebGPURenderTarget target = new(512, 512);
         using (DrawingCanvas canvas = target.CreateCanvas())
         {
             DrawNestedLayers(canvas, 9, 512);
         }
 
+        using Image<Rgba32> actual = target.ReadbackImage().CloneAs<Rgba32>();
         Assert.Equal(0, target.Backend.DiagnosticScratchOverflowCount);
+
+        // The CPU and GPU layer blends differ by one 8-bit level in some pixels: 0.0081% measured.
+        AssertBackendPairSimilarity(expected, actual, 0.0082F);
     }
 
     // One hundred full-target layers in sequence write BeginClip, the forced solid and EndClip in
-    // every tile for each layer, which is more PTCL than the initial buffer.
+    // every tile for each layer, which is more PTCL than the initial buffer. The pixels must equal
+    // the CPU pixels, for the same reason as the nested layers.
     [WebGPUFact]
     public void FirstRender_HundredSequentialLayers_DoesNotOverflowScratch()
     {
+        using Image<Rgba32> expected = RenderWithCpuCanvas(2048, 2048, DrawSequentialLayers);
+
         using WebGPURenderTarget target = new(2048, 2048);
         using (DrawingCanvas canvas = target.CreateCanvas())
+        {
+            DrawSequentialLayers(canvas);
+        }
+
+        using Image<Rgba32> actual = target.ReadbackImage().CloneAs<Rgba32>();
+        Assert.Equal(0, target.Backend.DiagnosticScratchOverflowCount);
+        AssertBackendPairSimilarity(expected, actual, 0F);
+
+        static void DrawSequentialLayers(DrawingCanvas canvas)
         {
             for (int i = 0; i < 100; i++)
             {
@@ -248,19 +253,37 @@ public partial class WebGPUDrawingBackendTests
                 canvas.Restore();
             }
         }
-
-        Assert.Equal(0, target.Backend.DiagnosticScratchOverflowCount);
     }
 
     // A retained scene read in place inside layers nests its own layers inside the outer ones. Five
     // outer layers and four retained layers reach blend depth 9, which only the shifted depths of
-    // the retained scene show.
+    // the retained scene show. The pixels must match the CPU pixels, for the same reason as the
+    // nested layers.
     [WebGPUFact]
     public void FirstRender_RetainedNestedLayersInsideLayers_DoesNotOverflowScratch()
     {
+        using Image<Rgba32> expected = new(512, 512);
+        ImageFrame<Rgba32> frame = expected.Frames.RootFrame;
+        using DrawingBackendScene cpuScene = CreateNestedLayerScene(frame.CreateCanvas(Configuration.Default, new DrawingOptions()), 4, 512);
+        using (DrawingCanvas canvas = frame.CreateCanvas(Configuration.Default, new DrawingOptions()))
+        {
+            DrawSceneInsideLayers(canvas, cpuScene);
+        }
+
         using WebGPURenderTarget target = new(512, 512);
-        using DrawingBackendScene scene = CreateNestedLayerScene(target, 4);
+        using DrawingBackendScene scene = CreateNestedLayerScene(target.CreateCanvas(), 4, 512);
         using (DrawingCanvas canvas = target.CreateCanvas())
+        {
+            DrawSceneInsideLayers(canvas, scene);
+        }
+
+        using Image<Rgba32> actual = target.ReadbackImage().CloneAs<Rgba32>();
+        Assert.Equal(0, target.Backend.DiagnosticScratchOverflowCount);
+
+        // The CPU and GPU layer blends differ by one 8-bit level in some pixels: 0.0215% measured.
+        AssertBackendPairSimilarity(expected, actual, 0.0216F);
+
+        static void DrawSceneInsideLayers(DrawingCanvas canvas, DrawingBackendScene scene)
         {
             for (int i = 0; i < 5; i++)
             {
@@ -273,8 +296,6 @@ public partial class WebGPUDrawingBackendTests
                 canvas.Restore();
             }
         }
-
-        Assert.Equal(0, target.Backend.DiagnosticScratchOverflowCount);
     }
 
     // Dense lines in the top quarter of a large target render in tile-row chunks when the binding
@@ -325,11 +346,24 @@ public partial class WebGPUDrawingBackendTests
         }
     }
 
-    private static DrawingBackendScene CreateNestedLayerScene(WebGPURenderTarget target, int depth)
+    private static DrawingBackendScene CreateNestedLayerScene(DrawingCanvas canvas, int depth, int size)
     {
-        using DrawingCanvas canvas = target.CreateCanvas();
-        DrawNestedLayers(canvas, depth, target.Width);
-        return canvas.CreateScene();
+        using (canvas)
+        {
+            DrawNestedLayers(canvas, depth, size);
+            return canvas.CreateScene();
+        }
+    }
+
+    private static Image<Rgba32> RenderWithCpuCanvas(int width, int height, Action<DrawingCanvas> draw)
+    {
+        Image<Rgba32> image = new(width, height);
+        using (DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(Configuration.Default, new DrawingOptions()))
+        {
+            draw(canvas);
+        }
+
+        return image;
     }
 
     private static Image<Rgba32> RenderManyLinesToImage(int width, int height, Brush background, (PointF Start, PointF End, Color Color, float Width)[] lines, int passes)

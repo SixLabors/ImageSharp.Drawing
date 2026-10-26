@@ -129,6 +129,13 @@ internal static class WebGPUSceneEncoder
     private const int RowWalkMinimumTiles = 1024;
 
     /// <summary>
+    /// The largest interior vertex count of one round arc in the stroke shaders. The count is
+    /// stored in the low bits of a stroke style flags word, so it must fit in
+    /// STYLE_FLAGS_ARC_LIMIT_MASK in Shared/pathtag.wgsl.
+    /// </summary>
+    private const int MaxStrokeArcSubdivisions = 1024;
+
+    /// <summary>
     /// The words in one scene segment table entry. Must match SCENE_SEGMENT_WORDS in scene_segment.wgsl.
     /// </summary>
     public const int SceneSegmentEntryWordCount = 13;
@@ -4128,7 +4135,21 @@ internal static class WebGPUSceneEncoder
             this.lastStyle8 = style8;
             this.lastStyle9 = style9;
             this.blendDepth++;
-            this.AccumulateDrawRowEstimateLocal(clipBounds, clipLineCount, -1, GetPtclPaintWords(GpuSceneDrawTag.EndClip), true, RowSpanSource.None);
+
+            // The clip interest is the whole range, so the GPU box of the clip is the box of its
+            // path, and it can be larger than clipBounds:
+            // - binning adds one pixel to the right edge of an aliased (Hard) path;
+            // - the GPU box is floor and ceil of the f32 points after the GPU transform, and
+            //   clipBounds is floor and ceil of the transformed path bounds.
+            // One pixel on each side holds both.
+            this.AccumulateDrawRowEstimateLocal(
+                Rectangle.Inflate(clipBounds, 1, 1),
+                clipLineCount,
+                -1,
+                GetPtclPaintWords(GpuSceneDrawTag.EndClip),
+                true,
+                RowSpanSource.None);
+
             this.PathCount += encodedPathCount;
             this.LineCount += clipLineCount;
             this.InfoWordCount += (int)GpuSceneDrawTag.Map(GpuSceneDrawTag.BeginClip).InfoOffset;
@@ -7455,7 +7476,9 @@ internal static class WebGPUSceneEncoder
         out long endCrossings)
     {
         long bodyRowCrossings = 0;
+        long innerJoinCrossings = 0;
         int bodySegmentCount = 0;
+        float outlineRadius = GetStrokeOutlineRadius(pen, widthScale);
         float pointTranslateX = destinationOffset.X - rootTargetBounds.X;
         float pointTranslateY = destinationOffset.Y - rootTargetBounds.Y;
         lineCount = EstimateStrokeLineCount(geometry, pen, widthScale);
@@ -7514,7 +7537,16 @@ internal static class WebGPUSceneEncoder
                 }
                 else
                 {
-                    contourOutlineLength += GetStrokeJoinChainLength(pen, halfWidth, previousDirection, previousLength, direction, segmentLength);
+                    contourOutlineLength += GetStrokeJoinChainLength(
+                        pen,
+                        halfWidth,
+                        previousDirection,
+                        previousLength,
+                        direction,
+                        segmentLength,
+                        out float innerExtent);
+
+                    innerJoinCrossings += GetInnerJoinTileCrossings(innerExtent, halfWidth, outlineRadius);
                 }
 
                 previousDirection = direction;
@@ -7575,13 +7607,40 @@ internal static class WebGPUSceneEncoder
                     Vector2 closingVector = (Vector2)firstPoint - (Vector2)lastKept;
                     float closingLength = closingVector.Length();
                     Vector2 closingDirection = closingVector / closingLength;
-                    contourOutlineLength += (2D * closingLength) +
-                        GetStrokeJoinChainLength(pen, halfWidth, previousDirection, previousLength, closingDirection, closingLength) +
-                        GetStrokeJoinChainLength(pen, halfWidth, closingDirection, closingLength, firstDirection, firstLength);
+                    float closingJoinLength = GetStrokeJoinChainLength(
+                        pen,
+                        halfWidth,
+                        previousDirection,
+                        previousLength,
+                        closingDirection,
+                        closingLength,
+                        out float closingInnerExtent);
+
+                    float firstJoinLength = GetStrokeJoinChainLength(
+                        pen,
+                        halfWidth,
+                        closingDirection,
+                        closingLength,
+                        firstDirection,
+                        firstLength,
+                        out float firstInnerExtent);
+
+                    contourOutlineLength += (2D * closingLength) + closingJoinLength + firstJoinLength;
+                    innerJoinCrossings += GetInnerJoinTileCrossings(closingInnerExtent, halfWidth, outlineRadius) +
+                        GetInnerJoinTileCrossings(firstInnerExtent, halfWidth, outlineRadius);
                 }
                 else
                 {
-                    contourOutlineLength += GetStrokeJoinChainLength(pen, halfWidth, previousDirection, previousLength, firstDirection, firstLength);
+                    contourOutlineLength += GetStrokeJoinChainLength(
+                        pen,
+                        halfWidth,
+                        previousDirection,
+                        previousLength,
+                        firstDirection,
+                        firstLength,
+                        out float innerExtent);
+
+                    innerJoinCrossings += GetInnerJoinTileCrossings(innerExtent, halfWidth, outlineRadius);
                 }
 
                 outlineLength += contourOutlineLength;
@@ -7664,7 +7723,7 @@ internal static class WebGPUSceneEncoder
 
         tileCrossings = BoundStrokeTileCrossings(outlineLength, residualStretch, lineCount);
         rowCrossings = bodyRowCrossings;
-        endCrossings = GetStrokeEndTileCrossings(lineCount, bodySegmentCount, pen, widthScale);
+        endCrossings = GetStrokeEndTileCrossings(lineCount, bodySegmentCount, pen, widthScale) + innerJoinCrossings;
         if (encodedContourCount == 0)
         {
             return 0;
@@ -7864,6 +7923,29 @@ internal static class WebGPUSceneEncoder
         long otherLines = Math.Max(lineCount - (2L * segmentCount), 0L);
         long otherLineCrossings = (long)(4F * GetStrokeOutlineRadius(pen, widthScale) / TileWidth) + 3L;
         return otherLines * otherLineCrossings;
+    }
+
+    /// <summary>
+    /// Bounds the tile crossings of the inner chain of one join when it does not fit in the square
+    /// of twice the outline radius that <see cref="GetStrokeEndTileCrossings"/> assumes.
+    /// </summary>
+    /// <remarks>
+    /// An inner corner draws two lines: from the offset point of one segment to the inner miter
+    /// apex, and from the apex to the offset point of the next segment. The offset points are one
+    /// half width from the vertex, so each line is at most innerExtent + halfWidth long. A line
+    /// with length L crosses at most sqrt(2) * L / 16 + 3 tiles. This is a bound on the total of the
+    /// lines, so it holds in every tile-row window.
+    /// </remarks>
+    /// <param name="innerExtent">The largest distance of the inner chain from the join vertex.</param>
+    /// <param name="halfWidth">Half the transform-scaled stroke width.</param>
+    /// <param name="outlineRadius">The outline radius from <see cref="GetStrokeOutlineRadius"/>.</param>
+    /// <returns>The added tile-crossing bound, or zero when the lines fit the square.</returns>
+    private static long GetInnerJoinTileCrossings(float innerExtent, float halfWidth, float outlineRadius)
+    {
+        float lineLength = innerExtent + halfWidth;
+        return lineLength > 2F * outlineRadius
+            ? (long)Math.Ceiling(Math.Sqrt(2D) * 2D * lineLength / TileWidth) + 6L
+            : 0L;
     }
 
     /// <summary>
@@ -8438,7 +8520,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Bounds the length of the line chains the GPU stroker emits for one join. The outer chain reaches at most
     /// the miter apex, the miter limit, the round arc, or the bevel chord. The inner chain reaches at most the
-    /// miter apex or the shorter neighboring segment.
+    /// miter apex or the inner miter limit of the shader, which is the shorter neighboring segment and at least
+    /// 1.01 half widths.
     /// </summary>
     /// <param name="pen">The pen that defines the join style and miter limit.</param>
     /// <param name="halfWidth">Half the transform-scaled stroke width.</param>
@@ -8446,13 +8529,23 @@ internal static class WebGPUSceneEncoder
     /// <param name="incomingLength">The length of the segment entering the join.</param>
     /// <param name="outgoing">The unit direction of the segment leaving the join.</param>
     /// <param name="outgoingLength">The length of the segment leaving the join.</param>
+    /// <param name="innerExtent">Receives the largest distance of the inner chain from the join vertex.</param>
     /// <returns>The chain length bound in pixels.</returns>
-    private static float GetStrokeJoinChainLength(Pen pen, float halfWidth, Vector2 incoming, float incomingLength, Vector2 outgoing, float outgoingLength)
+    private static float GetStrokeJoinChainLength(
+        Pen pen,
+        float halfWidth,
+        Vector2 incoming,
+        float incomingLength,
+        Vector2 outgoing,
+        float outgoingLength,
+        out float innerExtent)
     {
         float cosTheta = -Vector2.Dot(incoming, outgoing);
         float sinHalfTheta = MathF.Sqrt(MathF.Max(0F, (1F - cosTheta) * 0.5F));
         float miterApex = sinHalfTheta > 1E-6F ? halfWidth / sinHalfTheta : float.PositiveInfinity;
-        float innerExtent = MathF.Min(miterApex, MathF.Min(incomingLength, outgoingLength));
+
+        // stroke_side_join limits the inner miter to max(min(len1, len2), 1.01 * half_width).
+        innerExtent = MathF.Min(miterApex, MathF.Max(MathF.Min(incomingLength, outgoingLength), 1.01F * halfWidth));
         float miterLimit = (float)Math.Max(pen.StrokeOptions.MiterLimit, 1D);
         float outerExtent = pen.StrokeOptions.LineJoin switch
         {
@@ -8498,11 +8591,12 @@ internal static class WebGPUSceneEncoder
     {
         float halfWidth = pen.StrokeWidth * widthScale * 0.5F;
 
-        // A round cap writes the arc points plus one. One more point absorbs f32 differences in acos.
+        // A round cap writes the arc points plus one. The shader clamps the arc points to the arc
+        // limit in the style flags, which is this arc cost.
         return pen.StrokeOptions.LineCap switch
         {
             LineCap.Square => 3,
-            LineCap.Round => GetStrokeArcLineCost(halfWidth, MathF.PI, pen.StrokeOptions.ArcDetailScale) + 2,
+            LineCap.Round => GetStrokeArcLineCost(halfWidth, MathF.PI, pen.StrokeOptions.ArcDetailScale) + 1,
             _ => 1
         };
     }
@@ -8679,6 +8773,13 @@ internal static class WebGPUSceneEncoder
     /// 2 = packed draw flags, 3 = miter limit, 4 = arc detail scale, 5 = zero,
     /// 6-9 = target-local interest rectangle as left, top, right, bottom.
     /// Strokes do not use antialiased text coverage boost data, so word 5 is zero in both modes.
+    /// <para>
+    /// Bits 0-10 of word 0 hold the arc limit: the interior vertex count of a round arc of
+    /// half a turn, from <see cref="GetStrokeArcLineCost"/>. The shader clamps the vertex count of
+    /// every arc to it. The f32 arc math on the GPU can give a larger count than the CPU, for
+    /// example for a cap radius rounded at a large coordinate. The clamp makes the line estimates
+    /// of round joins and caps upper bounds.
+    /// </para>
     /// </remarks>
     /// <param name="options">The graphics options used for blending.</param>
     /// <param name="pen">The pen that defines stroke width, joins, caps, and miter limit.</param>
@@ -8706,8 +8807,16 @@ internal static class WebGPUSceneEncoder
             | EncodeStrokeJoinFlags(pen.StrokeOptions.LineJoin)
             | EncodeStrokeCapFlags(pen.StrokeOptions.LineCap);
 
+        // Only round joins and caps draw arcs, so other pens skip the acos.
+        uint arcLimit = 0U;
+        if (pen.StrokeOptions.LineJoin is LineJoin.Round or LineJoin.MiterRound || pen.StrokeOptions.LineCap == LineCap.Round)
+        {
+            int arcCount = GetStrokeArcLineCost(pen.StrokeWidth * widthScale * 0.5F, MathF.PI, pen.StrokeOptions.ArcDetailScale);
+            arcLimit = (uint)Math.Min(arcCount, MaxStrokeArcSubdivisions);
+        }
+
         return (
-            (uint)styleFlags,
+            (uint)styleFlags | arcLimit,
             BitcastSingle(pen.StrokeWidth * widthScale),
             PackStyleDrawFlags(options),
             BitcastSingle((float)pen.StrokeOptions.MiterLimit),
