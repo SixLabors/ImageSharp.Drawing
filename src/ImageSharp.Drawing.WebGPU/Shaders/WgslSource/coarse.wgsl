@@ -183,7 +183,7 @@ fn write_path(tile: Tile, tile_ix: u32, path: Path, global_x: u32, global_y: u32
         // Only aliased fills read profile records in fine. With a segment table, each retained
         // scene has its own record table, so a CMD_PROFILE_TABLE before the fill sets it.
         let with_profile_records = aliased && config.segment_count != 0u;
-        alloc_cmd(select(6u, 8u, with_profile_records));
+        alloc_cmd(6u + select(0u, 2u, aliased) + select(0u, 2u, with_profile_records));
         if with_profile_records {
             ptcl[cmd_offset] = CMD_PROFILE_TABLE;
             ptcl[cmd_offset + 1u] = segment_profile_records;
@@ -225,6 +225,29 @@ fn write_path(tile: Tile, tile_ix: u32, path: Path, global_x: u32, global_y: u32
         // count so fine can read adjacent slices after segment_count_or_ix becomes the allocation.
         tiles[tile_ix].backdrop = i32(n_segs);
         cmd_offset += 6u;
+        if aliased {
+            // The aliased column walk reads the crossings within half a pixel above and below the
+            // tile from the path tiles above and below it. The two words hold their path-tile
+            // indices, or INVALID_TILE_INDEX when that tile has no segments for the path.
+            var above = INVALID_TILE_INDEX;
+            if global_y > 0u {
+                let up = lookup_tile(path, global_x, global_y - 1u);
+                if up.valid != 0u && tiles[up.tile_ix].segment_count_or_ix != 0u {
+                    above = up.tile_ix;
+                }
+            }
+
+            var below = INVALID_TILE_INDEX;
+            let down = lookup_tile(path, global_x, global_y + 1u);
+            if down.valid != 0u && tiles[down.tile_ix].segment_count_or_ix != 0u {
+                below = down.tile_ix;
+            }
+
+            ptcl[cmd_offset] = above;
+            ptcl[cmd_offset + 1u] = below;
+            cmd_offset += 2u;
+        }
+
         return true;
     } else {
         if !emit_empty_solid && !solid_tile_has_coverage(draw_flags, tile.backdrop) {

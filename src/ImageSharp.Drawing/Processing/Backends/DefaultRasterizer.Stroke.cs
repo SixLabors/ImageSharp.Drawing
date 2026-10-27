@@ -697,6 +697,11 @@ internal static partial class DefaultRasterizer
                 lines?.Iterate(this.Outline.GetFirstBlockLineCountForRow(localRowIndex), ref context);
             }
 
+            if (bandInfo.RasterizationMode == RasterizationMode.Aliased)
+            {
+                CaptureColumnHalos(ref context, this.Outline, localRowIndex, tagged: false);
+            }
+
             context.EmitCoverageRows(bandInfo.DestinationTop, bandInfo.DestinationLeft, scanline, ref rowHandler);
             context.ResetTouchedRows();
         }

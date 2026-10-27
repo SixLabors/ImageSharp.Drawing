@@ -80,9 +80,9 @@ internal static class WebGPUSceneDispatch
 
     // The command words each chunk holds at least before the next one starts. A chunk holds
     // PTCL_INCREMENT - PTCL_HEADROOM = 254 words, and the next chunk starts when the used words
-    // plus the next command reach 254. The largest command is 8 words (CMD_PROFILE_TABLE and
-    // CMD_FILL in coarse.wgsl write_path), so a chunk holds at least 254 - 8 = 246 words.
-    private const long PtclChunkCommandWords = 246;
+    // plus the next command reach 254. The largest command is 10 words (CMD_PROFILE_TABLE and an
+    // aliased CMD_FILL in coarse.wgsl write_path), so a chunk holds at least 254 - 10 = 244 words.
+    private const long PtclChunkCommandWords = 244;
 
     /// <summary>
     /// Identifies the staged-scene storage binding that exceeded the device limit for one flush attempt.
@@ -3227,9 +3227,9 @@ internal static class WebGPUSceneDispatch
     /// Bounds the dynamic PTCL words that coarse allocates for a set of tiles.
     /// </summary>
     /// <remarks>
-    /// A tile with j chunks writes at least 61 + 246 * (j - 1) command words, so it has at most
-    /// 1 + (W_t - 61) / 246 chunks. Over the tiles that start a chunk, the chunk count is at most
-    /// N + (W - 61 * N) / 246, with W the command words of the tiles and N the number of these
+    /// A tile with j chunks writes at least 61 + 244 * (j - 1) command words, so it has at most
+    /// 1 + (W_t - 61) / 244 chunks. Over the tiles that start a chunk, the chunk count is at most
+    /// N + (W - 61 * N) / 244, with W the command words of the tiles and N the number of these
     /// tiles. This grows with N, and N is at most the tile count and at most W / 61. Each chunk is
     /// 256 words.
     /// </remarks>
