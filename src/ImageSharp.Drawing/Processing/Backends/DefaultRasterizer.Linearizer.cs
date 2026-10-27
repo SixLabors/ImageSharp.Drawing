@@ -327,10 +327,11 @@ internal static partial class DefaultRasterizer
         {
             // A horizontal edge does not change winding along a row. Continuous coverage can
             // discard it. Aliased rendering retains its visible part because the column pass needs
-            // both horizontal boundaries of a feature that lies between two row centres.
+            // both horizontal boundaries of a feature that lies between two row centres. An edge on
+            // the bottom of the interest is such a boundary, so the Y range includes Height.
             if (y0 == y1)
             {
-                if (this.KeepHorizontalLines && y0 >= 0F && y0 < this.Height)
+                if (this.KeepHorizontalLines && y0 >= 0F && y0 <= this.Height)
                 {
                     float hx0 = Math.Clamp(x0, 0F, this.Width);
                     float hx1 = Math.Clamp(x1, 0F, this.Width);
@@ -371,7 +372,11 @@ internal static partial class DefaultRasterizer
                 int p0y = Math.Clamp(FloatToFixed24Dot8(y0), 0, this.Height * FixedOne);
                 int p1y = Math.Clamp(FloatToFixed24Dot8(y1), 0, this.Height * FixedOne);
 
-                if (x0c == 0)
+                // An edge exactly on the left edge is a contained line, as it is for contained
+                // geometry, so the aliased row walk sees its crossing and its profile. The test
+                // uses the unrounded X, the same as the WebGPU bbox test: an edge that rounds to
+                // 0 from the left is still left of the band.
+                if (x0 < 0F)
                 {
                     // Segments clipped fully to the left edge do not produce a visible line, but they
                     // still change winding for rows they cross. Retain that effect as start covers.
@@ -833,13 +838,51 @@ internal static partial class DefaultRasterizer
             }
 
             Span<int> covers = owner.Memory.Span[..PreferredRowHeight];
-            if (y0 < y1)
+            if (this.KeepHorizontalLines)
+            {
+                // Aliased rows read the start cover as the winding at the first pixel centre, so
+                // they need the crossings of the row centres, not the covered height.
+                UpdateCentreCrossings(covers, y0, y1);
+            }
+            else if (y0 < y1)
             {
                 UpdateCoverTableDown(covers, y0, y1);
             }
             else
             {
                 UpdateCoverTableUp(covers, y0, y1);
+            }
+        }
+
+        /// <summary>
+        /// Adds one whole crossing to each row whose centre a clipped vertical interval crosses.
+        /// </summary>
+        /// <remarks>
+        /// The test is half-open, the same as the crossing capture of the rasterizer: the interval
+        /// crosses a centre at <c>top &lt; centre &lt;= bottom</c>. Two intervals that meet at a
+        /// vertex therefore count the vertex once, and the start winding of a row equals the count
+        /// of the crossings that the clipped edges would have had left of the band.
+        /// </remarks>
+        /// <param name="covers">The retained start-cover rows.</param>
+        /// <param name="y0">The starting Y coordinate relative to the row band, in [0, band height].</param>
+        /// <param name="y1">The ending Y coordinate relative to the row band, in [0, band height].</param>
+        private static void UpdateCentreCrossings(Span<int> covers, int y0, int y1)
+        {
+            // A downward interval subtracts one cover unit, the same sign as the cell cover.
+            int top = y0 < y1 ? y0 : y1;
+            int bottom = y0 < y1 ? y1 : y0;
+            int value = y0 < y1 ? -FixedOne : FixedOne;
+
+            // Row r has its centre at r * one + half. The first row with top < centre is
+            // floor((top - half) / one) + 1, and the last row with centre <= bottom is
+            // floor((bottom - half) / one). The arithmetic shift floors negative values. Band-local
+            // Y in [0, band height] keeps both rows inside the band, and an interval that crosses
+            // no centre gives lastRow < firstRow.
+            int firstRow = ((top - FixedHalf) >> FixedShift) + 1;
+            int lastRow = (bottom - FixedHalf) >> FixedShift;
+            for (int row = firstRow; row <= lastRow; row++)
+            {
+                covers[row] += value;
             }
         }
 

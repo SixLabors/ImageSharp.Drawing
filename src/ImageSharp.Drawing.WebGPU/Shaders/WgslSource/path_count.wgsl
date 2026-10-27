@@ -143,7 +143,13 @@ fn main(
         imax = u32(imaxf);
     }
 
-    if max(s0.x, s1.x) <= f32(bbox.x) {
+    // A vertical line exactly on the bbox's left edge is a line left of the bbox for winding:
+    // path_row_span adds its winding to the row backdrops, and the y_edge values of the lines that
+    // meet it carry it inside a tile row. The aliased row walk still needs its crossing and profile,
+    // so path_tiling keeps it in its own tile as a halo-only segment. It must not change any
+    // backdrop here.
+    let on_bbox_left = s0.x == s1.x && s0.x == f32(bbox.x);
+    if max(s0.x, s1.x) <= f32(bbox.x) && !on_bbox_left {
         imax = imin;
     } else {
         let fudge = select(1.0, 0.0, is_positive_slope);
@@ -210,7 +216,7 @@ fn main(
         // the old in-range-only path did) left fills whose left edges crossed
         // the bbox boundary with zero-backdrop interior tiles, rendering
         // horizontal row-aligned gaps.
-        if top_edge && row.x0 < row.x1 && x + 1 < i32(row.x1) {
+        if top_edge && !on_bbox_left && row.x0 < row.x1 && x + 1 < i32(row.x1) {
             let x_bump = max(x + 1, i32(row.x0));
             let bump_ix = row.tiles + u32(x_bump) - row.x0;
             atomicAdd(&tile[bump_ix].backdrop, delta);

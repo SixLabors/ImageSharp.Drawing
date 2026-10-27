@@ -505,24 +505,9 @@ internal static partial class DefaultRasterizer
     /// <returns>The inflated stroke bounds.</returns>
     private static RectangleF InflateStrokeBounds(RectangleF bounds, in StrokeStyle stroke)
     {
-        // Miter joins can protrude up to halfWidth * miterLimit past the corner; every other
-        // join stays within halfWidth of the centerline.
-        float joinInflate = stroke.LineJoin switch
-        {
-            LineJoin.Miter or LineJoin.MiterRevert or LineJoin.MiterRound
-            => stroke.HalfWidth * (float)Math.Max(stroke.MiterLimit, 1D),
-            _ => stroke.HalfWidth
-        };
-
-        // A square cap's corner sits halfWidth along the tangent and halfWidth along the
-        // normal, so its farthest point is halfWidth * sqrt(2) from the endpoint.
-        float capInflate = stroke.LineCap == LineCap.Square
-            ? stroke.HalfWidth * MathF.Sqrt(2F)
-            : stroke.HalfWidth;
-
-        float inflate = MathF.Max(joinInflate, capInflate);
-
-        bounds.Inflate(new SizeF(inflate, inflate));
+        // The scene bounds of both backends use the same radius, so the raster bounds hold every
+        // pixel that the interest rectangle holds, the clipped bevel of a Miter join included.
+        bounds.Inflate(new SizeF(stroke.OutlineRadius, stroke.OutlineRadius));
         return bounds;
     }
 
@@ -1588,6 +1573,7 @@ internal static partial class DefaultRasterizer
             this.LineJoin = pen.StrokeOptions.LineJoin;
             this.MiterLimit = pen.StrokeOptions.MiterLimit;
             this.ArcDetailScale = pen.StrokeOptions.ArcDetailScale;
+            this.OutlineRadius = pen.GetOutlineRadius(widthScale);
         }
 
         /// <summary>
@@ -1609,6 +1595,16 @@ internal static partial class DefaultRasterizer
         /// Gets the outer join style applied to contour corners.
         /// </summary>
         public LineJoin LineJoin { get; }
+
+        /// <summary>
+        /// Gets the largest distance from the centerline that the stroke outline can reach, in
+        /// device-space pixels. This is the radius that both backends use for the stroke bounds.
+        /// </summary>
+        /// <remarks>
+        /// It follows the two four-byte enums, so it fills the gap before the eight-byte fields
+        /// and the struct stays 32 bytes.
+        /// </remarks>
+        public float OutlineRadius { get; }
 
         /// <summary>
         /// Gets the outer miter limit expressed in stroke-width units.

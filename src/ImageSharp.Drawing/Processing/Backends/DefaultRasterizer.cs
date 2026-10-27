@@ -98,6 +98,18 @@ internal static partial class DefaultRasterizer
     private const int CrossingShift = ProfileIdBits + 1;
 
     /// <summary>
+    /// The bit inside a packed row crossing that records a vertical edge. A vertical edge does not
+    /// own a pixel centre that lies exactly on it when the edge opens a filled interval.
+    /// </summary>
+    private const long RowCrossingVerticalBit = 1L << CrossingShift;
+
+    /// <summary>
+    /// The left shift that positions a row crossing coordinate above its vertical, direction, and
+    /// profile bits.
+    /// </summary>
+    private const int RowCrossingShift = CrossingShift + 1;
+
+    /// <summary>
     /// The doubled cell area of one fully covered pixel (2 * 256 * 256), one 24.8 unit of winding.
     /// </summary>
     private const int FullCoverageArea = (FixedOne * FixedOne) << 1;
@@ -1028,23 +1040,25 @@ internal static partial class DefaultRasterizer
                 int row = this.touchedRows[i];
                 int count = this.crossingCounts[row];
 
-                // startCover contains signed vertical cover from edges left of this band. One full
-                // pixel of cover represents one crossing, so round it to the winding at the first
-                // pixel centre before processing the retained crossings.
-                int winding = NearestCrossingCount(this.startCover[row]);
+                // In aliased mode, the linearizer stores one full cover unit in startCover for each
+                // row centre that an edge left of this band crosses, so the value is the winding at
+                // the first pixel centre. It uses the cell sign, y0 - y1, and CaptureCrossings
+                // counts a downward edge as +1, so the value changes sign before it joins the
+                // crossings. Otherwise an edge clipped into startCover and an edge kept as a
+                // crossing add instead of cancel, and the fill runs through the gaps between contours.
+                int winding = -NearestCrossingCount(this.startCover[row]);
                 if (this.intersectionRule == IntersectionRule.EvenOdd)
                 {
                     winding &= 1;
                 }
 
-                if (count == 0)
+                // A row with no centre crossing and a zero winding can still hold a horizontal
+                // feature that lies between two row centres. Only the column pass sees that
+                // feature, so such a row continues to the dropout merge below.
+                if (count == 0 && winding != 0)
                 {
-                    if (winding != 0)
-                    {
-                        scanline[..this.width].Fill(1F);
-                        rowHandler.Handle(destinationTop + row, destinationLeft, scanline[..this.width]);
-                    }
-
+                    scanline[..this.width].Fill(1F);
+                    rowHandler.Handle(destinationTop + row, destinationLeft, scanline[..this.width]);
                     continue;
                 }
 
@@ -1073,7 +1087,7 @@ internal static partial class DefaultRasterizer
                     {
                         long crossing = rowCrossings[c];
                         currentCrossing = crossing;
-                        x = (int)(crossing >> CrossingShift);
+                        x = (int)(crossing >> RowCrossingShift);
                         winding = this.intersectionRule == IntersectionRule.NonZero
                             ? winding + (((crossing & CrossingDirectionBit) != 0) ? 1 : -1)
                             : winding ^ 1;
@@ -1103,16 +1117,29 @@ internal static partial class DefaultRasterizer
                         continue;
                     }
 
-                    // Coverage is closed at both ends. CeilingPixel finds the first centre at or
+                    // Coverage includes a centre on the closing edge. It includes a centre on the
+                    // opening edge only when that edge is not vertical. A centre on a vertical edge
+                    // therefore belongs to the shape left of that edge, and a 1 pixel wide
+                    // vertical feature sets one column. CeilingPixel finds the first centre at or
                     // after the start; FloorPixel finds the last centre at or before the end.
-                    int first = CeilingPixel(intervalStart);
+                    // An interval opened by the start cover has no crossing; long.MinValue has the
+                    // vertical bit clear, and its start is the band's left edge, which is never a
+                    // centre.
+                    int first = (intervalStartCrossing & RowCrossingVerticalBit) != 0
+                        ? FloorPixel(intervalStart) + 1
+                        : CeilingPixel(intervalStart);
+
                     int last = FloorPixel(x);
                     if (last < first)
                     {
                         // This interval contains no pixel centre. Normally, preserve the thin
                         // feature by lighting the pixel that contains its midpoint. Do not light it
-                        // when the two boundary profiles identify a terminating contour tip.
-                        if (intervalStartCrossing != long.MinValue && currentCrossing != long.MinValue && IsStubInterval(
+                        // when the two boundary profiles identify a terminating contour tip. An
+                        // interval opened by the start cover or closed at the right clip edge
+                        // continues outside the band, so its visible part is not a thin feature.
+                        // The WebGPU row walk applies the same rule to an interval that is open at
+                        // either end of its crossing list.
+                        if (intervalStartCrossing == long.MinValue || currentCrossing == long.MinValue || IsStubInterval(
                                 this.profiles,
                                 xAxis: false,
                                 this.rowProfileTranslate,
@@ -1162,6 +1189,32 @@ internal static partial class DefaultRasterizer
                 {
                     int dropColumn = columnDropouts[dropoutStart++] & 0xFFFF;
                     AccumulateRun(scanline, dropColumn, dropColumn, ref runStart, ref runEnd, destinationTop + row, destinationLeft, ref rowHandler);
+                }
+
+                if (runStart >= 0)
+                {
+                    scanline[..(runEnd - runStart)].Fill(1F);
+                    rowHandler.Handle(destinationTop + row, destinationLeft + runStart, scanline[..(runEnd - runStart)]);
+                }
+            }
+
+            // A column result can also lie in a row that no edge touched, when the edges that
+            // bound the feature are horizontal or lie outside the band. The loop above does not
+            // visit that row, so its results are emitted here. Such a row has no crossing and no
+            // start cover, so its winding is zero and the column results are its only coverage.
+            for (int d = 0; d < columnDropouts.Length;)
+            {
+                int row = columnDropouts[d] >> 16;
+                bool touched = this.rowTouched[row] != 0;
+                int runStart = -1;
+                int runEnd = -1;
+                for (; d < columnDropouts.Length && (columnDropouts[d] >> 16) == row; d++)
+                {
+                    if (!touched)
+                    {
+                        int dropColumn = columnDropouts[d] & 0xFFFF;
+                        AccumulateRun(scanline, dropColumn, dropColumn, ref runStart, ref runEnd, destinationTop + row, destinationLeft, ref rowHandler);
+                    }
                 }
 
                 if (runStart >= 0)
@@ -1492,7 +1545,9 @@ internal static partial class DefaultRasterizer
                         continue;
                     }
 
-                    if (FloorPixel(y) >= CeilingPixel(intervalStart))
+                    // The row pass excludes a centre on the top end and includes a centre on the
+                    // bottom end, so it sees this interval when a centre lies in (start, end].
+                    if (FloorPixel(y) > FloorPixel(intervalStart))
                     {
                         // The primary row pass sees this interval and needs no secondary result.
                         continue;
@@ -1525,15 +1580,16 @@ internal static partial class DefaultRasterizer
         }
 
         /// <summary>
-        /// Converts a row's signed 24.8 start cover to an integer winding count.
+        /// Converts a row's signed 24.8 start cover to an integer crossing count in the cell sign,
+        /// where a downward edge counts as -1.
         /// </summary>
         /// <remarks>
-        /// One complete cover unit represents one crossing to the left of the band. A partial unit
-        /// represents an edge that crosses only part of the row. Rounding to the nearest signed
-        /// unit determines whether that edge has crossed the row centre.
+        /// One complete cover unit represents one crossing to the left of the band. In aliased mode
+        /// the linearizer stores whole units, one for each crossed row centre, so the rounding
+        /// changes no value.
         /// </remarks>
         /// <param name="startCover">The row's accumulated carry cover in 24.8 units.</param>
-        /// <returns>The signed crossing count.</returns>
+        /// <returns>The signed crossing count in the cell sign.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int NearestCrossingCount(int startCover)
             => startCover >= 0
@@ -1597,13 +1653,15 @@ internal static partial class DefaultRasterizer
             int firstRow = Math.Max(0, top >> FixedShift);
             int lastRow = Math.Min(this.height - 1, (bottom - 1) >> FixedShift);
 
+            long vertical = x0 == x1 ? RowCrossingVerticalBit : 0L;
             for (int row = firstRow; row <= lastRow; row++)
             {
                 int sampleY = (row << FixedShift) + FixedHalf;
 
                 // Use a half-open Y range so two edges meeting at a vertex do not both contribute
-                // that vertex to the winding count.
-                if (sampleY < top || sampleY >= bottom)
+                // that vertex to the winding count. The range excludes the top and includes the
+                // bottom, so a centre on a horizontal edge belongs to the shape above that edge.
+                if (sampleY <= top || sampleY > bottom)
                 {
                     continue;
                 }
@@ -1611,10 +1669,12 @@ internal static partial class DefaultRasterizer
                 int count = this.crossingCounts[row];
                 int x = x0 + (int)(((long)(x1 - x0) * (sampleY - y0)) / (y1 - y0));
 
-                // Position, direction, and profile pack into one value ordered by position, so a
-                // row sorts with a single primitive sort. The lower bits only break ties between
-                // equal positions, where crossing order cannot change the winding result.
-                this.crossings[(row * this.crossingStride) + count] = ((long)x << CrossingShift) | (direction > 0 ? CrossingDirectionBit : 0L) | (tag >> 16);
+                // Position, vertical flag, direction, and profile pack into one value ordered by
+                // position, so a row sorts with a single primitive sort. The lower bits only break
+                // ties between equal positions, where crossing order cannot change the result.
+                this.crossings[(row * this.crossingStride) + count] =
+                    ((long)x << RowCrossingShift) | vertical | (direction > 0 ? CrossingDirectionBit : 0L) | (tag >> 16);
+
                 this.crossingCounts[row] = count + 1;
                 this.MarkRowTouched(row);
             }

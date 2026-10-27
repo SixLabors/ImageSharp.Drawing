@@ -673,17 +673,35 @@ var<workgroup> aliased_column_overflow: array<u32, TILE_WIDTH>;
 // Packs one crossing into a sortable word:
 // bits  0..15: profile identifier
 // bit      16: positive winding direction
-// bits 17..31: tile-relative position, biased by 16 pixels, with 9 fractional bits
+// bit      17: vertical edge
+// bits 18..31: tile-relative position, biased by 16 pixels, with 8 fractional bits
 //
-// The full 15-bit position field is required for the right halo, which extends to X = 16.5.
-fn pack_crossing(position: f32, direction_positive: bool, profile_id: u32) -> u32 {
-    let fixed = min(u32(max(position + 16.0, 0.0) * 512.0), 0x7fffu);
-    return (fixed << 17u) | (u32(direction_positive) << 16u) | profile_id;
+// Every position is a 24.8 value, so 8 fractional bits keep it exact. The 14-bit position field
+// holds the right halo, which extends to X = 16.5, and the bias of 16 pixels.
+fn pack_crossing(position: f32, direction_positive: bool, vertical: bool, profile_id: u32) -> u32 {
+    let fixed = min(u32(max(position + 16.0, 0.0) * 256.0), 0x3fffu);
+    return (fixed << 18u) | (u32(vertical) << 17u) | (u32(direction_positive) << 16u) | profile_id;
 }
 
 // Recovers the position a crossing was packed with.
 fn unpack_crossing_position(packed: u32) -> f32 {
-    return (f32(packed >> 17u) / 512.0) - 16.0;
+    return (f32(packed >> 18u) / 256.0) - 16.0;
+}
+
+// Tests whether a crossing was packed from a vertical edge.
+fn crossing_is_vertical(packed: u32) -> bool {
+    return ((packed >> 17u) & 1u) != 0u;
+}
+
+// Tests whether path_tiling stretched a vertical segment that starts on the tile's top-left
+// corner to the full tile height. Such a segment keeps its real end in y_edge. Only that branch
+// gives a segment with both points at the same f32 X, the Y range exactly [0, TILE_HEIGHT], and
+// a y_edge that is neither 1e9 nor the halo-only marker.
+fn is_stretched_left_edge(segment: Segment) -> bool {
+    return segment.point0.x == segment.point1.x
+        && min(segment.point0.y, segment.point1.y) == 0.0
+        && max(segment.point0.y, segment.point1.y) == f32(TILE_HEIGHT)
+        && segment.y_edge < 1.0e9 && segment.y_edge != HALO_ONLY_Y_EDGE;
 }
 
 // Inserts one crossing into its row's shared sorted list. One invocation owns each row, so the
@@ -752,6 +770,23 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
         for (var s = 0u; s < n_segs; s++) {
             let segment = segments[fill.seg_data + s];
             if segment.y_edge == HALO_ONLY_Y_EDGE {
+                // This vertical edge lies on the tile's left edge. The backdrop and y_edge values
+                // already carry its winding to every centre of the tile, so it adds nothing to the
+                // centre windings. The CPU row list holds a crossing for this edge, and an interval
+                // that it opens can be centre-free. Add the crossing to the list only, and remove
+                // its winding from row_seed, which is the winding immediately before the first
+                // listed crossing.
+                if owns_row {
+                    let sample_y_fixed = i32(sample_y * 256.0);
+                    let y0_fixed = i32(round(segment.point0.y * 256.0));
+                    let y1_fixed = i32(round(segment.point1.y * 256.0));
+                    if (y0_fixed < sample_y_fixed) != (y1_fixed < sample_y_fixed) {
+                        let direction = -i32(sign(segment.point1.y - segment.point0.y));
+                        insert_aliased_row_crossing(row, pack_crossing(0.0, direction > 0, true, segment.tag >> 16u));
+                        aliased_row_seed[row] -= direction;
+                    }
+                }
+
                 continue;
             }
 
@@ -766,34 +801,55 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
                 let sample_y_fixed = i32(sample_y * 256.0);
 
                 // Half-open span ownership counts a vertex on the centre line on exactly one edge.
-                let crosses_row = (p0_fixed.y <= sample_y_fixed) != (p1_fixed.y <= sample_y_fixed);
+                // The span excludes its top and includes its bottom, as on the CPU, so a centre on
+                // a horizontal edge belongs to the shape above that edge.
+                let crosses_row = (p0_fixed.y < sample_y_fixed) != (p1_fixed.y < sample_y_fixed);
                 if crosses_row {
                     let x_cross_fixed = p0_fixed.x
                         + (((p1_fixed.x - p0_fixed.x) * (sample_y_fixed - p0_fixed.y)) / (p1_fixed.y - p0_fixed.y));
 
                     // Increasing local X walks from the tile's left edge. Match the sign used by
                     // the backdrop and y_edge values so all three contributions form one winding.
+                    // A sloped edge on a centre counts at that centre, so an opening edge includes
+                    // it. A vertical edge on a centre counts only right of it, so the centre belongs
+                    // to the shape left of the edge, the same as the CPU row intervals.
                     let direction = -i32(sign(delta.y));
+                    let vertical = p0_fixed.x == p1_fixed.x;
                     for (var k = 0u; k < TILE_WIDTH; k += 1u) {
-                        if x_cross_fixed <= (i32(k) << 8) + 128 {
+                        let centre_fixed = (i32(k) << 8) + 128;
+                        if x_cross_fixed < centre_fixed || (!vertical && x_cross_fixed == centre_fixed) {
                             aliased_row_winding[row][k] += direction;
                         }
                     }
 
-                    // A horizontal interval uses the Y profiles of its two boundary edges. Their
-                    // identifiers occupy bits 16..31 of the segment tag.
-                    insert_aliased_row_crossing(
-                        row,
-                        pack_crossing(f32(x_cross_fixed) / 256.0, direction > 0, segment.tag >> 16u));
+                    if is_stretched_left_edge(segment) && sample_y_fixed > i32(round(segment.y_edge * 256.0)) {
+                        // Below its real end the stretched segment is not an edge of the row. The
+                        // winding step above stays, because the y_edge of the line that meets the
+                        // end cancels it. The crossing stays out of the list, and its winding moves
+                        // into row_seed, so row_seed stays the winding before the first listed
+                        // crossing.
+                        aliased_row_seed[row] += direction;
+                    } else {
+                        // A horizontal interval uses the Y profiles of its two boundary edges.
+                        // Their identifiers occupy bits 16..31 of the segment tag.
+                        insert_aliased_row_crossing(
+                            row,
+                            pack_crossing(f32(x_cross_fixed) / 256.0, direction > 0, vertical, segment.tag >> 16u));
+                    }
                 }
 
                 // y_edge represents the part of this segment clipped to the left of the tile. Add
                 // its winding step to every centre below that crossing. It is not a column event;
                 // the corresponding geometry lies outside this tile.
                 if segment.y_edge < 1.0e9 {
-                    // NearestCrossingCount rounds an exact half-row carry away from zero, so a
-                    // left-edge crossing on the row centre is included.
-                    let step = select(0, i32(sign(delta.x)), sample_y >= segment.y_edge);
+                    // The clipped part runs down the tile's left edge from y_edge, and it crosses
+                    // every centre below y_edge. That is the half-open rule of the row test above
+                    // and of the CPU start cover, which exclude the top of a span. y_edge is the f32
+                    // Y of the segment endpoint on the tile's left edge, and the row test rounds that
+                    // endpoint to 24.8. Round y_edge the same way, so a tie on a row centre counts in
+                    // exactly one test.
+                    let y_edge_fixed = i32(round(segment.y_edge * 256.0));
+                    let step = select(0, i32(sign(delta.x)), sample_y_fixed > y_edge_fixed);
                     for (var k = 0u; k < TILE_WIDTH; k += 1u) {
                         aliased_row_winding[row][k] += step;
                     }
@@ -817,6 +873,7 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
                             let packed = pack_crossing(
                                 f32(y_cross_fixed) / 256.0,
                                 segment.point1.x > segment.point0.x,
+                                false,
                                 segment.tag & PROFILE_ID_MASK);
 
                             // Keep the shared list sorted as it is built. Sorting once here avoids
@@ -862,7 +919,13 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
                 let p0_fixed = vec2<i32>(round(segment.point0 * 256.0));
                 let p1_fixed = vec2<i32>(round(segment.point1 * 256.0));
                 let sample_y_fixed = i32(sample_y * 256.0);
-                if (p0_fixed.y <= sample_y_fixed) == (p1_fixed.y <= sample_y_fixed) {
+                if (p0_fixed.y < sample_y_fixed) == (p1_fixed.y < sample_y_fixed) {
+                    continue;
+                }
+
+                // Below the real end of a stretched segment the segment is not a crossing of the
+                // row.
+                if is_stretched_left_edge(segment) && sample_y_fixed > i32(round(segment.y_edge * 256.0)) {
                     continue;
                 }
 
@@ -880,7 +943,7 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
                 let direction = -i32(sign(segment.point1.y - segment.point0.y));
                 insert_aliased_row_crossing(
                     row,
-                    pack_crossing(f32(local_x_fixed) / 256.0, direction > 0, segment.tag >> 16u));
+                    pack_crossing(f32(local_x_fixed) / 256.0, direction > 0, p0_fixed.x == p1_fixed.x, segment.tag >> 16u));
 
                 if h == 0u {
                     // row_seed is the winding at X = 0. The sorted list begins in the left halo, so
@@ -918,10 +981,12 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
 
         var interval_start = 0.0;
         var enter_id = PROFILE_ID_SENTINEL;
+        var enter_vertical = false;
         var has_local_start = false;
         for (var c = 0u; c < row_count; c += 1u) {
             let packed = aliased_row_crossings[row][c];
             let position = unpack_crossing_position(packed) - xy.x;
+            let vertical = crossing_is_vertical(packed);
             let previous = w;
             if even_odd {
                 w ^= 1;
@@ -929,11 +994,13 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
                 w += select(-1, 1, ((packed >> 16u) & 1u) != 0u);
             }
 
-            // Interval coverage is closed at both ends. The direct winding comparison already
-            // includes an opening edge on a centre, but it excludes a closing edge on a centre.
-            // Restore that closing endpoint explicitly.
+            // Interval coverage includes a centre on the closing edge. It includes a centre on
+            // the opening edge only when that edge is not vertical. For a sloped edge, the direct
+            // winding comparison already includes an opening edge on a centre, but it excludes a
+            // closing edge on a centre. Restore that closing endpoint explicitly. For a vertical
+            // edge, the winding comparison already gives this result.
             let centre_index = i32(floor(position));
-            if centre_index >= 0 && centre_index < i32(PIXELS_PER_THREAD)
+            if !vertical && centre_index >= 0 && centre_index < i32(PIXELS_PER_THREAD)
                 && position == f32(centre_index) + 0.5 && (previous != 0 || w != 0) {
                 lit[u32(centre_index)] = true;
             }
@@ -941,6 +1008,7 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
             if previous == 0 && w != 0 {
                 interval_start = position;
                 enter_id = packed & PROFILE_ID_MASK;
+                enter_vertical = vertical;
                 has_local_start = true;
                 continue;
             }
@@ -949,21 +1017,16 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
             }
 
             // An interval already open before the halo is not a local centre-free interval; it may
-            // have covered centres farther left. The clipped-left case is different: the CPU keeps
-            // the closing edge's one-pixel extension, so its first destination pixel remains covered.
+            // have covered centres farther left.
             if !has_local_start {
-                let clipped_left = (tile_and_neighbors & ALIASED_CLIPPED_LEFT_BIT) != 0u;
-                if clipped_left && position == 0.0 && global_xy.x + 1.0 == fill.interest.z {
-                    lit[0] = true;
-                }
-
                 continue;
             }
             has_local_start = false;
 
-            // For closed endpoint coverage, the first contained centre is ceil(start - 0.5) and
-            // the last is floor(end - 0.5). last < first means the interval contains no centre.
-            let first = i32(ceil(interval_start - 0.5));
+            // The last contained centre is floor(end - 0.5). The first is ceil(start - 0.5), or
+            // floor(start - 0.5) + 1 when a vertical edge opens the interval and excludes a centre
+            // on it. last < first means the interval contains no centre.
+            let first = select(i32(ceil(interval_start - 0.5)), i32(floor(interval_start - 0.5)) + 1, enter_vertical);
             let last = i32(floor(position - 0.5));
             if last >= first {
                 continue;
@@ -987,9 +1050,10 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
         let column = u32(xy.x) + i;
         let column_count = aliased_column_counts[column];
 
-        // Match the CPU's merge order. It consults column results only when this row has at least
-        // one horizontal-centre crossing. Overflow disables only this secondary recovery.
-        if lit[i] || row_overflow || row_count == 0u || aliased_column_overflow[column] != 0u || column_count < 2u {
+        // A row with no horizontal-centre crossing can still hold a horizontal feature that lies
+        // between two row centres, so the CPU consults column results for every row. Overflow
+        // disables only this secondary recovery.
+        if lit[i] || row_overflow || aliased_column_overflow[column] != 0u || column_count < 2u {
             continue;
         }
 
@@ -1016,9 +1080,9 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
                 continue;
             }
 
-            // Closed at both ends, as in the row walk: an interval reaching a row centre
-            // exactly is owned by that row's walk and is not a collapsed interval.
-            if i32(floor(position - 0.5)) >= i32(ceil(interval_start - 0.5)) {
+            // The row walk excludes a centre on the top end and includes a centre on the bottom
+            // end, so it owns this interval when a row centre lies in (start, end].
+            if i32(floor(position - 0.5)) > i32(floor(interval_start - 0.5)) {
                 continue;
             }
 

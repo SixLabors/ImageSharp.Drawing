@@ -1345,7 +1345,6 @@ internal static class WebGPUSceneDispatch
         nuint sceneBufferSize = GetBindingByteLength<uint>(encodedScene.SceneBufferWordCount);
         nuint drawMonoidBufferSize = bufferSizes.DrawMonoids.ByteLength;
         nuint infoBinDataBufferSize = checked(bufferSizes.Info.ByteLength + bufferSizes.BinData.ByteLength + bufferSizes.BinHeaders.ByteLength);
-        nuint pathBboxBufferSize = bufferSizes.PathBboxes.ByteLength;
         nuint drawBboxBufferSize = bufferSizes.DrawBboxes.ByteLength;
         nuint pathBufferSize = bufferSizes.Paths.ByteLength;
         nuint lineBufferSize = bufferSizes.Lines.ByteLength;
@@ -1402,7 +1401,6 @@ internal static class WebGPUSceneDispatch
                 stagedScene.Resources,
                 sceneBufferSize,
                 drawBboxBufferSize,
-                pathBboxBufferSize,
                 pathBufferSize,
                 pathRowBuffer,
                 pathRowBufferSize,
@@ -4309,7 +4307,6 @@ internal static class WebGPUSceneDispatch
     /// <param name="resources">The staged-scene resource set that provides the scene, draw-bbox, and path buffers.</param>
     /// <param name="sceneBufferSize">The byte length of the packed scene buffer binding.</param>
     /// <param name="drawBboxBufferSize">The byte length of the draw-bbox buffer binding.</param>
-    /// <param name="pathBboxBufferSize">The byte length of the original path-bbox buffer binding.</param>
     /// <param name="pathBufferSize">The byte length of the per-path buffer binding.</param>
     /// <param name="pathRowBuffer">The sparse path-row buffer to populate.</param>
     /// <param name="pathRowBufferSize">The byte length of the sparse path-row buffer binding.</param>
@@ -4323,7 +4320,6 @@ internal static class WebGPUSceneDispatch
         WebGPUSceneResourceSet resources,
         nuint sceneBufferSize,
         nuint drawBboxBufferSize,
-        nuint pathBboxBufferSize,
         nuint pathBufferSize,
         WGPUBufferImpl* pathRowBuffer,
         nuint pathRowBufferSize,
@@ -4331,16 +4327,15 @@ internal static class WebGPUSceneDispatch
         uint dispatchX,
         out string? error)
     {
-        WGPUBindGroupEntry* entries = stackalloc WGPUBindGroupEntry[7];
+        WGPUBindGroupEntry* entries = stackalloc WGPUBindGroupEntry[6];
         entries[0] = CreateBufferBinding(0, resources.HeaderBuffer, (nuint)sizeof(GpuSceneConfig));
         entries[1] = CreateBufferBinding(1, resources.SceneBuffer, sceneBufferSize);
         entries[2] = CreateBufferBinding(2, resources.DrawBboxBuffer, drawBboxBufferSize);
         entries[3] = CreateBufferBinding(3, bumpBuffer, (nuint)sizeof(GpuSceneBumpAllocators));
         entries[4] = CreateBufferBinding(4, resources.PathBuffer, pathBufferSize);
         entries[5] = CreateBufferBinding(5, pathRowBuffer, pathRowBufferSize);
-        entries[6] = CreateBufferBinding(6, resources.PathBboxBuffer, pathBboxBufferSize);
 
-        if (!recording.TryRecord(WebGPUSceneShaderId.PathRowAlloc, entries, 7, dispatchX, 1, 1, out error))
+        if (!recording.TryRecord(WebGPUSceneShaderId.PathRowAlloc, entries, 6, dispatchX, 1, 1, out error))
         {
             return false;
         }

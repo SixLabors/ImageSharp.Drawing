@@ -1137,19 +1137,9 @@ internal static class WebGPUSceneEncoder
     /// <returns>The inflated stroke bounds.</returns>
     private static RectangleF GetStrokeBounds(RectangleF bounds, Pen pen, float widthScale)
     {
-        float halfWidth = pen.StrokeWidth * widthScale * 0.5F;
-        float joinInflate = pen.StrokeOptions.LineJoin switch
-        {
-            LineJoin.Miter or LineJoin.MiterRevert or LineJoin.MiterRound => (float)(halfWidth * Math.Max(pen.StrokeOptions.MiterLimit, 1D)),
-            _ => halfWidth
-        };
-
-        float capInflate = pen.StrokeOptions.LineCap == LineCap.Square
-            ? halfWidth * MathF.Sqrt(2F)
-            : halfWidth;
-
-        float inflate = MathF.Max(joinInflate, capInflate);
-
+        // The CPU backend inflates by the same radius, so both backends get the same interest
+        // rectangle and the same brush origin.
+        float inflate = pen.GetOutlineRadius(widthScale);
         bounds.Inflate(new SizeF(inflate, inflate));
         return bounds;
     }

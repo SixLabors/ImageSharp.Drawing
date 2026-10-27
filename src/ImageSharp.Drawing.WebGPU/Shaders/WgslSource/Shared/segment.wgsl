@@ -16,7 +16,9 @@ struct Segment {
     point1: vec2<f32>,
     // Tile-relative y at which the segment meets the tile's left edge, or
     // 1e9 if it does not; fine accumulates the implied vertical edge there
-    // to keep winding consistent after clipping.
+    // to keep winding consistent after clipping. A vertical segment that
+    // path_tiling stretched along the whole left edge keeps its real end
+    // here instead; its delta.x is 0, so the value adds no winding.
     y_edge: f32,
     // Profile identifiers used by aliased thin-feature recovery. Bits 0..15 select the profile
     // based on left and right movement. Bits 16..31 select the profile based on up and down

@@ -142,6 +142,49 @@ public partial class WebGPUDrawingBackendTests
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
+    // An aliased fill sets a pixel when the shape holds its centre. The rectangle starts left of
+    // the target and ends at x = 16, so the columns 0 to 15 are set and column 16, with its centre
+    // at 16.5, stays empty on both backends.
+    [WebGPUTheory]
+    [WithSolidFilledImages(48, 40, "White", PixelTypes.Rgba32)]
+    public void FillPath_AliasedRectangleLeftOfTarget_SetsOnlyCoveredCentres<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
+        };
+
+        RectanglePolygon rectangle = new(-8, 8, 24, 24);
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(Brushes.Solid(Color.Black), rectangle);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        foreach (Image<TPixel> image in new[] { defaultImage, nativeSurfaceImage })
+        {
+            for (int y = 0; y < image.Height; y++)
+            {
+                for (int x = 0; x < image.Width; x++)
+                {
+                    bool inside = x < 16 && y >= 8 && y < 32;
+                    Assert.True(inside == (image[x, y].ToRgba32().R == 0), $"Pixel ({x}, {y}) must be {(inside ? "set" : "empty")}.");
+                }
+            }
+        }
+    }
+
     [WebGPUTheory]
     [WithBasicTestPatternImages(384, 256, PixelTypes.Rgba32)]
     public void FillPath_WithImageBrush_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
@@ -1726,6 +1769,107 @@ public partial class WebGPUDrawingBackendTests
                 .DrawImage(reference, new Point(0, 0), 1F)
                 .DrawImage(rendered, new Point(0, reference.Height), 1F));
             return comparison;
+        }
+    }
+
+    // An image brush starts its texture at the left and top edges of the stroke bounds, so the two
+    // backends must inflate the bounds of a stroke by the same outline radius. For a Miter join with
+    // limit 4 and half width 5, the radius is 5 * sqrt(17) = 20.6, so the texture starts at x = 29
+    // for a path that starts at x = 50. The texture alternates its columns, so a start that moves by
+    // one pixel inverts every stroke pixel.
+    [WebGPUTheory]
+    [WithSolidFilledImages(200, 140, "White", PixelTypes.Rgba32)]
+    public void DrawPath_StrokeImageBrushMiterJoin_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true }
+        };
+
+        using Image<TPixel> columns = new(2, 1);
+        columns[0, 0] = Color.Black.ToPixel<TPixel>();
+        columns[1, 0] = Color.White.ToPixel<TPixel>();
+
+        Pen pen = new SolidPen(new PenOptions(new ImageBrush<TPixel>(columns, WrapMode.Repeat, WrapMode.Repeat), 10F, null)
+        {
+            StrokeOptions = new StrokeOptions { LineJoin = LineJoin.Miter, MiterLimit = 4D }
+        });
+
+        RectanglePolygon path = new(50, 30, 100, 80);
+        void DrawAction(DrawingCanvas canvas) => canvas.Draw(pen, path);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0F);
+    }
+
+    // A Miter join past its limit draws a clipped bevel. Near a reversal, its points are about one
+    // half width out from the centerline and m half widths along it, so they reach almost
+    // sqrt(m^2 + 1) half widths from the corner. The centerline here turns back at (100, 112.5) by
+    // almost 180 degrees. For half width 5 and limit 4, the bevel then covers part of column 79,
+    // outside bounds that are inflated by m half widths (x = 80). Both backends must draw the bevel
+    // pixels of column 79. The edge pixels differ by one 8-bit level between the CPU and the GPU:
+    // 0.0003% measured. A bevel column that one backend cuts gives 0.0011%.
+    [WebGPUTheory]
+    [WithSolidFilledImages(200, 160, "White", PixelTypes.Rgba32)]
+    public void DrawPath_StrokeMiterJoinReversal_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true }
+        };
+
+        PathBuilder pb = new();
+        pb.AddLine(new PointF(150, 100), new PointF(100, 112.5F));
+        pb.AddLine(new PointF(100, 112.5F), new PointF(150, 97));
+        IPath path = pb.Build();
+
+        Pen pen = new SolidPen(new PenOptions(Color.DarkBlue, 10F)
+        {
+            StrokeOptions = new StrokeOptions { LineJoin = LineJoin.Miter, MiterLimit = 4D }
+        });
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Draw(pen, path);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        // A stroke draws the same shape as a fill of its outline, and the fill does not use the
+        // stroke bounds. So the outline fill gives the bevel pixels that both backends must draw.
+        IPath outline = path.GenerateOutline(pen.StrokeWidth, pen.StrokeOptions);
+        using Image<TPixel> referenceImage = provider.GetImage();
+        RenderWithDefaultBackend(referenceImage, drawingOptions, canvas => canvas.Fill(pen.StrokeFill, outline));
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0004F);
+        for (int y = 0; y < referenceImage.Height; y++)
+        {
+            Assert.Equal(referenceImage[79, y], defaultImage[79, y]);
+            Assert.Equal(referenceImage[79, y], nativeSurfaceImage[79, y]);
         }
     }
 

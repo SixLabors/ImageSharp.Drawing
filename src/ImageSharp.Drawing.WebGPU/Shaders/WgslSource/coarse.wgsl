@@ -195,15 +195,10 @@ fn write_path(tile: Tile, tile_ix: u32, path: Path, global_x: u32, global_y: u32
         if aliased {
             // Pack the data needed by the aliased half-pixel halo into one word:
             // bits 0..28 contain this path-tile index;
-            // bit 29 means the original path started left of its clipped drawing bounds;
             // bit 30 means the tile on the left has segments for the same path row;
             // bit 31 means the tile on the right has segments for the same path row.
             // A path-tile record is eight bytes, so its storage-buffer index fits in 29 bits.
             var tile_and_neighbors = tile_ix;
-            if (path.flags & PATH_FLAGS_CLIPPED_LEFT) != 0u {
-                tile_and_neighbors |= ALIASED_CLIPPED_LEFT_BIT;
-            }
-
             if global_x > 0u {
                 let left = lookup_tile(path, global_x - 1u, global_y);
                 if left.valid != 0u && tiles[left.tile_ix].segment_count_or_ix != 0u {

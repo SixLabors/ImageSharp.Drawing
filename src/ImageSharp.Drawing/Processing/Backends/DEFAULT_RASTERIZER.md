@@ -404,7 +404,7 @@ The fill rule is therefore an emission-time decision, not a geometry-preprocessi
 The rasterizer has separate coverage paths for the two modes.
 
 - `Antialiased` mode keeps the continuous coverage produced by the area-and-cover math.
-- `Aliased` mode walks sorted crossings at pixel row and column centres. A pixel is covered when the shape contains its centre. If a closed interval contains no centre, the rasterizer lights its midpoint pixel unless the two boundary profiles show that the interval ends at a contour tip. A second, vertical walk finds horizontal features between row centres.
+- `Aliased` mode walks sorted crossings at pixel row and column centres. A pixel is covered when the shape contains its centre. A centre on a sloped edge is covered. A centre on a vertical edge belongs to the shape left of the edge, and a centre on a horizontal edge belongs to the shape above the edge, so a 1 pixel wide line on whole-pixel coordinates sets one row or column. If an interval contains no centre, the rasterizer lights its midpoint pixel unless the two boundary profiles show that the interval ends at a contour tip, or the interval continues past the left or right edge of the band. A second, vertical walk finds horizontal features between row centres, also in rows that have no row-centre crossing.
 
 Aliased coverage is therefore determined directly from geometry. It is not produced by thresholding antialiased area coverage.
 

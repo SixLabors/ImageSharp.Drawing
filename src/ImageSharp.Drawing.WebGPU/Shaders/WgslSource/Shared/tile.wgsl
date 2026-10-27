@@ -17,19 +17,12 @@ struct Path {
     bbox: vec4<u32>,
     // offset to the first sparse row record owned by this path
     rows: u32,
-    // Facts about the original path that remain necessary after clipping its drawing bounds.
-    flags: u32,
 }
 
-// The original path begins left of its drawing bounds. The aliased row walk uses this flag when an
-// interval enters through the clipped left edge and closes inside the first half pixel.
-const PATH_FLAGS_CLIPPED_LEFT = 0x1u;
-
-// Coarse packs one path-tile index and three aliased row-walk flags into CmdFill.coverage_data.
-// The index occupies bits 0..28. The remaining bits describe the original left clip and the two
+// Coarse packs one path-tile index and two aliased row-walk flags into CmdFill.coverage_data.
+// The index occupies bits 0..28 and bit 29 is unused. Bits 30 and 31 describe the two
 // neighboring tiles that contain segments for the same path row.
 const ALIASED_TILE_INDEX_MASK = 0x1fffffffu;
-const ALIASED_CLIPPED_LEFT_BIT = 0x20000000u;
 const ALIASED_LEFT_NEIGHBOR_BIT = 0x40000000u;
 const ALIASED_RIGHT_NEIGHBOR_BIT = 0x80000000u;
 const INVALID_TILE_INDEX = 0xffffffffu;
