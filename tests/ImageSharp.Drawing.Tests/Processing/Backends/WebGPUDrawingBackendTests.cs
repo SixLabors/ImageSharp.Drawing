@@ -3018,7 +3018,12 @@ public partial class WebGPUDrawingBackendTests
             // differ by one unit in some blended layer pixels between the CPU and the GPU, so the
             // pair tolerance is the largest measured difference of all cases plus one unit.
             AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0859F);
-            AssertBackendPairReferenceOutputs(provider, details, defaultImage, nativeSurfaceImage);
+
+            // The self copy composites green 128 at 50% over white, so the exact green value is the
+            // rounding tie 191.5. The WebGPU output on macOS rounds it to 191, against 192 in the
+            // reference, so that case gets its measured difference plus one unit.
+            float referenceTolerance = seal == "CopyPixelsFromSelf" ? 0.0185F : 0.0003F;
+            AssertBackendPairReferenceOutputs(provider, details, defaultImage, nativeSurfaceImage, referenceTolerance);
         }
         finally
         {
