@@ -297,12 +297,14 @@ on a sloped edge is covered, a centre on a vertical edge belongs to the shape le
 a centre on a horizontal edge belongs to the shape above the edge. If an interval contains no
 centre, they light its midpoint pixel unless the two boundary profiles show that the interval ends
 at a contour tip, or the interval is open at either end of the row's crossing list. A second,
-vertical walk finds horizontal features between row centres. It starts from the winding just above
-the centre of the tile's first row, and it reads the column crossings within half a pixel above and
-below the tile from the path tiles above and below, whose indices an aliased `CMD_FILL` holds in two
-more words. A vertical line exactly on the left edge of a path's tile bbox, and a horizontal line
-exactly on a tile row boundary, are kept as halo-only segments, so the row and column walks see
-their crossings. In a chunked render the tiles outside the chunk rows do not exist, so the column
+vertical walk finds horizontal features between row centres. Each crossing is a 24.8 value with the
+same order as the exact crossing relative to every pixel centre, as on the CPU. So the two walks put
+a centre on the same side of an edge, and a thin feature has no hole. The column walk starts from
+the winding just above the centre of the tile's first row, and it reads the column crossings within
+half a pixel above and below the tile from the path tiles above and below, whose indices an aliased
+`CMD_FILL` holds in two more words. A vertical line exactly on the left edge of a path's tile bbox,
+and a horizontal line exactly on a tile row boundary, are kept as halo-only segments, so the row and
+column walks see their crossings. In a chunked render the tiles outside the chunk rows do not exist, so the column
 walk does not read across a chunk edge. The aliased bit in `CmdFill.size_and_rule` selects the
 coverage path. Each fill also carries a raster interest rectangle; coverage outside it is zeroed.
 

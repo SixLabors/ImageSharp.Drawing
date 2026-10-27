@@ -291,6 +291,54 @@ public partial class WebGPUDrawingBackendTests
         }
     }
 
+    // A thin sliver 0.4 pixels high rises slowly over 56 pixels. Its lower edge passes less than 1/256
+    // pixel from row centres. In each column the sliver either holds a row centre or sets its midpoint
+    // pixel, so every column of the interior has a set pixel on both backends.
+    [WebGPUTheory]
+    [WithSolidFilledImages(64, 64, "White", PixelTypes.Rgba32, 31.825F, 0.3F)]
+    [WithSolidFilledImages(64, 64, "White", PixelTypes.Rgba32, 32.0125F, 0.3F)]
+    [WithSolidFilledImages(64, 64, "White", PixelTypes.Rgba32, 20.037F, 0.1F)]
+    public void FillPath_AliasedThinSlopedSliver_SetsPixelInEveryColumn<TPixel>(TestImageProvider<TPixel> provider, float top, float rise)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
+        };
+
+        Polygon path = new([new PointF(4, top), new PointF(60, top + rise), new PointF(60, top + rise + 0.4F), new PointF(4, top + 0.4F)]);
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(Brushes.Solid(Color.Black), path);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        foreach (Image<TPixel> image in new[] { defaultImage, nativeSurfaceImage })
+        {
+            for (int x = 8; x < 56; x++)
+            {
+                bool set = false;
+                for (int y = 0; y < image.Height; y++)
+                {
+                    set |= image[x, y].ToRgba32().R == 0;
+                }
+
+                Assert.True(set, $"Column {x} must have a set pixel.");
+            }
+        }
+    }
+
     // Two thin slanted shapes cross each other. In row 5 the closing edge of one shape and the opening
     // edge of the other cross the row centre at the same X. The order of these coincident crossings
     // decides whether the row walk finds one interval or two, so both backends must sort them with
