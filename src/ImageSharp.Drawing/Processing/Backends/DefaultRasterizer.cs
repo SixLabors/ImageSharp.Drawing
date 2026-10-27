@@ -1624,7 +1624,7 @@ internal static partial class DefaultRasterizer
                     continue;
                 }
 
-                int y = y0 + (int)(((long)(y1 - y0) * (sampleX - x0)) / (x1 - x0));
+                int y = InterpolateCrossing(y0, y1 - y0, sampleX - x0, x1 - x0);
                 if (y < yLow || y >= yHigh)
                 {
                     continue;
@@ -1905,6 +1905,44 @@ internal static partial class DefaultRasterizer
         }
 
         /// <summary>
+        /// Returns where a segment crosses a centre line, as a 24.8 coordinate that has the same order
+        /// as the exact crossing relative to every pixel centre.
+        /// </summary>
+        /// <remarks>
+        /// The row pass and the column pass test each pixel centre against the same edge, from two
+        /// separate interpolations. Both must put the centre on the same side of the edge. If one pass
+        /// puts it outside and the other puts it on the edge, neither pass sets the pixel and a thin
+        /// feature gets a hole. The exact crossing is rounded down to the 24.8 grid. A rounded value
+        /// equal to a pixel centre then means only an exact hit, because an inexact one moves up by
+        /// one unit. So less than, equal to and greater than a centre are exact in both passes.
+        /// </remarks>
+        /// <param name="origin">The segment's start coordinate on the interpolated axis.</param>
+        /// <param name="delta">The segment's extent on the interpolated axis.</param>
+        /// <param name="sampleOffset">The centre line position minus the segment's start on the other axis.</param>
+        /// <param name="span">The segment's extent on the other axis. It is not zero.</param>
+        /// <returns>The crossing coordinate in 24.8 fixed-point.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int InterpolateCrossing(int origin, int delta, int sampleOffset, int span)
+        {
+            long numerator = (long)delta * sampleOffset;
+            long quotient = numerator / span;
+            long remainder = numerator - (quotient * span);
+            if (remainder == 0)
+            {
+                return origin + (int)quotient;
+            }
+
+            // Division truncates toward zero, so a negative quotient needs one more step down.
+            if ((remainder < 0) != (span < 0))
+            {
+                quotient--;
+            }
+
+            int position = origin + (int)quotient;
+            return (position & (FixedOne - 1)) == FixedHalf ? position + 1 : position;
+        }
+
+        /// <summary>
         /// Records where one segment crosses the horizontal centre line of each affected row.
         /// </summary>
         /// <remarks>
@@ -1948,7 +1986,7 @@ internal static partial class DefaultRasterizer
                 }
 
                 int count = this.crossingCounts[row];
-                int x = x0 + (int)(((long)(x1 - x0) * (sampleY - y0)) / (y1 - y0));
+                int x = InterpolateCrossing(x0, x1 - x0, sampleY - y0, y1 - y0);
 
                 // Position, vertical flag, direction, profile, and slope flag pack into one value
                 // ordered by position, so a row sorts with a single primitive sort. The lower bits

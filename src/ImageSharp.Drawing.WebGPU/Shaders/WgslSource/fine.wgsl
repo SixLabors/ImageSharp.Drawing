@@ -757,6 +757,29 @@ fn insert_aliased_column_crossing(column: u32, packed: u32) {
     }
 }
 
+// Returns where a segment crosses a centre line, as a 24.8 value that has the same order as the
+// exact crossing relative to every pixel centre. The row walk and the column walk test each centre
+// against the same edge from two separate interpolations, and both must put it on the same side.
+// If one walk puts a centre outside and the other puts it on the edge, neither lights the pixel and
+// a thin feature gets a hole. The exact crossing is rounded down, and an inexact value that lands on
+// a centre moves up one unit, so only an exact hit equals a centre. The CPU uses the same rule.
+fn interpolate_crossing(origin: i32, delta: i32, sample_offset: i32, span: i32) -> i32 {
+    let numerator = delta * sample_offset;
+    var quotient = numerator / span;
+    let remainder = numerator - (quotient * span);
+    if remainder == 0 {
+        return origin + quotient;
+    }
+
+    // Division truncates toward zero, so a negative quotient needs one more step down.
+    if (remainder < 0) != (span < 0) {
+        quotient -= 1;
+    }
+
+    let position = origin + quotient;
+    return select(position, position + 1, (position & 255) == 128);
+}
+
 // Adds the crossings of one segment with the centre lines of the four columns that start at
 // first_column. offset_fixed moves a segment of the tile above or below into this tile's 24.8
 // coordinates, and only crossings with Y in [y_low, y_high) are kept. The CPU rounds endpoints to
@@ -769,8 +792,8 @@ fn capture_aliased_column_crossings(segment: Segment, first_column: u32, offset_
         let column = first_column + i;
         let sample_x_fixed = (i32(column) << 8) + 128;
         if (p0_fixed.x <= sample_x_fixed) != (p1_fixed.x <= sample_x_fixed) {
-            let y_cross_fixed = p0_fixed.y + offset_fixed
-                + (((p1_fixed.y - p0_fixed.y) * (sample_x_fixed - p0_fixed.x)) / (p1_fixed.x - p0_fixed.x));
+            let y_cross_fixed = interpolate_crossing(p0_fixed.y, p1_fixed.y - p0_fixed.y, sample_x_fixed - p0_fixed.x, p1_fixed.x - p0_fixed.x)
+                + offset_fixed;
             if y_cross_fixed >= y_low && y_cross_fixed < y_high {
                 // A vertical interval uses the X profiles of its two boundary edges. Their
                 // identifiers occupy bits 0..15 of the segment tag.
@@ -889,8 +912,7 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
                 // a horizontal edge belongs to the shape above that edge.
                 let crosses_row = (p0_fixed.y < sample_y_fixed) != (p1_fixed.y < sample_y_fixed);
                 if crosses_row {
-                    let x_cross_fixed = p0_fixed.x
-                        + (((p1_fixed.x - p0_fixed.x) * (sample_y_fixed - p0_fixed.y)) / (p1_fixed.y - p0_fixed.y));
+                    let x_cross_fixed = interpolate_crossing(p0_fixed.x, p1_fixed.x - p0_fixed.x, sample_y_fixed - p0_fixed.y, p1_fixed.y - p0_fixed.y);
 
                     // Increasing local X walks from the tile's left edge. Match the sign used by
                     // the backdrop and y_edge values so all three contributions form one winding.
@@ -1012,8 +1034,7 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
                     continue;
                 }
 
-                let local_x_fixed = p0_fixed.x
-                    + (((p1_fixed.x - p0_fixed.x) * (sample_y_fixed - p0_fixed.y)) / (p1_fixed.y - p0_fixed.y))
+                let local_x_fixed = interpolate_crossing(p0_fixed.x, p1_fixed.x - p0_fixed.x, sample_y_fixed - p0_fixed.y, p1_fixed.y - p0_fixed.y)
                     + fixed_offset;
                 let in_halo = select(
                     local_x_fixed >= -128 && local_x_fixed <= 0,

@@ -211,6 +211,41 @@ public partial class ProcessWithDrawingCanvasTests
     }
 
     /// <summary>
+    /// Verifies that a thin sloped sliver sets a pixel in every column of its interior.
+    /// </summary>
+    /// <remarks>
+    /// The sliver is 0.4 pixels high and rises 0.3 pixels over 56 pixels. Its lower edge passes less
+    /// than 1/256 pixel from the centres of row 32. In each column the sliver either holds a row centre
+    /// or sets its midpoint pixel, so no column of the interior is empty.
+    /// </remarks>
+    /// <typeparam name="TPixel">The pixel type.</typeparam>
+    /// <param name="provider">The test image provider.</param>
+    /// <param name="offset">The vertical offset of the sliver.</param>
+    [Theory]
+    [WithSolidFilledImages(64, 64, nameof(Color.Black), PixelTypes.Rgba32, 0.125F)]
+    [WithSolidFilledImages(64, 64, nameof(Color.Black), PixelTypes.Rgba32, 0.3125F)]
+    public void Fill_AliasedThinSlopedSliver_SetsPixelInEveryColumn<TPixel>(TestImageProvider<TPixel> provider, float offset)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Polygon path = new([new PointF(4, 31.7F + offset), new PointF(60, 32 + offset), new PointF(60, 32.4F + offset), new PointF(4, 32.1F + offset)]);
+        DrawingOptions options = new() { GraphicsOptions = new GraphicsOptions { Antialias = false } };
+
+        using Image<TPixel> image = provider.GetImage();
+        image.Mutate(ctx => ctx.Paint(options, canvas => canvas.Fill(Brushes.Solid(Color.White), path)));
+
+        for (int x = 8; x < 56; x++)
+        {
+            bool set = false;
+            for (int y = 0; y < image.Height; y++)
+            {
+                set |= image[x, y].ToRgba32().R == 255;
+            }
+
+            Assert.True(set, $"Column {x} must have a set pixel.");
+        }
+    }
+
+    /// <summary>
     /// Verifies that antialiased fills produce partial edge coverage.
     /// </summary>
     /// <typeparam name="TPixel">The pixel type.</typeparam>
