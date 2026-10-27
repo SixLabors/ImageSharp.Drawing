@@ -292,9 +292,13 @@ The fine pass is where the scheduled scene becomes final pixel writes.
 
 A single fine shader (`FineAreaComputeShader`) handles every flush; its pipeline is cached per
 output texture format. Antialiased fills use analytic area coverage. Aliased fills walk sorted
-crossings at pixel row and column centres. If a closed interval contains no centre, they light its
-midpoint pixel unless the two boundary profiles show that the interval ends at a contour tip. A
-second, vertical walk finds horizontal features between row centres. The aliased bit in
+crossings at pixel row and column centres, with the same tie rule as the CPU rasterizer: a centre
+on a sloped edge is covered, a centre on a vertical edge belongs to the shape left of the edge, and
+a centre on a horizontal edge belongs to the shape above the edge. If an interval contains no
+centre, they light its midpoint pixel unless the two boundary profiles show that the interval ends
+at a contour tip, or the interval is open at either end of the row's crossing list. A second, vertical walk finds horizontal features between row centres. A vertical
+line exactly on the left edge of a path's tile bbox is kept as a halo-only segment, so the row walk
+sees its crossing. The aliased bit in
 `CmdFill.size_and_rule` selects the coverage path. Each fill also carries a raster interest
 rectangle; coverage outside it is zeroed.
 

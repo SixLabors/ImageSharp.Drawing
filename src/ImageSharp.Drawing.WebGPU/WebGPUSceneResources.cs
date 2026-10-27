@@ -2885,8 +2885,9 @@ internal readonly struct GpuSceneConfig
 [StructLayout(LayoutKind.Sequential)]
 internal readonly struct GpuScenePath
 {
-    // Path in tile.wgsl has a 16-byte-aligned vec4<u32> followed by two u32 values. WGSL rounds
-    // the 24-byte payload up to a 32-byte array stride, so these fields represent the final 8 bytes.
+    // Path in tile.wgsl has a vec4<u32> followed by one u32 and therefore a
+    // 32-byte array stride. The padding keeps reusable GPU buffer sizing exact.
+    private readonly uint padding0;
     private readonly uint padding1;
     private readonly uint padding2;
 
@@ -2898,15 +2899,14 @@ internal readonly struct GpuScenePath
     /// <param name="bboxMaxX">The maximum x of the path bounds in tiles.</param>
     /// <param name="bboxMaxY">The maximum y of the path bounds in tiles.</param>
     /// <param name="rowOffset">The first sparse row record owned by the path.</param>
-    /// <param name="flags">The path flags. Bit zero means that the original path starts left of its clipped drawing bounds.</param>
-    public GpuScenePath(uint bboxMinX, uint bboxMinY, uint bboxMaxX, uint bboxMaxY, uint rowOffset, uint flags)
+    public GpuScenePath(uint bboxMinX, uint bboxMinY, uint bboxMaxX, uint bboxMaxY, uint rowOffset)
     {
         this.BboxMinX = bboxMinX;
         this.BboxMinY = bboxMinY;
         this.BboxMaxX = bboxMaxX;
         this.BboxMaxY = bboxMaxY;
         this.RowOffset = rowOffset;
-        this.Flags = flags;
+        this.padding0 = 0;
         this.padding1 = 0;
         this.padding2 = 0;
     }
@@ -2935,11 +2935,6 @@ internal readonly struct GpuScenePath
     /// Gets the first sparse row record owned by this path.
     /// </summary>
     public uint RowOffset { get; }
-
-    /// <summary>
-    /// Gets the path flags. Bit zero means that the original path starts left of its clipped drawing bounds.
-    /// </summary>
-    public uint Flags { get; }
 }
 
 /// <summary>

@@ -20,7 +20,6 @@
 #import config
 #import bump
 #import drawtag
-#import bbox
 #import tile
 #import scene_segment
 
@@ -42,11 +41,6 @@ var<storage, read_write> paths: array<Path>;
 @group(0) @binding(5)
 var<storage, read_write> rows: array<AtomicPathRow>;
 
-@group(0) @binding(6)
-// Original path bounds and drawing bounds. The reduced draw_bboxes buffer no longer contains the
-// unclipped left edge needed to set PATH_FLAGS_CLIPPED_LEFT.
-var<storage> path_bboxes: array<PathBbox>;
-
 // Allocates and initializes the row records for one draw object. NOP and
 // end-clip objects, and objects with an empty bbox, keep an all-zero tile
 // bbox and therefore allocate no rows.
@@ -60,13 +54,6 @@ fn main(
     }
 
     let drawtag = scene[draw_tag_bias(resolve_draw_segment(drawobj_ix)) + drawobj_ix];
-    let path_bbox = path_bboxes[drawobj_ix];
-    // Only aliased fills use the original left edge. Fine needs this distinction for the one-pixel
-    // extension of an interval that started before the drawing bounds.
-    let path_flags = select(
-        0u,
-        PATH_FLAGS_CLIPPED_LEFT,
-        (path_bbox.draw_flags & DRAW_INFO_FLAGS_ALIASED_BIT) != 0u && f32(path_bbox.x0) < path_bbox.interest.x);
 
     var ux0 = 0u;
     var uy0 = 0u;
@@ -99,11 +86,11 @@ fn main(
     // setup stages dispatch zero work, and the CPU resizes and retries.
     if row_limit_exceeded {
         atomicOr(&bump.failed, STAGE_TILE_ALLOC);
-        paths[drawobj_ix] = Path(bbox, 0u, path_flags);
+        paths[drawobj_ix] = Path(bbox, 0u);
         return;
     }
 
-    paths[drawobj_ix] = Path(bbox, row_base, path_flags);
+    paths[drawobj_ix] = Path(bbox, row_base);
 
     // Empty-span sentinel: x0 at u32 max and x1 at 0 so the atomicMin/Max
     // updates in path_row_span establish the true span; a row with

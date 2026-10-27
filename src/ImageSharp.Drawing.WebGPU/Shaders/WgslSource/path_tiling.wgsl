@@ -160,11 +160,26 @@ fn main(
     var p0 = xy0 - tile_xy;
     var p1 = xy1 - tile_xy;
     let EPSILON = 1e-6;
-    if p0.x == 0.0 {
+
+    // path_count keeps a vertical line exactly on the bbox's left edge only for the aliased row
+    // walk. Its winding reaches the tile through the row backdrop and the y_edge values of the
+    // lines that meet it, so the tile must ignore it as a boundary edge, even when it starts on the
+    // tile's top edge.
+    let on_bbox_left = s0.x == s1.x && s0.x == f32(path.bbox.x);
+    if on_bbox_left {
+        p0.x = EPSILON;
+        p1.x = EPSILON;
+        y_edge = HALO_ONLY_Y_EDGE;
+    } else if p0.x == 0.0 {
         if p1.x == 0.0 {
             p0.x = EPSILON;
             if p0.y == 0.0 {
-                // Vertical line covering the entire left edge of the tile.
+                // Vertical line covering the entire left edge of the tile. A line that ends
+                // inside the tile is stretched too; the y_edge of the line that meets its end
+                // cancels the extra winding below that end. The aliased row walk of the tile on
+                // the left reads this segment as a halo crossing and needs the real end, so
+                // y_edge keeps it. delta.x is 0, so y_edge adds no winding to this segment.
+                y_edge = p1.y;
                 p1.x = EPSILON;
                 p1.y = f32(TILE_HEIGHT);
             } else {
