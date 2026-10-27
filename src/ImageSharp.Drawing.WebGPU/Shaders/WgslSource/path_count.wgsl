@@ -55,6 +55,24 @@ fn span(a: f32, b: f32) -> u32 {
     return u32(max(ceil(max(a, b)) - floor(min(a, b)), 1.0));
 }
 
+// Returns the tile row that keeps a horizontal line exactly on the top edge of tile row `below`,
+// at tile column x: that row when the path has a tile there, otherwise the row above. Returns -1
+// when neither row has a tile at that column. Must match boundary_horizontal_row in
+// path_tiling.wgsl.
+fn boundary_horizontal_row(path: Path, x: i32, below: i32) -> i32 {
+    let bbox = vec4<i32>(path.bbox);
+    for (var candidate = below; candidate >= below - 1; candidate -= 1) {
+        if candidate >= bbox.y && candidate < bbox.w {
+            let row = rows[path.rows + u32(candidate - bbox.y)];
+            if x >= i32(row.x0) && x < i32(row.x1) {
+                return candidate;
+            }
+        }
+    }
+
+    return -1;
+}
+
 // Largest f32 strictly less than 1.0; clamping b below 1 keeps the first
 // floor(a * i + b) evaluation from overshooting a boundary.
 const ONE_MINUS_ULP: f32 = 0.99999994;
@@ -97,9 +115,46 @@ fn main(
     if dx + dy == 0.0 {
         return;
     }
-    // A horizontal line lying exactly on a tile boundary crosses no
-    // horizontal scanline, so it contributes no winding; drop it.
+    // A horizontal line lying exactly on a tile boundary crosses no horizontal scanline, so it
+    // contributes no winding. The aliased column walk still needs its column crossings, so
+    // path_tiling keeps it as one halo-only segment in each tile column. The CPU keeps the line
+    // in both bands; one copy is enough here, because the column walk of each tile also reads the
+    // tiles above and below.
     if dy == 0.0 && floor(s0.y) == s0.y {
+        let path = paths[line.path_ix];
+        let bbox = vec4<i32>(path.bbox);
+        let tx0 = max(i32(floor(min(s0.x, s1.x))), bbox.x);
+        let tx1 = min(i32(ceil(max(s0.x, s1.x))), bbox.z);
+        let below = i32(s0.y);
+        var kept = 0u;
+        for (var x = tx0; x < tx1; x += 1) {
+            if boundary_horizontal_row(path, x, below) >= 0 {
+                kept += 1u;
+            }
+        }
+
+        if kept == 0u {
+            return;
+        }
+
+        // Record i is tile column tx0 + i; path_tiling chooses the same row again.
+        var seg_ix = atomicAdd(&bump.seg_counts, kept);
+        for (var x = tx0; x < tx1; x += 1) {
+            let y = boundary_horizontal_row(path, x, below);
+            if y < 0 {
+                continue;
+            }
+
+            let row = rows[path.rows + u32(y - bbox.y)];
+            let tile_ix = row.tiles + u32(x) - row.x0;
+            let seg_within_slice = atomicAdd(&tile[tile_ix].segment_count_or_ix, 1u);
+            if seg_ix < config.seg_counts_size {
+                seg_counts[seg_ix] = SegmentCount(line_ix, (seg_within_slice << 16u) | u32(x - tx0));
+            }
+
+            seg_ix += 1u;
+        }
+
         return;
     }
 

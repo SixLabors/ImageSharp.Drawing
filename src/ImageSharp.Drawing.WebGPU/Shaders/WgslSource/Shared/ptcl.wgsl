@@ -54,7 +54,8 @@ const CMD_INTEREST_FULL_TARGET = 0xffffffffu;
 // Fill coverage command: rasterize the tile's segment slice into coverage.
 // Written by coarse write_path, read by fine read_fill. The command holds five words after
 // the tag: size_and_rule, seg_data, backdrop, coverage_data, and the info-stream offset of
-// the interest rectangle, which read_fill resolves into the vec4 below.
+// the interest rectangle, which read_fill resolves into the vec4 below. An aliased fill
+// holds two more words: the path-tile indices of the tiles above and below.
 struct CmdFill {
     size_and_rule: u32, // bit 0 = even-odd, bit 1 = aliased coverage, bits 2.. = segment count
     seg_data: u32, // index of the tile's first Segment in segment storage
@@ -63,6 +64,9 @@ struct CmdFill {
     // flags. Antialiased fills store the bit pattern of their coverage boost, or zero.
     coverage_data: u32,
     interest: vec4<f32>, // pixel rect (x0, y0, x1, y1); coverage outside it is zeroed
+    // Aliased fills only: the path-tile indices of the tiles above (x) and below (y) that have
+    // segments for the same path, or INVALID_TILE_INDEX.
+    vertical_neighbors: vec2<u32>,
 }
 
 // Continue reading the command stream at new_ix; links bump-allocated

@@ -74,9 +74,10 @@ internal static class WebGPUSceneEncoder
     public const int TileHeight = 16;
 
     /// <summary>
-    /// The PTCL word count of one CMD_FILL command. Must match write_path in coarse.wgsl.
+    /// The PTCL word count of one CMD_FILL command. Must match write_path in coarse.wgsl. An aliased
+    /// fill writes 8 words and an antialiased fill 6; the bounds use the larger count for both.
     /// </summary>
-    private const int PtclFillWords = 6;
+    private const int PtclFillWords = 8;
 
     /// <summary>
     /// The extra PTCL words of one clip or layer on a tile: BeginClip (2), the forced solid and
@@ -4364,7 +4365,7 @@ internal static class WebGPUSceneEncoder
             int tileX1 = DivideRoundUp(clippedBounds.Right, TileWidth);
             long tiles = (long)(tileX1 - tileX0) * rowCount;
 
-            // coarse writes for every covered tile: a fill command (6 words) on a tile with
+            // coarse writes for every covered tile: a fill command (PtclFillWords) on a tile with
             // segments, a solid command (2 words) otherwise, and the paint command. A clip or a
             // layer also writes its PtclClipWords.
             int ptclWordsPerTile = PtclFillWords + paintWords + (isClip ? PtclClipWords : 0);

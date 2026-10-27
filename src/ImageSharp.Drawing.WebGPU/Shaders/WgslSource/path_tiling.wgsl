@@ -49,6 +49,24 @@ fn span(a: f32, b: f32) -> u32 {
     return u32(max(ceil(max(a, b)) - floor(min(a, b)), 1.0));
 }
 
+// Returns the tile row that keeps a horizontal line exactly on the top edge of tile row `below`,
+// at tile column x: that row when the path has a tile there, otherwise the row above. Returns -1
+// when neither row has a tile at that column. Must match boundary_horizontal_row in
+// path_count.wgsl.
+fn boundary_horizontal_row(path: Path, x: i32, below: i32) -> i32 {
+    let bbox = vec4<i32>(path.bbox);
+    for (var candidate = below; candidate >= below - 1; candidate -= 1) {
+        if candidate >= bbox.y && candidate < bbox.w {
+            let row = rows[path.rows + u32(candidate - bbox.y)];
+            if x >= i32(row.x0) && x < i32(row.x1) {
+                return candidate;
+            }
+        }
+    }
+
+    return -1;
+}
+
 // Largest f32 strictly less than 1.0; clamping b below 1 keeps the first
 // floor(a * i + b) evaluation from overshooting a boundary.
 const ONE_MINUS_ULP: f32 = 0.99999994;
@@ -85,6 +103,31 @@ fn main(
     let count = count_x + span(s0.y, s1.y);
     let dx = abs(s1.x - s0.x);
     let dy = s1.y - s0.y;
+
+    // path_count keeps a horizontal line exactly on a tile row boundary only for the aliased column
+    // walk. Record i is tile column tx0 + i, in the row that boundary_horizontal_row chooses. The
+    // halo-only marker keeps it out of every winding calculation.
+    if dy == 0.0 && floor(s0.y) == s0.y {
+        let path = paths[line.path_ix];
+        let bbox = vec4<i32>(path.bbox);
+        let tx0 = max(i32(floor(min(s0.x, s1.x))), bbox.x);
+        let x = tx0 + i32(seg_within_line);
+        let y = boundary_horizontal_row(path, x, i32(s0.y));
+        let row = rows[path.rows + u32(y - bbox.y)];
+        let tile = tiles[row.tiles + u32(x) - row.x0];
+        let seg_start = ~tile.segment_count_or_ix;
+        if i32(seg_start) < 0 {
+            return;
+        }
+
+        let tile_xy = vec2(f32(x) * f32(TILE_WIDTH), f32(y) * f32(TILE_HEIGHT));
+        let tile_xy1 = tile_xy + vec2(f32(TILE_WIDTH), f32(TILE_HEIGHT));
+        let p0 = vec2(clamp(line.p0.x, tile_xy.x, tile_xy1.x), line.p0.y) - tile_xy;
+        let p1 = vec2(clamp(line.p1.x, tile_xy.x, tile_xy1.x), line.p1.y) - tile_xy;
+        segments[seg_start + seg_within_slice] = Segment(p0, p1, HALO_ONLY_Y_EDGE, line.tag);
+        return;
+    }
+
     let idxdy = 1.0 / (dx + dy);
     var a = dx * idxdy;
     let is_positive_slope = s1.x >= s0.x;

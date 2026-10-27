@@ -107,7 +107,12 @@ fn read_fill(cmd_ix: u32) -> CmdFill {
     let backdrop = i32(ptcl[cmd_ix + 3u]);
     let coverage_data = ptcl[cmd_ix + 4u];
     let interest = resolve_interest(ptcl[cmd_ix + 5u]);
-    return CmdFill(size_and_rule, seg_data, backdrop, coverage_data, interest);
+    var vertical_neighbors = vec2<u32>(INVALID_TILE_INDEX);
+    if (size_and_rule & 2u) != 0u {
+        vertical_neighbors = vec2<u32>(ptcl[cmd_ix + 6u], ptcl[cmd_ix + 7u]);
+    }
+
+    return CmdFill(size_and_rule, seg_data, backdrop, coverage_data, interest, vertical_neighbors);
 }
 
 // Resolves the raster interest rectangle referenced by a CMD_FILL or CMD_SOLID: the four
@@ -653,8 +658,10 @@ fn profile_is_stub(x_axis: bool, a: u32, b: u32, centre_px: f32, span_px: f32) -
 
 // Fixed shared-memory capacities for one row or column crossing list. On overflow, the exact
 // centre-winding result remains valid. Only midpoint recovery for a centre-free interval is skipped.
+// The column capacity must match ColumnCrossingCapacity of the CPU rasterizer, which also skips a
+// column whose list overflows.
 const ROW_CROSSING_CAPACITY = 16u;
-const COLUMN_CROSSING_CAPACITY = 8u;
+const COLUMN_CROSSING_CAPACITY = 16u;
 
 // Four invocations shade each row, but all four need the same crossing list. The invocation whose
 // first pixel has X = 0 scans the geometry once and calculates winding for all sixteen row centres.
@@ -670,17 +677,26 @@ var<workgroup> aliased_column_crossings: array<array<u32, COLUMN_CROSSING_CAPACI
 var<workgroup> aliased_column_counts: array<u32, TILE_WIDTH>;
 var<workgroup> aliased_column_overflow: array<u32, TILE_WIDTH>;
 
+// The winding of each column just above the centre of row zero, the seed of the column walk. Every
+// edge left of the column centre counts. An edge through the column centre on that row counts only
+// when the seed point is right of it: when the edge is vertical, or when its X increases downward.
+// The row owner of row zero builds it with that row's crossings, the same as the CPU.
+var<workgroup> aliased_column_seed: array<i32, TILE_WIDTH>;
+
 // Packs one crossing into a sortable word:
 // bits  0..15: profile identifier
-// bit      16: positive winding direction
+// bit      16: direction: a downward edge in a row list, a rightward edge in a column list
 // bit      17: vertical edge
 // bits 18..31: tile-relative position, biased by 16 pixels, with 8 fractional bits
 //
 // Every position is a 24.8 value, so 8 fractional bits keep it exact. The 14-bit position field
-// holds the right halo, which extends to X = 16.5, and the bias of 16 pixels.
-fn pack_crossing(position: f32, direction_positive: bool, vertical: bool, profile_id: u32) -> u32 {
+// holds the right halo, which extends to X = 16.5, and the bias of 16 pixels. Crossings at one
+// position sort by the vertical bit, then the direction bit, then the profile identifier. The CPU
+// rasterizer sorts its crossings with the same key, so both backends find the same intervals when
+// crossings coincide.
+fn pack_crossing(position: f32, direction_bit: bool, vertical: bool, profile_id: u32) -> u32 {
     let fixed = min(u32(max(position + 16.0, 0.0) * 256.0), 0x3fffu);
-    return (fixed << 18u) | (u32(vertical) << 17u) | (u32(direction_positive) << 16u) | profile_id;
+    return (fixed << 18u) | (u32(vertical) << 17u) | (u32(direction_bit) << 16u) | profile_id;
 }
 
 // Recovers the position a crossing was packed with.
@@ -722,6 +738,66 @@ fn insert_aliased_row_crossing(row: u32, packed: u32) {
     }
 }
 
+// Inserts one crossing into its column's shared sorted list, or marks the list as overflowed. One
+// invocation owns each column, so the insertion needs no atomics. Keeping the list sorted here
+// avoids sorting the same column again in every row.
+fn insert_aliased_column_crossing(column: u32, packed: u32) {
+    let count = aliased_column_counts[column];
+    if count < COLUMN_CROSSING_CAPACITY {
+        var insert = count;
+        while insert > 0u && aliased_column_crossings[column][insert - 1u] > packed {
+            aliased_column_crossings[column][insert] = aliased_column_crossings[column][insert - 1u];
+            insert -= 1u;
+        }
+
+        aliased_column_crossings[column][insert] = packed;
+        aliased_column_counts[column] = count + 1u;
+    } else {
+        aliased_column_overflow[column] = 1u;
+    }
+}
+
+// Adds the crossings of one segment with the centre lines of the four columns that start at
+// first_column. offset_fixed moves a segment of the tile above or below into this tile's 24.8
+// coordinates, and only crossings with Y in [y_low, y_high) are kept. The CPU rounds endpoints to
+// 24.8 before it interpolates, so this does the same. The half-open X test gives a shared vertex to
+// one edge only.
+fn capture_aliased_column_crossings(segment: Segment, first_column: u32, offset_fixed: i32, y_low: i32, y_high: i32) {
+    let p0_fixed = vec2<i32>(round(segment.point0 * 256.0));
+    let p1_fixed = vec2<i32>(round(segment.point1 * 256.0));
+    for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
+        let column = first_column + i;
+        let sample_x_fixed = (i32(column) << 8) + 128;
+        if (p0_fixed.x <= sample_x_fixed) != (p1_fixed.x <= sample_x_fixed) {
+            let y_cross_fixed = p0_fixed.y + offset_fixed
+                + (((p1_fixed.y - p0_fixed.y) * (sample_x_fixed - p0_fixed.x)) / (p1_fixed.x - p0_fixed.x));
+            if y_cross_fixed >= y_low && y_cross_fixed < y_high {
+                // A vertical interval uses the X profiles of its two boundary edges. Their
+                // identifiers occupy bits 0..15 of the segment tag.
+                insert_aliased_column_crossing(
+                    column,
+                    pack_crossing(f32(y_cross_fixed) / 256.0, segment.point1.x > segment.point0.x, false, segment.tag & PROFILE_ID_MASK));
+            }
+        }
+    }
+}
+
+// Tests whether a closed vertical interval is a thin feature whose midpoint pixel is in this row.
+// The row walk owns an interval that holds a row centre in (start, end]. A midpoint in another row
+// belongs to that row, which can be in the tile above or below. The CPU column pass applies the
+// same tests in the same order.
+fn column_interval_lights(start_fixed: i32, end_fixed: i32, enter_id: u32, exit_id: u32, row: i32, centre_px: f32) -> bool {
+    if ((end_fixed - 128) >> 8) > ((start_fixed - 128) >> 8) {
+        return false;
+    }
+
+    if (((start_fixed >> 1) + (end_fixed >> 1)) >> 8) != row {
+        return false;
+    }
+
+    return !profile_is_stub(true, enter_id, exit_id, centre_px, f32(end_fixed - start_fixed) / 256.0);
+}
+
 // Computes binary coverage for one 16x16 tile.
 //
 // The workgroup has 64 invocations. Each invocation returns four adjacent pixels in one row.
@@ -752,6 +828,9 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
         aliased_row_seed[row] = fill.backdrop;
         for (var i = 0u; i < TILE_WIDTH; i += 1u) {
             aliased_row_winding[row][i] = fill.backdrop;
+            if row == 0u {
+                aliased_column_seed[i] = fill.backdrop;
+            }
         }
     }
 
@@ -782,9 +861,14 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
                     let y1_fixed = i32(round(segment.point1.y * 256.0));
                     if (y0_fixed < sample_y_fixed) != (y1_fixed < sample_y_fixed) {
                         let direction = -i32(sign(segment.point1.y - segment.point0.y));
-                        insert_aliased_row_crossing(row, pack_crossing(0.0, direction > 0, true, segment.tag >> 16u));
+                        insert_aliased_row_crossing(row, pack_crossing(0.0, (direction < 0), true, segment.tag >> 16u));
                         aliased_row_seed[row] -= direction;
                     }
+                }
+
+                // A halo-only horizontal line on a tile row boundary is a column crossing.
+                if owns_columns {
+                    capture_aliased_column_crossings(segment, u32(xy.x), 0, -0x40000000, 0x40000000);
                 }
 
                 continue;
@@ -815,10 +899,15 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
                     // to the shape left of the edge, the same as the CPU row intervals.
                     let direction = -i32(sign(delta.y));
                     let vertical = p0_fixed.x == p1_fixed.x;
+                    let seed_on_centre = vertical || (p1_fixed.x - p0_fixed.x) * (p1_fixed.y - p0_fixed.y) > 0;
                     for (var k = 0u; k < TILE_WIDTH; k += 1u) {
                         let centre_fixed = (i32(k) << 8) + 128;
                         if x_cross_fixed < centre_fixed || (!vertical && x_cross_fixed == centre_fixed) {
                             aliased_row_winding[row][k] += direction;
+                        }
+
+                        if row == 0u && (x_cross_fixed < centre_fixed || (seed_on_centre && x_cross_fixed == centre_fixed)) {
+                            aliased_column_seed[k] += direction;
                         }
                     }
 
@@ -834,7 +923,7 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
                         // Their identifiers occupy bits 16..31 of the segment tag.
                         insert_aliased_row_crossing(
                             row,
-                            pack_crossing(f32(x_cross_fixed) / 256.0, direction > 0, vertical, segment.tag >> 16u));
+                            pack_crossing(f32(x_cross_fixed) / 256.0, (direction < 0), vertical, segment.tag >> 16u));
                     }
                 }
 
@@ -852,6 +941,9 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
                     let step = select(0, i32(sign(delta.x)), sample_y_fixed > y_edge_fixed);
                     for (var k = 0u; k < TILE_WIDTH; k += 1u) {
                         aliased_row_winding[row][k] += step;
+                        if row == 0u {
+                            aliased_column_seed[k] += step;
+                        }
                     }
 
                     aliased_row_seed[row] += step;
@@ -859,38 +951,29 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
             }
 
             if owns_columns {
-                for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
-                    let column = u32(xy.x) + i;
-                    let sample_x_fixed = (i32(column) << 8) + 128;
-                    if (p0_fixed.x <= sample_x_fixed) != (p1_fixed.x <= sample_x_fixed) {
-                        let column_count = aliased_column_counts[column];
-                        if column_count < COLUMN_CROSSING_CAPACITY {
-                            let y_cross_fixed = p0_fixed.y
-                                + (((p1_fixed.y - p0_fixed.y) * (sample_x_fixed - p0_fixed.x)) / (p1_fixed.x - p0_fixed.x));
+                capture_aliased_column_crossings(segment, u32(xy.x), 0, -0x40000000, 0x40000000);
+            }
+        }
+    }
 
-                            // A vertical interval uses the X profiles of its two boundary edges.
-                            // Their identifiers occupy bits 0..15 of the segment tag.
-                            let packed = pack_crossing(
-                                f32(y_cross_fixed) / 256.0,
-                                segment.point1.x > segment.point0.x,
-                                false,
-                                segment.tag & PROFILE_ID_MASK);
+    // The column walk also needs the crossings within half a pixel above and below the tile. They
+    // come from the tiles above and below, in this tile's coordinates. A horizontal line exactly on
+    // a tile row boundary is one halo-only segment of one of the two tiles, so each column reads it
+    // once, from its own list or from a halo.
+    if owns_columns {
+        for (var h = 0u; h < 2u; h += 1u) {
+            let halo_tile_ix = fill.vertical_neighbors[h];
+            if halo_tile_ix == INVALID_TILE_INDEX {
+                continue;
+            }
 
-                            // Keep the shared list sorted as it is built. Sorting once here avoids
-                            // copying and sorting the same column again in every row.
-                            var insert = column_count;
-                            while insert > 0u && aliased_column_crossings[column][insert - 1u] > packed {
-                                aliased_column_crossings[column][insert] = aliased_column_crossings[column][insert - 1u];
-                                insert -= 1u;
-                            }
-
-                            aliased_column_crossings[column][insert] = packed;
-                            aliased_column_counts[column] = column_count + 1u;
-                        } else {
-                            aliased_column_overflow[column] = 1u;
-                        }
-                    }
-                }
+            let halo_data = ~path_tiles[halo_tile_ix].segment_count_or_ix;
+            let halo_count = u32(path_tiles[halo_tile_ix].backdrop);
+            let offset_fixed = select(-4096, 4096, h != 0u);
+            let y_low = select(-128, 4096, h != 0u);
+            let y_high = select(1, 4224, h != 0u);
+            for (var s = 0u; s < halo_count; s += 1u) {
+                capture_aliased_column_crossings(segments[halo_data + s], u32(xy.x), offset_fixed, y_low, y_high);
             }
         }
     }
@@ -943,7 +1026,7 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
                 let direction = -i32(sign(segment.point1.y - segment.point0.y));
                 insert_aliased_row_crossing(
                     row,
-                    pack_crossing(f32(local_x_fixed) / 256.0, direction > 0, p0_fixed.x == p1_fixed.x, segment.tag >> 16u));
+                    pack_crossing(f32(local_x_fixed) / 256.0, (direction < 0), p0_fixed.x == p1_fixed.x, segment.tag >> 16u));
 
                 if h == 0u {
                     // row_seed is the winding at X = 0. The sorted list begins in the left halo, so
@@ -991,7 +1074,8 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
             if even_odd {
                 w ^= 1;
             } else {
-                w += select(-1, 1, ((packed >> 16u) & 1u) != 0u);
+                // The direction bit marks a downward edge, which steps the row winding by -1.
+                w += select(1, -1, ((packed >> 16u) & 1u) != 0u);
             }
 
             // Interval coverage includes a centre on the closing edge. It includes a centre on
@@ -1043,27 +1127,36 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
         }
     }
 
-    // The CPU column pass starts each 16-row band at zero and accepts only intervals with both
-    // crossings inside that band. Do not derive a top-edge winding seed: that would turn geometry
-    // clipped above the band into a new open interval and could add a pixel absent from the CPU.
+    // The column walk is the CPU column pass. It starts from the winding just above the centre of row
+    // zero, walks down through the tile and the half-pixel halo below it, and walks up through the top
+    // of the tile and the half-pixel halo above it. A centre-free interval lies between two
+    // consecutive row centres, so these halos hold both of its ends even when it touches or crosses
+    // the tile row boundary. Only intervals opened and closed by one walk can be centre-free: an
+    // interval open at the seed holds the centre of row zero, and an interval open at the end of a
+    // walk continues past the halo. The seed does not depend on the row lists, so a full row list
+    // does not disable this recovery.
     for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
         let column = u32(xy.x) + i;
         let column_count = aliased_column_counts[column];
-
-        // A row with no horizontal-centre crossing can still hold a horizontal feature that lies
-        // between two row centres, so the CPU consults column results for every row. Overflow
-        // disables only this secondary recovery.
-        if lit[i] || row_overflow || aliased_column_overflow[column] != 0u || column_count < 2u {
+        if lit[i] || aliased_column_overflow[column] != 0u || column_count < 2u {
             continue;
         }
 
-        var w = 0;
+        let centre_px = global_xy.x + data_origin.x + f32(i) + 0.5;
+        let seed = select(aliased_column_seed[column], aliased_column_seed[column] & 1, even_odd);
 
-        var interval_start = 0.0;
+        // A crossing exactly on the centre of row zero belongs to the downward walk.
+        var split = 0u;
+        while split < column_count && unpack_crossing_position(aliased_column_crossings[column][split]) < 0.5 {
+            split += 1u;
+        }
+
+        var w = seed;
+        var open = false;
+        var start_fixed = 0;
         var enter_id = PROFILE_ID_SENTINEL;
-        for (var c = 0u; c < column_count; c += 1u) {
+        for (var c = split; c < column_count; c += 1u) {
             let packed = aliased_column_crossings[column][c];
-            let position = unpack_crossing_position(packed);
             let previous = w;
             if even_odd {
                 w ^= 1;
@@ -1071,30 +1164,44 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
                 w += select(-1, 1, ((packed >> 16u) & 1u) != 0u);
             }
 
+            let y_fixed = i32(round(unpack_crossing_position(packed) * 256.0));
             if previous == 0 && w != 0 {
-                interval_start = position;
+                open = true;
+                start_fixed = y_fixed;
                 enter_id = packed & PROFILE_ID_MASK;
-                continue;
+            } else if previous != 0 && w == 0 && open {
+                open = false;
+                if column_interval_lights(start_fixed, y_fixed, enter_id, packed & PROFILE_ID_MASK, i32(xy.y), centre_px) {
+                    lit[i] = true;
+                }
             }
-            if previous == 0 || w != 0 {
-                continue;
+        }
+
+        // Crossing a line upward removes its winding step, and an interval is found from its bottom
+        // end first.
+        w = seed;
+        open = false;
+        var end_fixed = 0;
+        var exit_id = PROFILE_ID_SENTINEL;
+        for (var c = split; c > 0u; c -= 1u) {
+            let packed = aliased_column_crossings[column][c - 1u];
+            let below = w;
+            if even_odd {
+                w ^= 1;
+            } else {
+                w -= select(-1, 1, ((packed >> 16u) & 1u) != 0u);
             }
 
-            // The row walk excludes a centre on the top end and includes a centre on the bottom
-            // end, so it owns this interval when a row centre lies in (start, end].
-            if i32(floor(position - 0.5)) > i32(floor(interval_start - 0.5)) {
-                continue;
-            }
-
-            // Match the CPU's overflow-safe fixed-point midpoint exactly: it
-            // halves each endpoint before adding, so two odd coordinates land
-            // one 24.8 unit below their mathematical average.
-            let interval_start_fixed = i32(round(interval_start * 256.0));
-            let position_fixed = i32(round(position * 256.0));
-            let midpoint_row = ((interval_start_fixed >> 1) + (position_fixed >> 1)) >> 8;
-            if midpoint_row == i32(xy.y)
-                && !profile_is_stub(true, enter_id, packed & PROFILE_ID_MASK, global_xy.x + data_origin.x + f32(i) + 0.5, position - interval_start) {
-                lit[i] = true;
+            let y_fixed = i32(round(unpack_crossing_position(packed) * 256.0));
+            if below == 0 && w != 0 {
+                open = true;
+                end_fixed = y_fixed;
+                exit_id = packed & PROFILE_ID_MASK;
+            } else if below != 0 && w == 0 && open {
+                open = false;
+                if column_interval_lights(y_fixed, end_fixed, packed & PROFILE_ID_MASK, exit_id, i32(xy.y), centre_px) {
+                    lit[i] = true;
+                }
             }
         }
     }
@@ -1321,7 +1428,7 @@ fn main(
                 // rasterizer, so one call site keeps the shader small and fast.
                 let fill = read_fill(cmd_ix);
                 fill_path(fill, local_xy, xy, &area);
-                cmd_ix += 6u;
+                cmd_ix += select(6u, 8u, (fill.size_and_rule & 2u) != 0u);
             }
             case CMD_PROFILE_TABLE: {
                 fill_profile_records = ptcl[cmd_ix + 1u];

@@ -185,6 +185,149 @@ public partial class WebGPUDrawingBackendTests
         }
     }
 
+    // A 0.3 pixel bar holds no row centre, so an aliased fill sets the row of its midpoint. The bars
+    // start or end on the tile row edge at y = 16 or cross it, so the column walk needs the crossings
+    // of the tile above or below. In the last case a 0.7 pixel bar holds the centre of row 16 and a
+    // thin bar lies below it, so the column walk starts inside the shape. Only the bar interiors are
+    // tested, because the contour-tip rule decides the end columns.
+    [WebGPUTheory]
+    [WithSolidFilledImages(48, 32, "White", PixelTypes.Rgba32, 15.85F, 0.3F, 16, -1)]
+    [WithSolidFilledImages(48, 32, "White", PixelTypes.Rgba32, 16F, 0.3F, 16, -1)]
+    [WithSolidFilledImages(48, 32, "White", PixelTypes.Rgba32, 15.7F, 0.3F, 15, -1)]
+    [WithSolidFilledImages(48, 32, "White", PixelTypes.Rgba32, 16.2F, 0.7F, 16, 17)]
+    public void FillPath_AliasedThinBarAtTileRowEdge_SetsMidpointRow<TPixel>(TestImageProvider<TPixel> provider, float top, float height, int firstRow, int secondRow)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
+        };
+
+        IPath path = secondRow < 0
+            ? new RectanglePolygon(4, top, 40, height)
+            : new ComplexPolygon(new RectanglePolygon(4, top, 40, height), new RectanglePolygon(4, 17.6F, 40, 0.3F));
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(Brushes.Solid(Color.Black), path);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0F);
+        foreach (Image<TPixel> image in new[] { defaultImage, nativeSurfaceImage })
+        {
+            for (int y = 0; y < image.Height; y++)
+            {
+                bool barRow = y == firstRow || y == secondRow;
+                for (int x = 0; x < image.Width; x++)
+                {
+                    bool set = image[x, y].ToRgba32().R == 0;
+                    if (!barRow)
+                    {
+                        Assert.False(set, $"Pixel ({x}, {y}) must be empty.");
+                    }
+                    else if (x >= 8 && x < 40)
+                    {
+                        Assert.True(set, $"Pixel ({x}, {y}) must be set.");
+                    }
+                }
+            }
+        }
+    }
+
+    // The sloped edge from (11.5, 15.5) to (9.4, 17.6) passes exactly through (10.5, 16.5), the
+    // centre of column 10 in the first row of the second tile row. The column walk of that tile
+    // starts just above this centre, where the edge is right of the column. The 0.3 pixel bar at
+    // y = 18.1 holds no row centre, so its midpoint row 18 is set in every column of the bar
+    // interior on both backends.
+    [WebGPUTheory]
+    [WithSolidFilledImages(48, 32, "White", PixelTypes.Rgba32)]
+    public void FillPath_AliasedThinBarBelowEdgeThroughCentre_SetsMidpointRow<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false },
+            IntersectionRule = IntersectionRule.EvenOdd
+        };
+
+        ComplexPolygon path = new(
+            new Polygon([new PointF(11.5F, 15.5F), new PointF(9.4F, 17.6F), new PointF(20, 17.6F), new PointF(20, 15.5F)]),
+            new RectanglePolygon(4, 18.1F, 40, 0.3F));
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(Brushes.Solid(Color.Black), path);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0F);
+        foreach (Image<TPixel> image in new[] { defaultImage, nativeSurfaceImage })
+        {
+            for (int x = 8; x < 40; x++)
+            {
+                Assert.True(image[x, 18].ToRgba32().R == 0, $"Pixel ({x}, 18) must be set.");
+            }
+        }
+    }
+
+    // Two thin slanted shapes cross each other. In row 5 the closing edge of one shape and the opening
+    // edge of the other cross the row centre at the same X. The order of these coincident crossings
+    // decides whether the row walk finds one interval or two, so both backends must sort them with
+    // the same key.
+    [WebGPUTheory]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32)]
+    public void FillPath_AliasedCoincidentRowCrossings_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
+        };
+
+        ComplexPolygon path = new(
+            new Polygon([new PointF(9.2F, 0), new PointF(9.5F, 0), new PointF(10.5F, 11), new PointF(10.2F, 11)]),
+            new Polygon([new PointF(10.5F, 0), new PointF(10.8F, 0), new PointF(9.8F, 11), new PointF(9.5F, 11)]));
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(Brushes.Solid(Color.Black), path);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0F);
+    }
+
     [WebGPUTheory]
     [WithBasicTestPatternImages(384, 256, PixelTypes.Rgba32)]
     public void FillPath_WithImageBrush_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
