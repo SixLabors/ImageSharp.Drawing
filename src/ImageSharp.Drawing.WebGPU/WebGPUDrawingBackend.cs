@@ -43,15 +43,14 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     private WebGPUSceneSchedulingArena? cachedSchedulingArena;
     private WebGPUSceneResourceArena? cachedResourceArena;
 
-    // Deferred scheduling-status readbacks from recent flushes. The backend is the owner
-    // because it outlives the per-frame canvases and scenes: parking a pending map on a
-    // per-frame scene would force a blocking resolve at that scene's disposal, putting the
-    // CPU-GPU sync right back into the frame. The queue is harvested wait-free at the start
-    // of each flush; entries are only force-resolved when the queue exceeds its bound.
-    // Offscreen entries carry the context for a corrective re-render on overflow and hold a
-    // deferred-render reference that keeps their scene's GPU payload alive until harvested.
+    // Deferred scheduling-status readbacks from recent presentation flushes. The backend is the
+    // owner because it outlives the per-frame canvases and scenes. A pending map on a per-frame
+    // scene forces a blocking resolve when that scene is disposed, which puts the CPU-GPU sync
+    // back into the frame. Each flush harvests the queue wait-free at its start. Entries are
+    // force-resolved only when the queue exceeds its bound. An entry only grows the scratch
+    // capacities, because the next frame redraws the surface.
     private readonly object pendingStatusSync = new();
-    private readonly List<PendingSchedulingStatusEntry> pendingSchedulingStatuses = [];
+    private readonly List<WebGPUPendingSchedulingStatus> pendingSchedulingStatuses = [];
 
     // Bounds the deferred-readback queue. The GPU typically completes a frame's map by the
     // next flush, so the queue holds roughly one entry per flush in the current frame; the
@@ -70,6 +69,9 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     private WebGPUSceneDispatch.BindingLimitBuffer lastChunkingBindingFailure;
     private bool isDisposed;
 
+    // The count behind DiagnosticScratchOverflowCount. Concurrent renders add to it with Interlocked.
+    private int scratchOverflowCount;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPUDrawingBackend"/> class.
     /// </summary>
@@ -86,6 +88,16 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     internal bool DiagnosticLastFlushUsedChunking { get; private set; }
 
     /// <summary>
+    /// Gets the number of renders on this backend instance whose scratch buffers overflowed.
+    /// </summary>
+    /// <remarks>
+    /// An offscreen overflow is counted before its render returns. A presentation overflow is
+    /// counted when a later flush harvests its status readback. Concurrent renders can count at the
+    /// same time, so the count changes only through <see cref="CountScratchOverflow"/>.
+    /// </remarks>
+    internal int DiagnosticScratchOverflowCount => Volatile.Read(ref this.scratchOverflowCount);
+
+    /// <summary>
     /// Gets or sets the upper bound used when validating staged-scene storage bindings.
     /// </summary>
     /// <remarks>
@@ -99,10 +111,14 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     /// </summary>
     /// <remarks>
     /// This value describes only the most recent flush on this backend instance. When the most recent flush did not use
-    /// chunked rendering, this property returns <c>None</c>. A corrective re-render triggered by a deferred overflow
-    /// readback also updates this value, so it can change after the originating flush call has returned.
+    /// chunked rendering, this property returns <c>None</c>.
     /// </remarks>
     internal string DiagnosticLastChunkingBindingFailure => this.lastChunkingBindingFailure.ToString();
+
+    /// <summary>
+    /// Counts one render whose scratch buffers overflowed.
+    /// </summary>
+    internal void CountScratchOverflow() => Interlocked.Increment(ref this.scratchOverflowCount);
 
     /// <inheritdoc />
     public DrawingBackendScene CreateScene(
@@ -113,11 +129,32 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     {
         this.ThrowIfDisposed();
 
+        if (commandBatch.HasScenes)
+        {
+            int index = 0;
+            DrawingBackendScene? retainedScene = commandBatch.ReadRootPart(ref index, out DrawingCommandBatch run);
+            if (retainedScene is not null)
+            {
+                return this.CreatePartsScene(configuration, targetBounds, commandBatch, run, retainedScene, index, ownedResources);
+            }
+
+            // No retained scene is outside a layer. The run has the flags of the whole batch.
+            commandBatch = run;
+        }
+
+        // A retained scene with ordered work inside a layer orders the batch the same as an Apply
+        // drawn there, and each layer open around it renders as a scoped layer.
+        bool[]? scopedSceneLayers = null;
+        bool hasOrderedScenes = commandBatch.HasScenes && commandBatch.FindOrderedScenes(
+            static scene => scene is WebGPUDrawingBackendScene { HasOrderedWork: true },
+            out scopedSceneLayers);
+
         // Batches containing Apply need the ordered encoder: Apply reads pixels back mid-scene,
         // so the operations before and after it must stay in submission order.
-        bool encoded = commandBatch.HasApply
+        bool encoded = commandBatch.HasApply || hasOrderedScenes
             ? WebGPUSceneEncoder.TryEncodeOrdered(
                 commandBatch,
+                scopedSceneLayers,
                 targetBounds,
                 configuration.MemoryAllocator,
                 configuration.MaxDegreeOfParallelism,
@@ -143,6 +180,87 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             ownedResources);
     }
 
+    /// <summary>
+    /// Creates a scene for a batch that has retained scenes outside every layer.
+    /// </summary>
+    /// <remarks>
+    /// Each retained scene outside a layer renders as its own pass, in stream order, and each run
+    /// of commands between them renders as its own scene. This is the same work as the canvas
+    /// replay of each run and each retained scene on its own.
+    /// </remarks>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="targetBounds">The target bounds of the batch.</param>
+    /// <param name="commandBatch">The batch to split.</param>
+    /// <param name="firstRun">The commands before the first retained scene.</param>
+    /// <param name="firstScene">The first retained scene outside every layer.</param>
+    /// <param name="index">The first command index after the first retained scene.</param>
+    /// <param name="ownedResources">The resources that must stay alive for the returned scene.</param>
+    /// <returns>The created backend scene.</returns>
+    private WebGPUDrawingBackendScene CreatePartsScene(
+        Configuration configuration,
+        Rectangle targetBounds,
+        DrawingCommandBatch commandBatch,
+        DrawingCommandBatch firstRun,
+        DrawingBackendScene firstScene,
+        int index,
+        IReadOnlyList<IDisposable>? ownedResources)
+    {
+        List<DrawingBackendScene> parts = [];
+        List<IDisposable> partResources = [];
+
+        try
+        {
+            DrawingCommandBatch run = firstRun;
+            DrawingBackendScene? retainedScene = firstScene;
+            while (true)
+            {
+                if (run.CommandCount != 0)
+                {
+                    // The run has no retained scene outside a layer, so this call encodes it directly.
+                    // The parts scene owns the images that the run reads.
+                    DrawingBackendScene runScene = this.CreateScene(configuration, targetBounds, run);
+
+                    // The parts scene owns the run scenes. The caller owns the retained scenes.
+                    partResources.Add(runScene);
+                    parts.Add(runScene);
+                }
+
+                if (retainedScene is null)
+                {
+                    break;
+                }
+
+                parts.Add(retainedScene);
+                if (index == commandBatch.CommandCount)
+                {
+                    break;
+                }
+
+                retainedScene = commandBatch.ReadRootPart(ref index, out run);
+            }
+        }
+        catch
+        {
+            // The caller disposes the image resources on failure, so only the run scenes are
+            // released here.
+            for (int i = 0; i < partResources.Count; i++)
+            {
+                partResources[i].Dispose();
+            }
+
+            throw;
+        }
+
+        // The run scenes come first so that they are disposed before the image resources that
+        // they use, the same order as a single scene that disposes its own state first.
+        if (ownedResources is not null)
+        {
+            partResources.AddRange(ownedResources);
+        }
+
+        return new WebGPUDrawingBackendScene([.. parts], targetBounds, this.bumpSizes, partResources);
+    }
+
     /// <inheritdoc />
     public void RenderScene<TPixel>(
         Configuration configuration,
@@ -157,6 +275,24 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         if (scene is not WebGPUDrawingBackendScene webGPUScene)
         {
             throw new InvalidOperationException("The scene is not compatible with the WebGPU drawing backend.");
+        }
+
+        if (webGPUScene.Parts is DrawingBackendScene[] parts)
+        {
+            if (nativeTarget.Bounds != webGPUScene.Bounds)
+            {
+                throw new InvalidOperationException("The target bounds do not match the WebGPU drawing backend scene bounds.");
+            }
+
+            // Each part goes through this method again, so every part gets the target checks and
+            // its own deferred overflow handling. This is the same work as one canvas replay entry
+            // for each part.
+            for (int i = 0; i < parts.Length; i++)
+            {
+                this.RenderScene(configuration, target, parts[i]);
+            }
+
+            return;
         }
 
         if (!TryGetCompositeTargetDescriptor<TPixel>(out WebGPUTargetDescriptor pixelDescriptor, out WGPUFeatureName requiredFeature))
@@ -282,6 +418,9 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                 resourceArena ??= webGPUScene.RentResourceArena() ?? this.RentResourceArena();
                 schedulingArena ??= webGPUScene.RentSchedulingArena() ?? this.RentSchedulingArena();
 
+                // Offscreen pixels must be complete before control returns to user code. A render
+                // whose capacities are upper bounds cannot overflow and reads no status. Otherwise
+                // only a presentation target defers the check.
                 this.RenderEncodedSceneWithGrowth<TPixel>(
                     configuration,
                     webGPUTarget,
@@ -289,7 +428,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                     targetDescriptor,
                     requiredFeature,
                     webGPUScene,
-                    deferOverflowCheck: true,
+                    webGPUTarget.IsPresentationSurface,
                     ref currentBumpSizes,
                     ref resourceArena,
                     ref schedulingArena);
@@ -308,11 +447,15 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
     /// <summary>
     /// Renders a plain (non-ordered) encoded scene through the staged pipeline with the dynamic
-    /// scratch-growth retry loop. All texture targets defer the scratch-overflow readback so the
-    /// flush never blocks on the GPU: presentation surfaces are corrected by the next frame's
-    /// redraw, while offscreen targets park a corrective re-render that a later harvest invokes
-    /// on the rare overflow, so no incomplete content can persist.
+    /// scratch-growth retry loop.
     /// </summary>
+    /// <remarks>
+    /// A render whose capacities are upper bounds of its scratch use cannot overflow. It submits
+    /// and returns without a status readback. For other renders, an offscreen render reads the
+    /// scratch status before the copy to the target, so an overflow retries here and never reaches
+    /// the target. A presentation render defers the status: an overflowed frame keeps the previous
+    /// surface content, and the next frame redraws with the grown capacities.
+    /// </remarks>
     /// <typeparam name="TPixel">The pixel format of the flush target.</typeparam>
     /// <param name="configuration">The active processing configuration.</param>
     /// <param name="webGPUTarget">The native surface holding the target texture handles.</param>
@@ -320,7 +463,10 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     /// <param name="targetDescriptor">The target texture format and alpha representation.</param>
     /// <param name="requiredFeature">The device feature required by the target format, or the default value.</param>
     /// <param name="webGPUScene">The retained scene being rendered.</param>
-    /// <param name="deferOverflowCheck">Whether the overflow readback may be deferred; corrective re-renders pass <see langword="false"/>.</param>
+    /// <param name="deferOverflowCheck">
+    /// Whether the overflow readback of a render without bounded capacities is deferred. Only
+    /// presentation targets pass <see langword="true"/>.
+    /// </param>
     /// <param name="currentBumpSizes">The scratch capacities carried across attempts.</param>
     /// <param name="resourceArena">The rented scene resource arena.</param>
     /// <param name="schedulingArena">The rented scheduling arena.</param>
@@ -379,17 +525,12 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                 {
                     currentBumpSizes = MaxBumpSizes(currentBumpSizes, grownBumpSizes);
 
-                    // A deferred render parks its readback on the backend, which outlives
-                    // per-frame scenes; a later flush harvests it and applies any observed
-                    // growth. Offscreen targets additionally park a corrective re-render:
-                    // their content is not redrawn every frame, so a rare overflow must be
-                    // repaired rather than waiting for the next redraw.
+                    // A deferred presentation render parks its readback on the backend, which
+                    // outlives per-frame scenes. A later flush harvests it and applies any
+                    // observed growth.
                     if (pendingStatus is not null)
                     {
-                        Action? correctiveRender = webGPUTarget.IsPresentationSurface
-                            ? null
-                            : () => this.RenderCorrective<TPixel>(configuration, webGPUTarget, targetBounds, targetDescriptor, requiredFeature, webGPUScene);
-                        this.EnqueuePendingSchedulingStatus(pendingStatus, webGPUScene, correctiveRender);
+                        this.EnqueuePendingSchedulingStatus(pendingStatus);
                     }
 
                     if (successfulChunkTileHeight != 0)
@@ -406,6 +547,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
                 if (requiresGrowth)
                 {
+                    this.CountScratchOverflow();
                     currentBumpSizes = MaxBumpSizes(currentBumpSizes, grownBumpSizes);
                     continue;
                 }
@@ -883,33 +1025,15 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     }
 
     /// <summary>
-    /// Parks the deferred scheduling-status readback of a just-submitted flush on this backend
-    /// for a later flush to harvest. Offscreen targets pass a corrective re-render and hold a
-    /// deferred-render reference on their scene so the correction remains possible until the
-    /// readback resolves; presentation surfaces are corrected by their next redraw and pass
-    /// <see langword="null"/>.
+    /// Parks the deferred scheduling-status readback of a just-submitted presentation flush on
+    /// this backend for a later flush to harvest.
     /// </summary>
     /// <param name="pendingStatus">The pending readback to park.</param>
-    /// <param name="scene">The retained scene the flush rendered.</param>
-    /// <param name="correctiveRender">The corrective re-render to invoke on overflow, or <see langword="null"/> for presentation flushes.</param>
-    private void EnqueuePendingSchedulingStatus(
-        WebGPUPendingSchedulingStatus pendingStatus,
-        WebGPUDrawingBackendScene scene,
-        Action? correctiveRender)
+    private void EnqueuePendingSchedulingStatus(WebGPUPendingSchedulingStatus pendingStatus)
     {
-        if (correctiveRender is not null)
-        {
-            scene.AddDeferredRenderReference();
-        }
-
-        PendingSchedulingStatusEntry entry = new(
-            pendingStatus,
-            correctiveRender is null ? null : scene,
-            correctiveRender);
-
         lock (this.pendingStatusSync)
         {
-            this.pendingSchedulingStatuses.Add(entry);
+            this.pendingSchedulingStatuses.Add(pendingStatus);
         }
     }
 
@@ -917,15 +1041,13 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     /// Resolves parked deferred readbacks. Completed maps resolve wait-free; unfinished maps
     /// stay parked unless the queue exceeds its bound (or <paramref name="drainAll"/> is set),
     /// where the oldest entries are resolved blocking as GPU backpressure. Observed demand is
-    /// merged into the backend capacities and the scene about to render, and offscreen entries
-    /// that overflowed are re-rendered with the grown capacities so no incomplete content can
-    /// persist in a texture the app may cache.
+    /// merged into the backend capacities and the scene about to render.
     /// </summary>
     /// <param name="scene">The scene about to render, or <see langword="null"/> during teardown or readback drains.</param>
     /// <param name="drainAll">Whether to resolve every parked entry regardless of readiness.</param>
     private void HarvestPendingSchedulingStatuses(WebGPUDrawingBackendScene? scene, bool drainAll)
     {
-        List<PendingSchedulingStatusEntry>? due = null;
+        List<WebGPUPendingSchedulingStatus>? due = null;
         lock (this.pendingStatusSync)
         {
             if (this.pendingSchedulingStatuses.Count == 0)
@@ -935,18 +1057,18 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
             // Map callbacks only advance while the device is pumped; one non-blocking poll
             // delivers every callback that has already completed on the GPU timeline.
-            this.pendingSchedulingStatuses[0].Status.PollDevice();
+            this.pendingSchedulingStatuses[0].PollDevice();
 
             int overflow = this.pendingSchedulingStatuses.Count - MaxPendingSchedulingStatuses;
             for (int i = this.pendingSchedulingStatuses.Count - 1; i >= 0; i--)
             {
-                PendingSchedulingStatusEntry entry = this.pendingSchedulingStatuses[i];
+                WebGPUPendingSchedulingStatus status = this.pendingSchedulingStatuses[i];
 
                 // Entries are ordered oldest-first, so indexes below the overflow count are
                 // exactly the oldest entries beyond the queue bound.
-                if (drainAll || entry.Status.IsReady || i < overflow)
+                if (drainAll || status.IsReady || i < overflow)
                 {
-                    (due ??= []).Add(entry);
+                    (due ??= []).Add(status);
                     this.pendingSchedulingStatuses.RemoveAt(i);
                 }
             }
@@ -958,32 +1080,26 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         }
 
         // Entries were already removed from the queue above, so a failure on one entry must not
-        // abandon the rest: every remaining status would leak its readback buffer and its scene
-        // reference, leaving the scene's deferred teardown permanently blocked. The first
+        // abandon the rest: every remaining status leaks its readback buffer. The first
         // failure is rethrown after every entry has been retired.
         Exception? firstFailure = null;
-        foreach (PendingSchedulingStatusEntry entry in due)
+        foreach (WebGPUPendingSchedulingStatus status in due)
         {
             try
             {
-                bool overflowed = WebGPUSceneDispatch.ResolveDeferredSchedulingStatus(entry.Status, out WebGPUSceneBumpSizes resolvedBumpSizes);
+                bool overflowed = WebGPUSceneDispatch.ResolveDeferredSchedulingStatus(status, out WebGPUSceneBumpSizes resolvedBumpSizes);
                 scene?.UpdateBumpSizes(resolvedBumpSizes);
-                entry.Scene?.UpdateBumpSizes(resolvedBumpSizes);
                 this.bumpSizes = MaxBumpSizes(this.bumpSizes, resolvedBumpSizes);
 
                 if (overflowed)
                 {
-                    entry.CorrectiveRender?.Invoke();
+                    this.CountScratchOverflow();
                 }
             }
             catch (Exception failure)
             {
                 firstFailure ??= failure;
-                entry.Status.Dispose();
-            }
-            finally
-            {
-                entry.Scene?.ReleaseDeferredRenderReference();
+                status.Dispose();
             }
         }
 
@@ -994,106 +1110,9 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     }
 
     /// <summary>
-    /// Re-renders an offscreen flush whose deferred readback reported a scratch overflow.
-    /// Runs the staged pipeline synchronously with the grown capacities so the corrected
-    /// content replaces the incomplete render before anything can observe it as final. A
-    /// target whose owner was disposed in the meantime is skipped: its content is gone too.
-    /// </summary>
-    /// <typeparam name="TPixel">The pixel format of the flush target.</typeparam>
-    /// <param name="configuration">The processing configuration of the original flush.</param>
-    /// <param name="webGPUTarget">The native surface holding the target texture handles.</param>
-    /// <param name="targetBounds">The target bounds of the original flush.</param>
-    /// <param name="targetDescriptor">The target texture format and alpha representation.</param>
-    /// <param name="requiredFeature">The device feature required by the target format, or the default value.</param>
-    /// <param name="webGPUScene">The retained scene to replay, kept alive by a deferred-render reference.</param>
-    private void RenderCorrective<TPixel>(
-        Configuration configuration,
-        WebGPUNativeSurface webGPUTarget,
-        Rectangle targetBounds,
-        WebGPUTargetDescriptor targetDescriptor,
-        WGPUFeatureName requiredFeature,
-        WebGPUDrawingBackendScene webGPUScene)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        WebGPUSceneBumpSizes currentBumpSizes = webGPUScene.BumpSizes;
-        WebGPUSceneResourceArena? resourceArena = webGPUScene.RentResourceArena() ?? this.RentResourceArena();
-        WebGPUSceneSchedulingArena? schedulingArena = webGPUScene.RentSchedulingArena() ?? this.RentSchedulingArena();
-
-        try
-        {
-            this.RenderEncodedSceneWithGrowth<TPixel>(
-                configuration,
-                webGPUTarget,
-                targetBounds,
-                targetDescriptor,
-                requiredFeature,
-                webGPUScene,
-                deferOverflowCheck: false,
-                ref currentBumpSizes,
-                ref resourceArena,
-                ref schedulingArena);
-
-            webGPUScene.UpdateBumpSizes(currentBumpSizes);
-            this.bumpSizes = MaxBumpSizes(this.bumpSizes, currentBumpSizes);
-        }
-        catch (ObjectDisposedException)
-        {
-            // The target texture handles were released between the flush and the harvest;
-            // the content the correction would repaint no longer exists.
-        }
-        catch (InvalidOperationException)
-        {
-            // Handle acquisition or device validation failed for the retired target; skip.
-        }
-        finally
-        {
-            webGPUScene.ReturnArenas(resourceArena, schedulingArena, this);
-        }
-    }
-
-    /// <summary>
     /// Throws <see cref="ObjectDisposedException"/> when this backend is disposed.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ThrowIfDisposed()
         => ObjectDisposedException.ThrowIf(this.isDisposed, this);
-
-    /// <summary>
-    /// One parked deferred readback and the corrective context for its flush.
-    /// </summary>
-    private readonly struct PendingSchedulingStatusEntry
-    {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="PendingSchedulingStatusEntry"/> struct.
-        /// </summary>
-        /// <param name="status">The deferred scheduling-status readback.</param>
-        /// <param name="scene">The rendered scene, held alive via a deferred-render reference; <see langword="null"/> for presentation flushes.</param>
-        /// <param name="correctiveRender">The corrective re-render invoked when the readback reports overflow; <see langword="null"/> for presentation flushes.</param>
-        public PendingSchedulingStatusEntry(
-            WebGPUPendingSchedulingStatus status,
-            WebGPUDrawingBackendScene? scene,
-            Action? correctiveRender)
-        {
-            this.Status = status;
-            this.Scene = scene;
-            this.CorrectiveRender = correctiveRender;
-        }
-
-        /// <summary>
-        /// Gets the deferred scheduling-status readback.
-        /// </summary>
-        public WebGPUPendingSchedulingStatus Status { get; }
-
-        /// <summary>
-        /// Gets the rendered scene, held alive via a deferred-render reference;
-        /// <see langword="null"/> for presentation flushes.
-        /// </summary>
-        public WebGPUDrawingBackendScene? Scene { get; }
-
-        /// <summary>
-        /// Gets the corrective re-render invoked when the readback reports overflow;
-        /// <see langword="null"/> for presentation flushes.
-        /// </summary>
-        public Action? CorrectiveRender { get; }
-    }
 }

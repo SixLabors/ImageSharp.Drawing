@@ -104,6 +104,10 @@ public sealed unsafe partial class WebGPUDrawingBackend
         private readonly WebGPUEffectRenderer? effectRenderer;
         private WebGPUSceneResourceArena? resourceArena;
         private WebGPUSceneSchedulingArena? schedulingArena;
+
+        // The resource arenas of the retained scenes that this transaction renders, by first use.
+        private List<(WebGPUDrawingBackendScene Scene, WebGPUSceneResourceArena? Arena)>? retainedArenas;
+
         private WGPUMapAsyncStatus mapStatus;
         private ulong lastSubmissionIndex;
         private int currentTargetId;
@@ -255,6 +259,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
                     case WebGPUSceneOperationKind.RenderRange:
                         this.SubmitRange(
                             operation.Range,
+                            operation.RetainedScene,
                             this.currentTargetId,
                             WebGPUOrderedExternalSourceKind.None,
                             null,
@@ -269,6 +274,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
                         this.currentTargetId = operation.ParentTargetId;
                         this.SubmitRange(
                             operation.Range,
+                            operation.RetainedScene,
                             operation.ParentTargetId,
                             WebGPUOrderedExternalSourceKind.Target,
                             null,
@@ -290,7 +296,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
                             this.CommitTargets();
                         }
 
-                        this.ProcessShaderEffect(operation.ShaderEffect!);
+                        this.ProcessShaderEffect(operation);
                         break;
                 }
             }
@@ -315,6 +321,40 @@ public sealed unsafe partial class WebGPUDrawingBackend
             this.DisposeApplyImages(this.applyImages.Length);
             this.mapCallback?.Dispose();
             this.mapReady?.Dispose();
+
+            // Queue order makes every submitted pass finish with an arena before a later render
+            // can use it, so the arenas return now, the same as after a render of the scene alone.
+            if (this.retainedArenas is not null)
+            {
+                for (int i = 0; i < this.retainedArenas.Count; i++)
+                {
+                    (WebGPUDrawingBackendScene scene, WebGPUSceneResourceArena? arena) = this.retainedArenas[i];
+                    scene.ReturnArenas(arena, null, this.backend);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets the resource arena slot of a retained scene for this transaction. The first call for
+        /// a scene rents the scene's own arena.
+        /// </summary>
+        /// <param name="scene">The retained scene.</param>
+        /// <returns>A reference to the arena slot. It stays valid until the next call.</returns>
+        private ref WebGPUSceneResourceArena? GetRetainedResourceArena(WebGPUDrawingBackendScene scene)
+        {
+            List<(WebGPUDrawingBackendScene Scene, WebGPUSceneResourceArena? Arena)> arenas = this.retainedArenas ??= [];
+            int index = 0;
+            while (index < arenas.Count && !ReferenceEquals(arenas[index].Scene, scene))
+            {
+                index++;
+            }
+
+            if (index == arenas.Count)
+            {
+                arenas.Add((scene, scene.RentResourceArena() ?? this.backend.RentResourceArena()));
+            }
+
+            return ref CollectionsMarshal.AsSpan(arenas)[index].Arena;
         }
 
         /// <summary>
@@ -407,12 +447,14 @@ public sealed unsafe partial class WebGPUDrawingBackend
         /// Submits one range with synchronous transaction validation or deferred presentation validation.
         /// </summary>
         /// <param name="range">The retained range to submit.</param>
+        /// <param name="retainedScene">The retained scene whose data the range reads, or <see langword="null"/> for the ordered scene itself.</param>
         /// <param name="targetId">The logical target receiving the range.</param>
         /// <param name="externalSourceKind">The source bound to the range's external texture slot.</param>
         /// <param name="externalTextureView">The fixed Apply upload view, when applicable.</param>
         /// <param name="externalTargetId">The layer target supplying a composite view, when applicable.</param>
         private void SubmitRange(
             WebGPUSceneRange range,
+            WebGPUDrawingBackendScene? retainedScene,
             int targetId,
             WebGPUOrderedExternalSourceKind externalSourceKind,
             WGPUTextureViewImpl* externalTextureView,
@@ -425,6 +467,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
             WebGPUOrderedJournalEntry newEntry = new(
                 range,
+                retainedScene,
                 targetId,
                 externalSourceKind,
                 externalTextureView,
@@ -463,14 +506,25 @@ public sealed unsafe partial class WebGPUDrawingBackend
                 _ => null
             };
 
-            WebGPUStagedScene stagedScene = WebGPUSceneDispatch.CreateStagedScene<TPixel>(
-                this.flushContext,
-                this.encodedScene,
-                entry.Range,
-                this.requiredFeature,
-                this.BumpSizes,
-                externalTextureView,
-                ref this.resourceArena);
+            // A retained scene keeps its data resident in its own arena, so the passes of the
+            // ordered scene and of the retained scene do not upload each other's data again.
+            WebGPUStagedScene stagedScene = entry.RetainedScene is null
+                ? WebGPUSceneDispatch.CreateStagedScene<TPixel>(
+                    this.flushContext,
+                    this.encodedScene,
+                    entry.Range,
+                    this.requiredFeature,
+                    this.BumpSizes,
+                    externalTextureView,
+                    ref this.resourceArena)
+                : WebGPUSceneDispatch.CreateStagedScene<TPixel>(
+                    this.flushContext,
+                    entry.RetainedScene.EncodedScene,
+                    entry.Range,
+                    this.requiredFeature,
+                    this.BumpSizes,
+                    externalTextureView,
+                    ref this.GetRetainedResourceArena(entry.RetainedScene));
 
             nuint statusBufferCapacity = 0;
             WGPUBufferImpl* statusReadbackBuffer = this.readbackBuffer;
@@ -549,7 +603,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
                             submissionIndex);
 
                     statusBufferOwnershipTransferred = true;
-                    this.backend.EnqueuePendingSchedulingStatus(pendingStatus, this.scene, correctiveRender: null);
+                    this.backend.EnqueuePendingSchedulingStatus(pendingStatus);
                 }
                 else
                 {
@@ -681,6 +735,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
                 if (requiresReplay)
                 {
+                    this.backend.CountScratchOverflow();
+
                     // CopyDst commands cannot target a mapped buffer. Replay starts only after
                     // the failed barrier has been unmapped.
                     this.ReplayJournal();
@@ -722,6 +778,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
                 if (requiresReplay)
                 {
+                    this.backend.CountScratchOverflow();
                     this.ReplayJournal();
                     continue;
                 }
@@ -923,7 +980,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
             {
                 for (; processedCount < applyCount; processedCount++)
                 {
-                    WebGPUApplySceneItem apply = operations[firstOperationIndex + processedCount].Apply!;
+                    WebGPUSceneOperation applyOperation = operations[firstOperationIndex + processedCount];
+                    WebGPUApplySceneItem apply = applyOperation.Apply!;
                     Image<TPixel> image = this.applyImages[processedCount]!;
                     image.Mutate(apply.Operation);
 
@@ -952,6 +1010,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
                     this.applyImages[processedCount] = null;
                     this.SubmitRange(
                         apply.DrawRange,
+                        applyOperation.RetainedScene,
                         this.currentTargetId,
                         WebGPUOrderedExternalSourceKind.TextureView,
                         textureView,
@@ -984,9 +1043,11 @@ public sealed unsafe partial class WebGPUDrawingBackend
         /// <summary>
         /// Executes one native effect against the latest ordered source and journals its retained write-back range.
         /// </summary>
-        /// <param name="effect">The native effect operation.</param>
-        private void ProcessShaderEffect(WebGPUShaderEffectSceneItem effect)
+        /// <param name="operation">The native effect operation.</param>
+        private void ProcessShaderEffect(WebGPUSceneOperation operation)
         {
+            WebGPUShaderEffectSceneItem effect = operation.ShaderEffect!;
+
             // A fully clipped write-back has no fill to draw. Skip the passes entirely: nothing
             // samples the result, and SubmitRange would return without submitting, leaving the
             // recorded passes in the shared encoder while the next invocation rewrites the
@@ -1000,6 +1061,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
             WGPUTextureViewImpl* effectTextureView = this.effectRenderer!.Render(effect, sourceTarget);
             this.SubmitRange(
                 effect.DrawRange,
+                operation.RetainedScene,
                 this.currentTargetId,
                 WebGPUOrderedExternalSourceKind.TextureView,
                 effectTextureView,
@@ -1305,18 +1367,21 @@ public sealed unsafe partial class WebGPUDrawingBackend
         /// Initializes a new instance of the <see cref="WebGPUOrderedJournalEntry"/> struct.
         /// </summary>
         /// <param name="range">The retained range to replay.</param>
+        /// <param name="retainedScene">The retained scene whose data the range reads, or <see langword="null"/> for the ordered scene itself.</param>
         /// <param name="targetId">The target identity receiving the range.</param>
         /// <param name="externalSourceKind">The range's external texture source.</param>
         /// <param name="externalTextureView">The fixed Apply upload view.</param>
         /// <param name="externalTargetId">The layer target supplying a composite view.</param>
         public WebGPUOrderedJournalEntry(
             WebGPUSceneRange range,
+            WebGPUDrawingBackendScene? retainedScene,
             int targetId,
             WebGPUOrderedExternalSourceKind externalSourceKind,
             WGPUTextureViewImpl* externalTextureView,
             int externalTargetId)
         {
             this.Range = range;
+            this.RetainedScene = retainedScene;
             this.TargetId = targetId;
             this.ExternalSourceKind = externalSourceKind;
             this.ExternalTextureView = externalTextureView;
@@ -1331,6 +1396,11 @@ public sealed unsafe partial class WebGPUDrawingBackend
         /// Gets the retained encoded range.
         /// </summary>
         public WebGPUSceneRange Range { get; }
+
+        /// <summary>
+        /// Gets the retained scene whose data the range reads, or <see langword="null"/> for the ordered scene itself.
+        /// </summary>
+        public WebGPUDrawingBackendScene? RetainedScene { get; }
 
         /// <summary>
         /// Gets the stable target identity receiving the range.

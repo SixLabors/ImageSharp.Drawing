@@ -20,8 +20,8 @@
 #import config
 #import bump
 #import drawtag
-#import bbox
 #import tile
+#import scene_segment
 
 @group(0) @binding(0)
 var<uniform> config: Config;
@@ -41,11 +41,6 @@ var<storage, read_write> paths: array<Path>;
 @group(0) @binding(5)
 var<storage, read_write> rows: array<AtomicPathRow>;
 
-@group(0) @binding(6)
-// Original path bounds and drawing bounds. The reduced draw_bboxes buffer no longer contains the
-// unclipped left edge needed to set PATH_FLAGS_CLIPPED_LEFT.
-var<storage> path_bboxes: array<PathBbox>;
-
 // Allocates and initializes the row records for one draw object. NOP and
 // end-clip objects, and objects with an empty bbox, keep an all-zero tile
 // bbox and therefore allocate no rows.
@@ -58,14 +53,7 @@ fn main(
         return;
     }
 
-    let drawtag = scene[config.drawtag_base + drawobj_ix];
-    let path_bbox = path_bboxes[drawobj_ix];
-    // Only aliased fills use the original left edge. Fine needs this distinction for the one-pixel
-    // extension of an interval that started before the drawing bounds.
-    let path_flags = select(
-        0u,
-        PATH_FLAGS_CLIPPED_LEFT,
-        (path_bbox.draw_flags & DRAW_INFO_FLAGS_ALIASED_BIT) != 0u && f32(path_bbox.x0) < path_bbox.interest.x);
+    let drawtag = scene[draw_tag_bias(resolve_draw_segment(drawobj_ix)) + drawobj_ix];
 
     var ux0 = 0u;
     var uy0 = 0u;
@@ -75,8 +63,11 @@ fn main(
     if drawtag != DRAWTAG_NOP && drawtag != DRAWTAG_END_CLIP {
         let bbox = draw_bboxes[drawobj_ix];
         if bbox.x < bbox.z && bbox.y < bbox.w {
-            let chunk_y0 = i32(config.chunk_tile_y_start);
-            let chunk_y1 = chunk_y0 + i32(config.chunk_tile_height);
+            // The aliased column walk of a tile reads the path tiles above and below it, also at
+            // the first and last rows of a chunk. Keep one tile row on each side of the chunk, so
+            // the tiles of those rows exist. Coarse writes commands only for the chunk rows.
+            let chunk_y0 = max(i32(config.chunk_tile_y_start) - 1, 0);
+            let chunk_y1 = min(i32(config.chunk_tile_y_start + config.chunk_tile_height) + 1, i32(config.height_in_tiles));
             let x0 = i32(floor(bbox.x / f32(TILE_WIDTH)));
             let y0 = i32(floor(bbox.y / f32(TILE_HEIGHT)));
             let x1 = i32(ceil(bbox.z / f32(TILE_WIDTH)));
@@ -85,6 +76,17 @@ fn main(
             uy0 = u32(clamp(y0, chunk_y0, chunk_y1));
             ux1 = u32(clamp(x1, 0, i32(config.width_in_tiles)));
             uy1 = u32(clamp(y1, chunk_y0, chunk_y1));
+
+            // A draw can have tile columns and no tile rows, for example an aliased fill whose
+            // geometry is only in the pixel row that binning keeps above the target, or a draw
+            // outside the chunk rows. The tiling stages read rows inside the bbox, so give it an
+            // empty bbox.
+            if ux0 >= ux1 || uy0 >= uy1 {
+                ux0 = 0u;
+                uy0 = 0u;
+                ux1 = 0u;
+                uy1 = 0u;
+            }
         }
     }
 
@@ -98,11 +100,11 @@ fn main(
     // setup stages dispatch zero work, and the CPU resizes and retries.
     if row_limit_exceeded {
         atomicOr(&bump.failed, STAGE_TILE_ALLOC);
-        paths[drawobj_ix] = Path(bbox, 0u, path_flags);
+        paths[drawobj_ix] = Path(bbox, 0u);
         return;
     }
 
-    paths[drawobj_ix] = Path(bbox, row_base, path_flags);
+    paths[drawobj_ix] = Path(bbox, row_base);
 
     // Empty-span sentinel: x0 at u32 max and x1 at 0 so the atomicMin/Max
     // updates in path_row_span establish the true span; a row with

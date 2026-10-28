@@ -54,33 +54,20 @@ public sealed unsafe partial class WebGPUDrawingBackend
             throw new NotSupportedException($"Pixel type '{typeof(TPixel).Name}' does not match one of the WebGPU target formats.");
         }
 
-        // Clip in two stages: first the request against the source bounds, then the shifted
-        // result against the target bounds. Out-of-range copies clip silently rather than throw.
-        Rectangle sourceBounds = new(0, 0, source.Bounds.Width, source.Bounds.Height);
-        Rectangle clippedSource = Rectangle.Intersect(sourceBounds, sourceRectangle);
-        if (clippedSource.Width <= 0 || clippedSource.Height <= 0)
+        // Out-of-range copies clip silently rather than throw.
+        if (!IDrawingBackend.TryClipPixelCopy(
+                source.Bounds.Size,
+                target.Bounds.Size,
+                sourceRectangle,
+                targetPoint,
+                out Point sourceOrigin,
+                out Rectangle clippedTarget))
         {
             return;
         }
 
-        Rectangle targetBounds = new(0, 0, target.Bounds.Width, target.Bounds.Height);
-        Rectangle targetRectangle = new(
-            targetPoint.X + clippedSource.X - sourceRectangle.X,
-            targetPoint.Y + clippedSource.Y - sourceRectangle.Y,
-            clippedSource.Width,
-            clippedSource.Height);
-
-        Rectangle clippedTarget = Rectangle.Intersect(targetBounds, targetRectangle);
-
-        if (clippedTarget.Width <= 0 || clippedTarget.Height <= 0)
-        {
-            return;
-        }
-
-        // Propagate any target-side clipping back to the source origin so both rectangles
-        // describe the same clipped extent.
-        int sourceX = clippedSource.X + clippedTarget.X - targetRectangle.X;
-        int sourceY = clippedSource.Y + clippedTarget.Y - targetRectangle.Y;
+        int sourceX = sourceOrigin.X;
+        int sourceY = sourceOrigin.Y;
         int targetX = clippedTarget.X;
         int targetY = clippedTarget.Y;
         int width = clippedTarget.Width;

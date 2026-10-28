@@ -142,6 +142,387 @@ public partial class WebGPUDrawingBackendTests
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
+    // An aliased fill sets a pixel when the shape holds its centre. The rectangle starts left of
+    // the target and ends at x = 16, so the columns 0 to 15 are set and column 16, with its centre
+    // at 16.5, stays empty on both backends.
+    [WebGPUTheory]
+    [WithSolidFilledImages(48, 40, "White", PixelTypes.Rgba32)]
+    public void FillPath_AliasedRectangleLeftOfTarget_SetsOnlyCoveredCentres<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
+        };
+
+        RectanglePolygon rectangle = new(-8, 8, 24, 24);
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(Brushes.Solid(Color.Black), rectangle);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        foreach (Image<TPixel> image in new[] { defaultImage, nativeSurfaceImage })
+        {
+            for (int y = 0; y < image.Height; y++)
+            {
+                for (int x = 0; x < image.Width; x++)
+                {
+                    bool inside = x < 16 && y >= 8 && y < 32;
+                    Assert.True(inside == (image[x, y].ToRgba32().R == 0), $"Pixel ({x}, {y}) must be {(inside ? "set" : "empty")}.");
+                }
+            }
+        }
+    }
+
+    // A 0.3 pixel bar holds no row centre, so an aliased fill sets the row of its midpoint. The bars
+    // start or end on the tile row edge at y = 16 or cross it, so the column walk needs the crossings
+    // of the tile above or below. In the last case a 0.7 pixel bar holds the centre of row 16 and a
+    // thin bar lies below it, so the column walk starts inside the shape. Only the bar interiors are
+    // tested, because the contour-tip rule decides the end columns.
+    [WebGPUTheory]
+    [WithSolidFilledImages(48, 32, "White", PixelTypes.Rgba32, 15.85F, 0.3F, 16, -1)]
+    [WithSolidFilledImages(48, 32, "White", PixelTypes.Rgba32, 16F, 0.3F, 16, -1)]
+    [WithSolidFilledImages(48, 32, "White", PixelTypes.Rgba32, 15.7F, 0.3F, 15, -1)]
+    [WithSolidFilledImages(48, 32, "White", PixelTypes.Rgba32, 16.2F, 0.7F, 16, 17)]
+    public void FillPath_AliasedThinBarAtTileRowEdge_SetsMidpointRow<TPixel>(TestImageProvider<TPixel> provider, float top, float height, int firstRow, int secondRow)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
+        };
+
+        IPath path = secondRow < 0
+            ? new RectanglePolygon(4, top, 40, height)
+            : new ComplexPolygon(new RectanglePolygon(4, top, 40, height), new RectanglePolygon(4, 17.6F, 40, 0.3F));
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(Brushes.Solid(Color.Black), path);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0F);
+        foreach (Image<TPixel> image in new[] { defaultImage, nativeSurfaceImage })
+        {
+            for (int y = 0; y < image.Height; y++)
+            {
+                bool barRow = y == firstRow || y == secondRow;
+                for (int x = 0; x < image.Width; x++)
+                {
+                    bool set = image[x, y].ToRgba32().R == 0;
+                    if (!barRow)
+                    {
+                        Assert.False(set, $"Pixel ({x}, {y}) must be empty.");
+                    }
+                    else if (x >= 8 && x < 40)
+                    {
+                        Assert.True(set, $"Pixel ({x}, {y}) must be set.");
+                    }
+                }
+            }
+        }
+    }
+
+    // The sloped edge from (11.5, 15.5) to (9.4, 17.6) passes exactly through (10.5, 16.5), the
+    // centre of column 10 in the first row of the second tile row. The column walk of that tile
+    // starts just above this centre, where the edge is right of the column. The 0.3 pixel bar at
+    // y = 18.1 holds no row centre, so its midpoint row 18 is set in every column of the bar
+    // interior on both backends.
+    [WebGPUTheory]
+    [WithSolidFilledImages(48, 32, "White", PixelTypes.Rgba32)]
+    public void FillPath_AliasedThinBarBelowEdgeThroughCentre_SetsMidpointRow<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false },
+            IntersectionRule = IntersectionRule.EvenOdd
+        };
+
+        ComplexPolygon path = new(
+            new Polygon([new PointF(11.5F, 15.5F), new PointF(9.4F, 17.6F), new PointF(20, 17.6F), new PointF(20, 15.5F)]),
+            new RectanglePolygon(4, 18.1F, 40, 0.3F));
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(Brushes.Solid(Color.Black), path);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0F);
+        foreach (Image<TPixel> image in new[] { defaultImage, nativeSurfaceImage })
+        {
+            for (int x = 8; x < 40; x++)
+            {
+                Assert.True(image[x, 18].ToRgba32().R == 0, $"Pixel ({x}, 18) must be set.");
+            }
+        }
+    }
+
+    // A bar 0.3 pixels thick is centred on the image edge or on the edge of a clip rectangle. It holds
+    // no pixel centre, so it sets its midpoint row or column, which is inside the image and the clip.
+    // The geometry outside the image or the clip must not change that, on both backends.
+    [WebGPUTheory]
+    [WithSolidFilledImages(64, 64, "White", PixelTypes.Rgba32, 0, -1F, false)]
+    [WithSolidFilledImages(64, 64, "White", PixelTypes.Rgba32, 0, -1F, true)]
+    [WithSolidFilledImages(64, 64, "White", PixelTypes.Rgba32, 64, -1F, false)]
+    [WithSolidFilledImages(64, 64, "White", PixelTypes.Rgba32, 64, -1F, true)]
+    [WithSolidFilledImages(64, 64, "White", PixelTypes.Rgba32, 16, 16F, false)]
+    [WithSolidFilledImages(64, 64, "White", PixelTypes.Rgba32, 16, 16F, true)]
+    [WithSolidFilledImages(64, 64, "White", PixelTypes.Rgba32, 16, 16.3F, false)]
+    public void FillPath_AliasedThinBarAcrossEdge_SetsMidpointLine<TPixel>(TestImageProvider<TPixel> provider, int line, float clipStart, bool vertical)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
+        };
+
+        // A bar on the far edge at 64 has its midpoint on the edge, so it sets the last row or
+        // column, 63, only when the midpoint is just inside. It is centred at 63.9 instead.
+        float centre = line == 64 ? 63.9F : line;
+        int expected = line == 64 ? 63 : line;
+        IPath bar = vertical
+            ? new RectanglePolygon(centre - 0.15F, 4, 0.3F, 56)
+            : new RectanglePolygon(4, centre - 0.15F, 56, 0.3F);
+
+        void DrawAction(DrawingCanvas canvas)
+        {
+            if (clipStart >= 0)
+            {
+                canvas.Clip(vertical
+                    ? new RectanglePolygon(clipStart, 0, 64 - clipStart, 64)
+                    : new RectanglePolygon(0, clipStart, 64, 64 - clipStart));
+            }
+
+            canvas.Fill(Brushes.Solid(Color.Black), bar);
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        foreach ((string backend, Image<TPixel> image) in new[] { ("Default", defaultImage), ("WebGPU", nativeSurfaceImage) })
+        {
+            for (int i = 8; i < 56; i++)
+            {
+                int x = vertical ? expected : i;
+                int y = vertical ? i : expected;
+                Assert.True(image[x, y].ToRgba32().R == 0, $"{backend}: pixel ({x}, {y}) must be set.");
+            }
+        }
+    }
+
+    // An aliased square from -8 to 72 covers the whole image. Its edges pass through the tile rows
+    // and columns just outside every edge of the target, and through the corner tiles outside two
+    // edges, which hold none of its crossings. Every pixel is set on both backends.
+    [WebGPUTheory]
+    [WithSolidFilledImages(64, 64, "White", PixelTypes.Rgba32)]
+    public void FillPath_AliasedSquarePastEveryEdge_SetsEveryPixel<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
+        };
+
+        void Square(DrawingCanvas canvas) => canvas.Fill(Brushes.Solid(Color.Black), new RectanglePolygon(-8, -8, 80, 80));
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, Square);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(64, 64, nativeSurfaceBackend, drawingOptions, Square, nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        foreach ((string backend, Image<TPixel> image) in new[] { ("Default", defaultImage), ("WebGPU", nativeSurfaceImage) })
+        {
+            for (int y = 0; y < image.Height; y++)
+            {
+                for (int x = 0; x < image.Width; x++)
+                {
+                    Assert.True(image[x, y].ToRgba32().R == 0, $"{backend}: pixel ({x}, {y}) must be set.");
+                }
+            }
+        }
+    }
+
+    // An aliased fill on a region canvas covers the whole region and more. Only the pixels of the
+    // region are set; the pixel ring that an aliased fill rasterizes outside its interest is never
+    // written, on both backends.
+    [WebGPUTheory]
+    [WithSolidFilledImages(64, 64, "White", PixelTypes.Rgba32)]
+    public void FillPath_AliasedOnRegionCanvas_SetsOnlyRegionPixels<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
+        };
+
+        Rectangle region = new(16, 16, 32, 32);
+
+        void DrawAction(DrawingCanvas canvas)
+        {
+            using DrawingCanvas regionCanvas = canvas.CreateRegion(region);
+            regionCanvas.Fill(Brushes.Solid(Color.Black), new RectanglePolygon(-8, -8, 48, 48));
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        foreach ((string backend, Image<TPixel> image) in new[] { ("Default", defaultImage), ("WebGPU", nativeSurfaceImage) })
+        {
+            for (int y = 0; y < image.Height; y++)
+            {
+                for (int x = 0; x < image.Width; x++)
+                {
+                    bool set = image[x, y].ToRgba32().R == 0;
+                    Assert.True(set == region.Contains(x, y), $"{backend}: pixel ({x}, {y}) must be {(set ? "empty" : "set")}.");
+                }
+            }
+        }
+    }
+
+    // A thin sliver 0.4 pixels high rises slowly over 56 pixels. Its lower edge passes less than 1/256
+    // pixel from row centres. In each column the sliver either holds a row centre or sets its midpoint
+    // pixel, so every column of the interior has a set pixel on both backends.
+    [WebGPUTheory]
+    [WithSolidFilledImages(64, 64, "White", PixelTypes.Rgba32, 31.825F, 0.3F)]
+    [WithSolidFilledImages(64, 64, "White", PixelTypes.Rgba32, 32.0125F, 0.3F)]
+    [WithSolidFilledImages(64, 64, "White", PixelTypes.Rgba32, 20.037F, 0.1F)]
+    public void FillPath_AliasedThinSlopedSliver_SetsPixelInEveryColumn<TPixel>(TestImageProvider<TPixel> provider, float top, float rise)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
+        };
+
+        Polygon path = new([new PointF(4, top), new PointF(60, top + rise), new PointF(60, top + rise + 0.4F), new PointF(4, top + 0.4F)]);
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(Brushes.Solid(Color.Black), path);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        foreach (Image<TPixel> image in new[] { defaultImage, nativeSurfaceImage })
+        {
+            for (int x = 8; x < 56; x++)
+            {
+                bool set = false;
+                for (int y = 0; y < image.Height; y++)
+                {
+                    set |= image[x, y].ToRgba32().R == 0;
+                }
+
+                Assert.True(set, $"Column {x} must have a set pixel.");
+            }
+        }
+    }
+
+    // Two thin slanted shapes cross each other. In row 5 the closing edge of one shape and the opening
+    // edge of the other cross the row centre at the same X. The order of these coincident crossings
+    // decides whether the row walk finds one interval or two, so both backends must sort them with
+    // the same key.
+    [WebGPUTheory]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32)]
+    public void FillPath_AliasedCoincidentRowCrossings_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
+        };
+
+        ComplexPolygon path = new(
+            new Polygon([new PointF(9.2F, 0), new PointF(9.5F, 0), new PointF(10.5F, 11), new PointF(10.2F, 11)]),
+            new Polygon([new PointF(10.5F, 0), new PointF(10.8F, 0), new PointF(9.8F, 11), new PointF(9.5F, 11)]));
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(Brushes.Solid(Color.Black), path);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0F);
+    }
+
     [WebGPUTheory]
     [WithBasicTestPatternImages(384, 256, PixelTypes.Rgba32)]
     public void FillPath_WithImageBrush_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
@@ -1729,6 +2110,107 @@ public partial class WebGPUDrawingBackendTests
         }
     }
 
+    // An image brush starts its texture at the left and top edges of the stroke bounds, so the two
+    // backends must inflate the bounds of a stroke by the same outline radius. For a Miter join with
+    // limit 4 and half width 5, the radius is 5 * sqrt(17) = 20.6, so the texture starts at x = 29
+    // for a path that starts at x = 50. The texture alternates its columns, so a start that moves by
+    // one pixel inverts every stroke pixel.
+    [WebGPUTheory]
+    [WithSolidFilledImages(200, 140, "White", PixelTypes.Rgba32)]
+    public void DrawPath_StrokeImageBrushMiterJoin_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true }
+        };
+
+        using Image<TPixel> columns = new(2, 1);
+        columns[0, 0] = Color.Black.ToPixel<TPixel>();
+        columns[1, 0] = Color.White.ToPixel<TPixel>();
+
+        Pen pen = new SolidPen(new PenOptions(new ImageBrush<TPixel>(columns, WrapMode.Repeat, WrapMode.Repeat), 10F, null)
+        {
+            StrokeOptions = new StrokeOptions { LineJoin = LineJoin.Miter, MiterLimit = 4D }
+        });
+
+        RectanglePolygon path = new(50, 30, 100, 80);
+        void DrawAction(DrawingCanvas canvas) => canvas.Draw(pen, path);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0F);
+    }
+
+    // A Miter join past its limit draws a clipped bevel. Near a reversal, its points are about one
+    // half width out from the centerline and m half widths along it, so they reach almost
+    // sqrt(m^2 + 1) half widths from the corner. The centerline here turns back at (100, 112.5) by
+    // almost 180 degrees. For half width 5 and limit 4, the bevel then covers part of column 79,
+    // outside bounds that are inflated by m half widths (x = 80). Both backends must draw the bevel
+    // pixels of column 79. The edge pixels differ by one 8-bit level between the CPU and the GPU:
+    // 0.0003% measured. A bevel column that one backend cuts gives 0.0011%.
+    [WebGPUTheory]
+    [WithSolidFilledImages(200, 160, "White", PixelTypes.Rgba32)]
+    public void DrawPath_StrokeMiterJoinReversal_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true }
+        };
+
+        PathBuilder pb = new();
+        pb.AddLine(new PointF(150, 100), new PointF(100, 112.5F));
+        pb.AddLine(new PointF(100, 112.5F), new PointF(150, 97));
+        IPath path = pb.Build();
+
+        Pen pen = new SolidPen(new PenOptions(Color.DarkBlue, 10F)
+        {
+            StrokeOptions = new StrokeOptions { LineJoin = LineJoin.Miter, MiterLimit = 4D }
+        });
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Draw(pen, path);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        // A stroke draws the same shape as a fill of its outline, and the fill does not use the
+        // stroke bounds. So the outline fill gives the bevel pixels that both backends must draw.
+        IPath outline = path.GenerateOutline(pen.StrokeWidth, pen.StrokeOptions);
+        using Image<TPixel> referenceImage = provider.GetImage();
+        RenderWithDefaultBackend(referenceImage, drawingOptions, canvas => canvas.Fill(pen.StrokeFill, outline));
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0004F);
+        for (int y = 0; y < referenceImage.Height; y++)
+        {
+            Assert.Equal(referenceImage[79, y], defaultImage[79, y]);
+            Assert.Equal(referenceImage[79, y], nativeSurfaceImage[79, y]);
+        }
+    }
+
     [WebGPUTheory]
     [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineJoin.MiterRound, 0.01D)]
     [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineJoin.MiterRound, 0.5D)]
@@ -2490,6 +2972,551 @@ public partial class WebGPUDrawingBackendTests
     }
 
     [WebGPUTheory]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32)]
+    public void CreateScene_KeepsScenesRecordedBeforeItInOrder<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
+        };
+
+        // Green is recorded before the inserted red scene and blue after it. Both overlap the red
+        // square, so the colors in the overlaps show the order of the three parts. The combined
+        // scene then renders into a second canvas.
+        static void DrawScenes(DrawingCanvas sourceCanvas, Func<DrawingCanvas> createTargetCanvas)
+        {
+            sourceCanvas.Fill(Brushes.Solid(Color.Red), new Rectangle(4, 4, 8, 8));
+            using DrawingBackendScene inserted = sourceCanvas.CreateScene();
+
+            sourceCanvas.Fill(Brushes.Solid(Color.Green), new Rectangle(0, 4, 6, 8));
+            sourceCanvas.RenderScene(inserted);
+            sourceCanvas.Fill(Brushes.Solid(Color.Blue), new Rectangle(10, 4, 8, 8));
+            using DrawingBackendScene combined = sourceCanvas.CreateScene();
+
+            using DrawingCanvas targetCanvas = createTargetCanvas();
+            targetCanvas.RenderScene(combined);
+        }
+
+        using Image<TPixel> defaultSource = provider.GetImage();
+        using Image<TPixel> defaultImage = provider.GetImage();
+        using (DrawingCanvas sourceCanvas = defaultSource.Frames.RootFrame.CreateCanvas(defaultSource.Configuration, drawingOptions))
+        {
+            DrawScenes(sourceCanvas, () => defaultImage.Frames.RootFrame.CreateCanvas(defaultImage.Configuration, drawingOptions));
+        }
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        Configuration nativeConfig = Configuration.Default.Clone();
+        nativeConfig.SetDrawingBackend(nativeSurfaceBackend);
+
+        using WebGPURenderTarget sourceTarget = new(defaultImage.Width, defaultImage.Height);
+        using WebGPURenderTarget renderTarget = new(defaultImage.Width, defaultImage.Height);
+        using (DrawingCanvas nativeSourceCanvas = WebGPUCanvasFactory.CreateCanvas(
+                   nativeConfig,
+                   drawingOptions,
+                   nativeSurfaceBackend,
+                   sourceTarget.Bounds,
+                   sourceTarget.Surface,
+                   sourceTarget.Surface.TargetDescriptor))
+        {
+            DrawScenes(
+                nativeSourceCanvas,
+                () =>
+                {
+                    DrawingCanvas canvas = WebGPUCanvasFactory.CreateCanvas(
+                        nativeConfig,
+                        drawingOptions,
+                        nativeSurfaceBackend,
+                        renderTarget.Bounds,
+                        renderTarget.Surface,
+                        renderTarget.Surface.TargetDescriptor);
+
+                    // The render target starts transparent, so match the white default image first.
+                    canvas.Clear(Brushes.Solid(Color.White));
+                    return canvas;
+                });
+        }
+
+        using Image<TPixel> nativeSurfaceImage = renderTarget.ReadbackImage<TPixel>();
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+
+        foreach (Image<TPixel> image in new[] { defaultImage, nativeSurfaceImage })
+        {
+            Assert.Equal(Color.Green.ToPixel<TPixel>(), image[2, 8]);
+            Assert.Equal(Color.Red.ToPixel<TPixel>(), image[5, 8]);
+            Assert.Equal(Color.Red.ToPixel<TPixel>(), image[8, 8]);
+            Assert.Equal(Color.Blue.ToPixel<TPixel>(), image[11, 8]);
+            Assert.Equal(Color.Blue.ToPixel<TPixel>(), image[16, 8]);
+        }
+
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "Flush", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "Flush", true)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderScene", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderScene", true)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderSceneWithLayer", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderSceneWithLayer", true)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "TwoScenes", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "TwoScenes", true)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "CreateScene", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "CreateScene", true)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "CreateSceneAfterRestore", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "CreateSceneAfterRestore", true)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "CopyPixelsFrom", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "CopyPixelsFrom", true)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "CopyPixelsFromSourceChanges", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "CopyPixelsFromSourceChanges", true)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderSceneAfterApply", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderSceneAfterApply", true)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderSceneInScopedChild", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderSceneInScopedChild", true)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderPathGradientSceneAfterApply", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderPathGradientSceneAfterApply", true)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderPartsScene", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderPartsScene", true)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderNestedScene", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "RenderNestedScene", true)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "CopyPixelsFromSelf", false)]
+    [WithSolidFilledImages(32, 16, "White", PixelTypes.Rgba32, "CopyPixelsFromSelf", true)]
+    public void SaveLayer_WithSealInsideLayer_MatchesDirectDrawing<TPixel>(
+        TestImageProvider<TPixel> provider,
+        string seal,
+        bool scopedLayer)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
+        };
+
+        GraphicsOptions layerOptions = new() { BlendPercentage = 0.5F };
+        Rectangle layerBounds = new(0, 0, 32, 16);
+        Rectangle red = new(2, 4, 12, 8);
+        Rectangle blue = new(8, 4, 12, 8);
+        Rectangle green = new(14, 4, 12, 8);
+        Point copyTarget = new(2, 4);
+
+        // The right half of the blue rectangle, yellow in the copy source.
+        Rectangle yellow = new(14, 4, 6, 8);
+
+        // The pixels that the self copy reads: the green rectangle of the frame before the layer.
+        using Image<TPixel> copiedGreen = new(green.Width, green.Height, Color.Green.ToPixel<TPixel>());
+
+        // Opens the outer layer and draws the content before the seal. An Apply in the layer makes
+        // both backends render it on the scoped path.
+        void BeginLayer(DrawingCanvas canvas)
+        {
+            _ = canvas.SaveLayer(layerOptions, layerBounds);
+            canvas.Fill(Brushes.Solid(Color.Red), red);
+            if (scopedLayer)
+            {
+                canvas.Apply(new Rectangle(2, 4, 4, 8), context => context.Invert());
+            }
+        }
+
+        // Records commands into a retained scene of the same canvas before anything else is
+        // recorded, so the scene holds only those commands and has the backend and bounds of the canvas.
+        static DrawingBackendScene CreateRetainedScene(DrawingCanvas canvas, Action<DrawingCanvas> draw, List<DrawingBackendScene> scenes)
+        {
+            draw(canvas);
+            DrawingBackendScene scene = canvas.CreateScene();
+            scenes.Add(scene);
+            return scene;
+        }
+
+        void DrawBlue(DrawingCanvas canvas) => canvas.Fill(Brushes.Solid(Color.Blue), blue);
+
+        void DrawGreen(DrawingCanvas canvas) => canvas.Fill(Brushes.Solid(Color.Green), green);
+
+        void DrawBlueInLayer(DrawingCanvas canvas)
+        {
+            _ = canvas.SaveLayer(layerOptions, layerBounds);
+            canvas.Fill(Brushes.Solid(Color.Blue), blue);
+            canvas.Restore();
+        }
+
+        // A path gradient has brush data outside the draw data, which a retained scene keeps in its own block.
+        void DrawPathGradient(DrawingCanvas canvas)
+            => canvas.Fill(
+                new PathGradientBrush(
+                    [new PointF(8, 4), new PointF(20, 4), new PointF(20, 12), new PointF(8, 12)],
+                    [Color.Blue, Color.Green, Color.Yellow, Color.Cyan]),
+                blue);
+
+        // A scoped layer with an Apply, and the content drawn by drawContent after the Apply.
+        void DrawInScopedLayer(DrawingCanvas canvas, Action<DrawingCanvas> drawContent)
+        {
+            _ = canvas.SaveLayer(layerOptions, layerBounds);
+            canvas.Apply(new Rectangle(4, 2, 4, 4), context => context.Invert());
+            drawContent(canvas);
+            canvas.Restore();
+        }
+
+        // An Apply before the layer makes the canvas scene ordered, and the layer stays plain unless
+        // scopedLayer is set.
+        void ApplyBeforeLayer(DrawingCanvas canvas)
+            => canvas.Apply(new Rectangle(26, 0, 6, 4), context => context.Invert());
+
+        // Opens a scoped layer that is smaller than the canvas, and a plain layer inside it. The
+        // Apply makes the smaller layer scoped. The content of the plain layer is drawn by drawContent.
+        void DrawInScopedChild(DrawingCanvas canvas, Action<DrawingCanvas> drawContent)
+        {
+            Rectangle childBounds = new(4, 2, 24, 12);
+            BeginLayer(canvas);
+            _ = canvas.SaveLayer(layerOptions, childBounds);
+            canvas.Apply(new Rectangle(4, 2, 4, 4), context => context.Invert());
+            _ = canvas.SaveLayer(layerOptions, childBounds);
+            drawContent(canvas);
+            canvas.Restore();
+            canvas.Restore();
+            canvas.Restore();
+        }
+
+        // The sealed drawing: the same content as the direct drawing, with the seal inside the layer.
+        // The copy source is a canvas of the same backend whose frame is blue with a yellow right half
+        // in the blue rectangle, so a copy that reads from the wrong origin gives other pixels.
+        void DrawSealed(DrawingCanvas canvas, List<DrawingBackendScene> scenes, Func<DrawingCanvas> createCopySource)
+        {
+            switch (seal)
+            {
+                case "CopyPixelsFrom":
+                {
+                    using DrawingCanvas source = createCopySource();
+                    BeginLayer(canvas);
+                    canvas.CopyPixelsFrom(source, blue, blue.Location);
+                    canvas.Restore();
+                    break;
+                }
+
+                case "CopyPixelsFromSourceChanges":
+                {
+                    // The source frame changes and renders before the target replays. The copy must
+                    // still give the source pixels from the time of the call.
+                    DrawingCanvas source = createCopySource();
+                    BeginLayer(canvas);
+                    canvas.CopyPixelsFrom(source, blue, blue.Location);
+                    canvas.Restore();
+                    source.Fill(Brushes.Solid(Color.Green), blue);
+                    source.Dispose();
+                    break;
+                }
+
+                case "Flush":
+                    BeginLayer(canvas);
+                    canvas.Flush();
+                    DrawBlue(canvas);
+                    canvas.Restore();
+                    break;
+
+                case "RenderScene":
+                {
+                    DrawingBackendScene blueScene = CreateRetainedScene(canvas, DrawBlue, scenes);
+                    BeginLayer(canvas);
+                    canvas.RenderScene(blueScene);
+                    canvas.Restore();
+                    break;
+                }
+
+                case "RenderSceneWithLayer":
+                {
+                    DrawingBackendScene layerScene = CreateRetainedScene(canvas, DrawBlueInLayer, scenes);
+                    BeginLayer(canvas);
+                    canvas.RenderScene(layerScene);
+                    canvas.Restore();
+                    break;
+                }
+
+                case "TwoScenes":
+                {
+                    DrawingBackendScene blueScene = CreateRetainedScene(canvas, DrawBlue, scenes);
+                    DrawingBackendScene greenScene = CreateRetainedScene(canvas, DrawGreen, scenes);
+                    BeginLayer(canvas);
+                    canvas.RenderScene(blueScene);
+                    canvas.RenderScene(greenScene);
+                    canvas.Restore();
+                    break;
+                }
+
+                case "CreateScene":
+                {
+                    // The returned scene closes the open layer at its end, and the canvas opens the layer
+                    // again. Rendering the scene back therefore puts its content in a nested layer.
+                    BeginLayer(canvas);
+                    DrawingBackendScene scene = canvas.CreateScene();
+                    scenes.Add(scene);
+                    canvas.RenderScene(scene);
+                    DrawBlue(canvas);
+                    canvas.Restore();
+                    break;
+                }
+
+                case "CreateSceneAfterRestore":
+                {
+                    DrawingBackendScene blueScene = CreateRetainedScene(canvas, DrawBlue, scenes);
+                    BeginLayer(canvas);
+                    canvas.RenderScene(blueScene);
+                    canvas.Restore();
+                    DrawingBackendScene combinedScene = canvas.CreateScene();
+                    scenes.Add(combinedScene);
+                    canvas.RenderScene(combinedScene);
+                    break;
+                }
+
+                case "RenderSceneAfterApply":
+                {
+                    DrawingBackendScene blueScene = CreateRetainedScene(canvas, DrawBlue, scenes);
+                    ApplyBeforeLayer(canvas);
+                    BeginLayer(canvas);
+                    canvas.RenderScene(blueScene);
+                    canvas.Restore();
+                    break;
+                }
+
+                case "RenderSceneInScopedChild":
+                {
+                    DrawingBackendScene blueScene = CreateRetainedScene(canvas, DrawBlue, scenes);
+                    DrawInScopedChild(canvas, target => target.RenderScene(blueScene));
+                    break;
+                }
+
+                case "RenderPathGradientSceneAfterApply":
+                {
+                    DrawingBackendScene gradientScene = CreateRetainedScene(canvas, DrawPathGradient, scenes);
+                    ApplyBeforeLayer(canvas);
+                    BeginLayer(canvas);
+                    canvas.RenderScene(gradientScene);
+                    canvas.Restore();
+                    break;
+                }
+
+                case "RenderPartsScene":
+                {
+                    // A scene that renders another scene outside every layer holds its parts in order.
+                    DrawingBackendScene blueScene = CreateRetainedScene(canvas, DrawBlue, scenes);
+                    DrawingBackendScene partsScene = CreateRetainedScene(
+                        canvas,
+                        target =>
+                        {
+                            target.RenderScene(blueScene);
+                            DrawGreen(target);
+                        },
+                        scenes);
+
+                    BeginLayer(canvas);
+                    canvas.RenderScene(partsScene);
+                    canvas.Restore();
+                    break;
+                }
+
+                case "CopyPixelsFromSelf":
+                    // CopyPixelsFrom applies the queued commands of the source first. The content
+                    // of the open layer reaches the frame only at Restore, so the copy of the green
+                    // rectangle holds the green fill that was recorded before the layer.
+                    DrawGreen(canvas);
+                    BeginLayer(canvas);
+                    canvas.CopyPixelsFrom(canvas, green, copyTarget);
+                    canvas.Restore();
+                    break;
+
+                case "RenderNestedScene":
+                {
+                    // The outer scene renders the blue scene directly inside its scoped layer, and
+                    // the canvas renders the outer scene inside its own layer.
+                    DrawingBackendScene blueScene = CreateRetainedScene(canvas, DrawBlue, scenes);
+                    DrawingBackendScene outerScene = CreateRetainedScene(
+                        canvas,
+                        target => DrawInScopedLayer(target, layer => layer.RenderScene(blueScene)),
+                        scenes);
+
+                    BeginLayer(canvas);
+                    canvas.RenderScene(outerScene);
+                    canvas.Restore();
+                    break;
+                }
+            }
+        }
+
+        // The direct drawing: the expected result of each sealed drawing, with no seal.
+        void DrawDirect(DrawingCanvas canvas)
+        {
+            switch (seal)
+            {
+                case "RenderSceneWithLayer":
+                    BeginLayer(canvas);
+                    DrawBlueInLayer(canvas);
+                    canvas.Restore();
+                    break;
+
+                case "TwoScenes":
+                    BeginLayer(canvas);
+                    DrawBlue(canvas);
+                    DrawGreen(canvas);
+                    canvas.Restore();
+                    break;
+
+                case "CreateScene":
+                    _ = canvas.SaveLayer(layerOptions, layerBounds);
+                    BeginLayer(canvas);
+                    canvas.Restore();
+                    DrawBlue(canvas);
+                    canvas.Restore();
+                    break;
+
+                case "RenderSceneAfterApply":
+                    ApplyBeforeLayer(canvas);
+                    BeginLayer(canvas);
+                    DrawBlue(canvas);
+                    canvas.Restore();
+                    break;
+
+                case "RenderSceneInScopedChild":
+                    DrawInScopedChild(canvas, DrawBlue);
+                    break;
+
+                case "RenderPathGradientSceneAfterApply":
+                    ApplyBeforeLayer(canvas);
+                    BeginLayer(canvas);
+                    DrawPathGradient(canvas);
+                    canvas.Restore();
+                    break;
+
+                case "RenderPartsScene":
+                    BeginLayer(canvas);
+                    DrawBlue(canvas);
+                    DrawGreen(canvas);
+                    canvas.Restore();
+                    break;
+
+                case "RenderNestedScene":
+                    BeginLayer(canvas);
+                    DrawInScopedLayer(canvas, DrawBlue);
+                    canvas.Restore();
+                    break;
+
+                case "CopyPixelsFrom":
+                case "CopyPixelsFromSourceChanges":
+                    // The copy writes the blue and yellow source pixels at the same position.
+                    BeginLayer(canvas);
+                    DrawBlue(canvas);
+                    canvas.Fill(Brushes.Solid(Color.Yellow), yellow);
+                    canvas.Restore();
+                    break;
+
+                case "CopyPixelsFromSelf":
+                    // The copy replaces the layer pixels with the green pixels of the frame. An
+                    // image of those pixels, drawn with Src, is the same operation.
+                    DrawGreen(canvas);
+                    BeginLayer(canvas);
+                    _ = canvas.Save(new DrawingOptions
+                    {
+                        GraphicsOptions = new GraphicsOptions { Antialias = false, AlphaCompositionMode = PixelAlphaCompositionMode.Src }
+                    });
+
+                    canvas.DrawImage(copiedGreen, copiedGreen.Bounds, new RectangleF(copyTarget, green.Size));
+                    canvas.Restore();
+                    canvas.Restore();
+                    break;
+
+                default:
+                    BeginLayer(canvas);
+                    DrawBlue(canvas);
+                    canvas.Restore();
+                    break;
+            }
+        }
+
+        // The scenes must stay alive until each canvas replays its timeline on disposal.
+        List<DrawingBackendScene> scenes = [];
+        string details = $"{seal}_{(scopedLayer ? "Scoped" : "Plain")}";
+        try
+        {
+            using Image<TPixel> defaultDirect = provider.GetImage();
+            RenderWithDefaultBackend(defaultDirect, drawingOptions, DrawDirect);
+
+            // The copy source frame must live until the target replays.
+            using Image<TPixel> defaultCopyImage = provider.GetImage();
+            DrawingCanvas CreateDefaultCopySource()
+            {
+                DrawingCanvas source = defaultCopyImage.Frames.RootFrame.CreateCanvas(defaultCopyImage.Configuration, drawingOptions);
+                source.Clear(Brushes.Solid(Color.Blue));
+                source.Fill(Brushes.Solid(Color.Yellow), yellow);
+                return source;
+            }
+
+            using Image<TPixel> defaultImage = provider.GetImage();
+            RenderWithDefaultBackend(defaultImage, drawingOptions, canvas => DrawSealed(canvas, scenes, CreateDefaultCopySource));
+
+            // The CPU images are saved before the WebGPU render, so a WebGPU failure cannot hide them.
+            defaultDirect.DebugSave(provider, CreateBackendPairDetails($"{details}_Direct", "Default"), appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+            defaultImage.DebugSave(provider, CreateBackendPairDetails(details, "Default"), appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+
+            using WebGPUDrawingBackend nativeSurfaceBackend = new();
+            using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+            using Image<TPixel> nativeSurfaceDirect = RenderWithNativeSurfaceWebGpuBackend(
+                defaultImage.Width,
+                defaultImage.Height,
+                nativeSurfaceBackend,
+                drawingOptions,
+                DrawDirect,
+                nativeSurfaceInitialImage);
+
+            Configuration nativeConfig = Configuration.Default.Clone();
+            nativeConfig.SetDrawingBackend(nativeSurfaceBackend);
+            using WebGPURenderTarget nativeCopyTarget = new(defaultImage.Width, defaultImage.Height);
+            DrawingCanvas CreateNativeCopySource()
+            {
+                DrawingCanvas source = WebGPUCanvasFactory.CreateCanvas(
+                    nativeConfig,
+                    drawingOptions,
+                    nativeSurfaceBackend,
+                    nativeCopyTarget.Bounds,
+                    nativeCopyTarget.Surface,
+                    nativeCopyTarget.Surface.TargetDescriptor);
+
+                source.Clear(Brushes.Solid(Color.Blue));
+                source.Fill(Brushes.Solid(Color.Yellow), yellow);
+                return source;
+            }
+
+            using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+                defaultImage.Width,
+                defaultImage.Height,
+                nativeSurfaceBackend,
+                drawingOptions,
+                canvas => DrawSealed(canvas, scenes, CreateNativeCopySource),
+                nativeSurfaceInitialImage);
+
+            DebugSaveBackendPair(provider, $"{details}_Direct", defaultDirect, nativeSurfaceDirect);
+            DebugSaveBackendPair(provider, details, defaultImage, nativeSurfaceImage);
+
+            ImageComparer.Exact.VerifySimilarity(defaultDirect, defaultImage);
+            ImageComparer.Exact.VerifySimilarity(nativeSurfaceDirect, nativeSurfaceImage);
+
+            // The exact checks above are the contract of each backend. The direct drawings already
+            // differ by one unit in some blended layer pixels between the CPU and the GPU, so the
+            // pair tolerance is the largest measured difference of all cases plus one unit.
+            AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0859F);
+
+            // The self copy composites green 128 at 50% over white, so the exact green value is the
+            // rounding tie 191.5. The WebGPU output on macOS rounds it to 191, against 192 in the
+            // reference, so that case gets its measured difference plus one unit.
+            float referenceTolerance = seal == "CopyPixelsFromSelf" ? 0.0185F : 0.0003F;
+            AssertBackendPairReferenceOutputs(provider, details, defaultImage, nativeSurfaceImage, referenceTolerance);
+        }
+        finally
+        {
+            foreach (DrawingBackendScene scene in scenes)
+            {
+                scene.Dispose();
+            }
+        }
+    }
+
+    [WebGPUTheory]
     [WithSolidFilledImages(160, 120, "White", PixelTypes.Rgba32)]
     public void RetainedScene_WithLayerCommands_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -2652,6 +3679,59 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
+    [WithBlankImage(300, 10, PixelTypes.Rgba32, GradientRepetitionMode.Repeat)]
+    [WithBlankImage(300, 10, PixelTypes.Rgba32, GradientRepetitionMode.Reflect)]
+    public void FillPath_WithLinearGradientBrush_RepeatsBeforeTheStartPoint<TPixel>(
+        TestImageProvider<TPixel> provider,
+        GradientRepetitionMode repetitionMode)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true }
+        };
+
+        // The axis runs from x = 100 to x = 200, so columns 0 to 99 lie before the start point.
+        Brush brush = new LinearGradientBrush(
+            new PointF(100, 0),
+            new PointF(200, 0),
+            repetitionMode,
+            new ColorStop(0, Color.Red),
+            new ColorStop(1, Color.Blue));
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, new RectanglePolygon(0, 0, 300, 10));
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        string testName = $"{repetitionMode}";
+        DebugSaveBackendPair(provider, testName, defaultImage, nativeSurfaceImage);
+
+        // Repeat gives columns 0 to 99 the colors of the first period, columns 100 to 199. Reflect
+        // mirrors the first period about the start point. Neither mode pads with the first stop.
+        using Image<TPixel> beforeStart = nativeSurfaceImage.Clone(ctx => ctx.Crop(new Rectangle(0, 0, 100, 10)));
+        using Image<TPixel> firstPeriod = nativeSurfaceImage.Clone(ctx => ctx.Crop(new Rectangle(100, 0, 100, 10)));
+        if (repetitionMode == GradientRepetitionMode.Reflect)
+        {
+            firstPeriod.Mutate(ctx => ctx.Flip(FlipMode.Horizontal));
+        }
+
+        ImageComparer.TolerantPercentage(0F).VerifySimilarity(firstPeriod, beforeStart);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0236F);
+        AssertBackendPairReferenceOutputs(provider, testName, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUFact]
@@ -2918,7 +3998,10 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0267F);
+
+        // The brushes repeat and reflect before their start points. The measured backend difference
+        // is 0.0301%, and the tolerance is that value plus 0.0001.
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0302F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -2993,9 +4076,20 @@ public partial class WebGPUDrawingBackendTests
 
         // The sampled point lies before the original start circle after the shader's
         // canonical circle swap. Repetition must therefore see the restored negative t.
-        Rgba32 expected = Color.Red.ToPixel<Rgba32>();
+        // The pixel center (0.5, 0.5) lies on the circle at t = (262 - sqrt(214756)) / 192 = -1.04905.
+        // Repeat maps t to t - floor(t) = 0.95095, and Reflect maps |t| = 1.04905 to 2 - 1.04905 = 0.95095.
+        // That position is 4.905% red and 95.095% lime. The swapped t' = 1 - t = 2.04905 gives 0.04905,
+        // which is almost pure red.
+        Rgba32 expected = new(13, 242, 0, 255);
         Assert.Equal(expected, defaultImage[0, 0]);
-        Assert.Equal(defaultImage[0, 0], actual[0, 0]);
+
+        // The exact channels are 12.508 and 242.49, next to a rounding boundary. The f32 shader can
+        // round to the other side, so WebGPU must be within one level of the CPU result.
+        Rgba32 actualPixel = actual[0, 0];
+        Assert.InRange(Math.Abs(expected.R - actualPixel.R), 0, 1);
+        Assert.InRange(Math.Abs(expected.G - actualPixel.G), 0, 1);
+        Assert.Equal(expected.B, actualPixel.B);
+        Assert.Equal(expected.A, actualPixel.A);
     }
 
     [WebGPUTheory]

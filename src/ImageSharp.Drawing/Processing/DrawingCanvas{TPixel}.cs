@@ -1179,7 +1179,20 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     public override DrawingBackendScene CreateScene()
     {
         this.EnsureNotDisposed();
-        this.CloseClipsAndSealActiveCommandRange();
+
+        // A scene is a balanced command stream. Open layers close at the end of the scene, nested
+        // with the open clips, and open again after it, the same as the clips.
+        bool hasOpenLayers = this.batcher.OpenLayerCount != 0;
+        DrawingCanvasBatcher<TPixel>.OpenScopes openScopes = default;
+        if (hasOpenLayers)
+        {
+            openScopes = this.batcher.CloseOpenScopes();
+            this.batcher.SealCommands();
+        }
+        else
+        {
+            this.CloseClipsAndSealActiveCommandRange();
+        }
 
         IDisposable[]? ownedResources = this.DetachPendingImageResources();
 
@@ -1196,10 +1209,17 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         {
             this.batcher.ClearCommandBatch();
 
-            // The sealed range consumed the balanced clip stream; reopen the active clip
-            // stack so later commands keep recording under the same clip state.
-            DrawingCanvasState state = this.ResolveState();
-            this.AppendBeginClips(state.ClipState, state.DestinationOffset);
+            // The sealed range used the balanced clip and layer stream. The canvas opens the scopes
+            // again, so later commands record under the same clip and layer state.
+            if (hasOpenLayers)
+            {
+                this.batcher.ReopenScopes(openScopes);
+            }
+            else
+            {
+                DrawingCanvasState state = this.ResolveState();
+                this.AppendBeginClips(state.ClipState, state.DestinationOffset);
+            }
         }
     }
 
@@ -1209,11 +1229,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         this.EnsureNotDisposed();
         Guard.NotNull(scene, nameof(scene));
 
-        this.CloseClipsAndSealActiveCommandRange();
         this.batcher.AddScene(scene);
-
-        DrawingCanvasState state = this.ResolveState();
-        this.AppendBeginClips(state.ClipState, state.DestinationOffset);
     }
 
     /// <inheritdoc />
@@ -1230,12 +1246,33 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         typedSource.EnsureNotDisposed();
 
         // Pixel copy transfers already-rasterized frame contents. Materialize both timelines at
-        // this ordering boundary so the backend copies pixels instead of replaying commands.
-        typedSource.CloseClipsAndSealActiveCommandRange();
-        typedSource.RenderRecordedTimeline();
+        // this ordering boundary so the backend copies pixels instead of replaying commands. The
+        // content of an open layer reaches the frame only when the layer closes. With an open
+        // layer, only the commands before the outermost open layer therefore render now. The
+        // source can share the stream of this canvas, for example as a region of it.
+        if (typedSource.batcher.OpenLayerCount == 0)
+        {
+            typedSource.CloseClipsAndSealActiveCommandRange();
+            typedSource.RenderRecordedTimeline();
 
-        DrawingCanvasState sourceState = typedSource.ResolveState();
-        typedSource.AppendBeginClips(sourceState.ClipState, sourceState.DestinationOffset);
+            DrawingCanvasState sourceState = typedSource.ResolveState();
+            typedSource.AppendBeginClips(sourceState.ClipState, sourceState.DestinationOffset);
+        }
+        else
+        {
+            DrawingCanvasBatcher<TPixel>.DetachedCommands detached = typedSource.batcher.DetachOpenLayerCommands();
+            typedSource.RenderRecordedTimeline();
+            typedSource.batcher.AttachCommands(detached);
+        }
+
+        // Inside a layer, the target cannot render now, because the layer composites only at Restore
+        // or Dispose. The canvas therefore reads the source pixels into an image now. It then draws
+        // that image into the layer at this position of the stream.
+        if (this.batcher.OpenLayerCount != 0)
+        {
+            this.CopyPixelsIntoLayer(typedSource, sourceRectangle, targetPoint);
+            return;
+        }
 
         this.CloseClipsAndSealActiveCommandRange();
         this.RenderRecordedTimeline();
@@ -1249,6 +1286,73 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             this.targetFrame,
             sourceRectangle,
             targetPoint);
+    }
+
+    /// <summary>
+    /// Reads the source rectangle into an image now, and writes the image into the open layer at
+    /// this position of the stream with replace semantics.
+    /// </summary>
+    /// <remarks>
+    /// The rectangles clip the same way as <see cref="IDrawingBackend.CopyPixels{TPixel}"/>: first
+    /// against the source frame, then against the target frame. The copy writes raw pixels, so the
+    /// canvas transform does not apply. The clips opened in the innermost layer do not apply, the
+    /// same as for a retained scene. Clips opened before that layer stay open.
+    /// </remarks>
+    /// <param name="source">The source canvas, already rendered.</param>
+    /// <param name="sourceRectangle">The source rectangle in source-local coordinates.</param>
+    /// <param name="targetPoint">The target point in target-local coordinates.</param>
+    private void CopyPixelsIntoLayer(DrawingCanvas<TPixel> source, Rectangle sourceRectangle, Point targetPoint)
+    {
+        if (!IDrawingBackend.TryClipPixelCopy(
+                source.targetFrame.Bounds.Size,
+                this.targetFrame.Bounds.Size,
+                sourceRectangle,
+                targetPoint,
+                out Point sourceOrigin,
+                out Rectangle clippedTarget))
+        {
+            return;
+        }
+
+        Rectangle readRectangle = new(sourceOrigin, clippedTarget.Size);
+
+        // The image is an owned resource, the same as a DrawImage image, so CreateScene moves it to
+        // the scene and Dispose releases it after the replay. It is added before the read, so a
+        // failed read cannot leak it.
+        Image<TPixel> image = new(this.configuration, readRectangle.Width, readRectangle.Height);
+        this.pendingImageResources.Add(image);
+
+        // The source backend reads the rendered source pixels into the image now. Later draws to
+        // the source then cannot change the pixels that the layer receives.
+        source.backend.ReadRegion(
+            this.configuration,
+            source.targetFrame,
+            readRectangle,
+            image.Frames.RootFrame.PixelBuffer.GetRegion());
+
+        // Src replaces the layer pixels. A pixel copy has no partial coverage, so the rectangle
+        // rasterizes aliased. Coverage is exactly one inside and zero outside, and the image
+        // pixels pass through unchanged.
+        DrawingOptions options = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false, AlphaCompositionMode = PixelAlphaCompositionMode.Src }
+        };
+
+        RasterizerOptions rasterizerOptions = new(
+            ToRasterizerInterest(clippedTarget),
+            IntersectionRule.NonZero,
+            RasterizationMode.Aliased);
+
+        DrawingCanvasState state = this.ResolveState();
+        this.batcher.AddUnclippedComposition(
+            CompositionCommand.Create(
+                new RectanglePolygon(clippedTarget),
+                new ImageBrush<TPixel>(image, image.Bounds),
+                options,
+                in rasterizerOptions,
+                state.TargetBounds,
+                state.DestinationOffset,
+                state.Layer));
     }
 
     /// <summary>
@@ -1938,6 +2042,14 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     public override void Flush()
     {
         this.EnsureNotDisposed();
+
+        // A command range is a balanced stream that cannot split a layer, and a seal changes no
+        // pixels. Inside a layer there is therefore nothing to seal.
+        if (this.batcher.OpenLayerCount != 0)
+        {
+            return;
+        }
+
         this.CloseClipsAndSealActiveCommandRange();
         DrawingCanvasState state = this.ResolveState();
         this.AppendBeginClips(state.ClipState, state.DestinationOffset);
@@ -1989,8 +2101,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     /// Renders the recorded timeline owned by the root canvas.
     /// </summary>
     /// <remarks>
-    /// Command-range entries are lowered to short-lived backend scenes here. Scene entries
-    /// reference retained scenes that were recorded earlier through <see cref="DrawingCanvas.RenderScene"/>.
+    /// Command-range entries are lowered to short-lived backend scenes here. Retained scenes
+    /// recorded through <see cref="DrawingCanvas.RenderScene"/> are scene commands inside the ranges.
     /// </remarks>
     private void RenderRecordedTimeline()
     {
@@ -2004,21 +2116,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         {
             for (int i = 0; i < this.batcher.TimelineEntryCount; i++)
             {
-                DrawingCanvasTimelineEntry entry = this.batcher.GetEntry(i);
-                switch (entry.Kind)
-                {
-                    case DrawingCanvasTimelineEntryKind.CommandRange:
-                        this.RenderCommandBatch(this.batcher.CreateCommandBatch(entry));
-                        break;
-
-                    case DrawingCanvasTimelineEntryKind.Scene:
-                        this.backend.RenderScene(
-                            this.configuration,
-                            this.targetFrame,
-                            this.batcher.GetInsertedScene(entry.Index));
-
-                        break;
-                }
+                this.RenderCommandBatch(this.batcher.CreateCommandBatch(this.batcher.GetEntry(i)));
             }
         }
         finally
@@ -2028,10 +2126,46 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     }
 
     /// <summary>
-    /// Creates and renders one backend scene for a prepared command batch.
+    /// Renders one prepared command batch. A retained scene outside every layer renders as its own
+    /// pass, and each run of commands between such scenes renders as one backend scene.
     /// </summary>
+    /// <remarks>
+    /// A retained scene outside every layer needs no work in the scene of its run, so it renders
+    /// directly, with no scene to create for it.
+    /// </remarks>
     /// <param name="commandBatch">The command batch to render.</param>
     private void RenderCommandBatch(DrawingCommandBatch commandBatch)
+    {
+        if (!commandBatch.HasScenes)
+        {
+            this.RenderCommandRun(commandBatch);
+            return;
+        }
+
+        int index = 0;
+        while (true)
+        {
+            DrawingBackendScene? retainedScene = commandBatch.ReadRootPart(ref index, out DrawingCommandBatch run);
+            if (run.CommandCount != 0)
+            {
+                this.RenderCommandRun(run);
+            }
+
+            if (retainedScene is null)
+            {
+                return;
+            }
+
+            // The caller of RenderScene owns the retained scene and its resources.
+            this.backend.RenderScene(this.configuration, this.targetFrame, retainedScene);
+        }
+    }
+
+    /// <summary>
+    /// Creates and renders one backend scene for a run of commands.
+    /// </summary>
+    /// <param name="commandBatch">The commands to render.</param>
+    private void RenderCommandRun(DrawingCommandBatch commandBatch)
     {
         using DrawingBackendScene scene = this.backend.CreateScene(
             this.configuration,

@@ -145,7 +145,14 @@ fn main(
         // antialiased bin coverage unchanged.
         let aliased_right_pad = select(0.0, 1.0, (path_bbox.draw_flags & DRAW_INFO_FLAGS_ALIASED_BIT) != 0u);
         let pb = vec4<f32>(f32(path_bbox.x0), f32(path_bbox.y0), f32(path_bbox.x1) + aliased_right_pad, f32(path_bbox.y1));
-        let bbox = bbox_intersect(clip_bbox, bbox_intersect(pb, path_bbox.interest));
+
+        // An aliased fill sets the midpoint pixel of a thin feature between two pixel centres. The
+        // feature can cross the edge of the interest or the clip, and the pixel that it sets inside
+        // depends on the geometry up to one pixel outside. Keep one more pixel on each side, as the
+        // CPU rasterizer does. Fine clears the coverage outside the interest, and the clip layer
+        // masks the coverage outside the clip.
+        let halo = vec4(-aliased_right_pad, -aliased_right_pad, aliased_right_pad, aliased_right_pad);
+        let bbox = bbox_intersect(clip_bbox + halo, bbox_intersect(pb, path_bbox.interest + halo));
 
         // Only the first bin-chunk workgroup writes the intersected bbox, since
         // the value is identical across chunks and later stages read it once.

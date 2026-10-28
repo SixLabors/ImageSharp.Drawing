@@ -138,3 +138,54 @@ public sealed class PolylineCompositionSceneCommand : CompositionSceneCommand
     /// <inheritdoc />
     public override void Accept(ICompositionSceneCommandVisitor visitor) => visitor.Visit(this);
 }
+
+/// <summary>
+/// Scene command that renders one retained backend scene at its position in the command stream.
+/// </summary>
+/// <remarks>
+/// This type is internal, so the public <see cref="ICompositionSceneCommandVisitor"/> contract does
+/// not change. Only the canvas batcher records this command, and only the backends of this library
+/// read it. They select it by type, the same as the other commands.
+/// </remarks>
+internal sealed class RetainedSceneCompositionSceneCommand : CompositionSceneCommand
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RetainedSceneCompositionSceneCommand"/> class.
+    /// </summary>
+    /// <remarks>
+    /// Only the canvas batcher records this command, so every batch that contains it comes from
+    /// the batcher and carries <see cref="DrawingCommandBatch.HasScenes"/>.
+    /// </remarks>
+    /// <param name="scene">The retained scene to render.</param>
+    /// <param name="targetBounds">The absolute bounds of the innermost open layer, or the scene bounds outside every layer.</param>
+    /// <param name="isInsideLayer">True if the command was recorded inside a layer.</param>
+    internal RetainedSceneCompositionSceneCommand(DrawingBackendScene scene, Rectangle targetBounds, bool isInsideLayer)
+    {
+        this.Scene = scene;
+        this.TargetBounds = targetBounds;
+        this.IsInsideLayer = isInsideLayer;
+    }
+
+    /// <summary>
+    /// Gets the retained scene to render.
+    /// </summary>
+    public DrawingBackendScene Scene { get; }
+
+    /// <summary>
+    /// Gets the absolute bounds of the innermost open layer, or the scene bounds outside every layer.
+    /// </summary>
+    public Rectangle TargetBounds { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the command was recorded inside a layer.
+    /// </summary>
+    public bool IsInsideLayer { get; }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The public visitor has no member for this internal command, so the visitor receives nothing.
+    /// </remarks>
+    public override void Accept(ICompositionSceneCommandVisitor visitor)
+    {
+    }
+}

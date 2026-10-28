@@ -217,12 +217,16 @@ public abstract class GradientBrush : Brush
                 switch (this.repetitionMode)
                 {
                     case GradientRepetitionMode.Repeat:
-                        positionOnCompleteGradient %= 1;
+                        // The floor subtraction moves every position into [0, 1], so the pattern also
+                        // repeats before the start point. The remainder operator keeps the sign of a
+                        // negative position, and the brush then pads that position with the first stop.
+                        positionOnCompleteGradient -= MathF.Floor(positionOnCompleteGradient);
                         break;
                     case GradientRepetitionMode.Reflect:
-                        // Fold every second period back on itself so alternating
-                        // repetitions run the stops in reverse order.
-                        positionOnCompleteGradient %= 2;
+                        // Reflection is symmetric about the start point, so the magnitude gives the
+                        // same color as the signed position. Every second period folds back on itself,
+                        // so alternate repetitions run the stops in reverse order.
+                        positionOnCompleteGradient = MathF.Abs(positionOnCompleteGradient) % 2;
                         if (positionOnCompleteGradient > 1)
                         {
                             positionOnCompleteGradient = 2 - positionOnCompleteGradient;

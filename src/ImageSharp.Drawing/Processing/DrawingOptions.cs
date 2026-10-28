@@ -70,7 +70,6 @@ public class DrawingOptions
 
     /// <summary>
     /// Gets or sets the transform matrix applied to vector output before rasterization.
-    /// For strokes, the pen is expanded in local geometry space and the resulting outline is transformed before rasterization.
     /// Defaults to <see cref="Matrix4x4.Identity"/>.
     /// </summary>
     public Matrix4x4 Transform { get; set; }

@@ -49,6 +49,34 @@ fn span(a: f32, b: f32) -> u32 {
     return u32(max(ceil(max(a, b)) - floor(min(a, b)), 1.0));
 }
 
+// Returns the tile row that keeps a horizontal line exactly on the top edge of tile row `below`,
+// at tile column x: that row when the path has a tile there, otherwise the row above. Returns -1
+// when neither row has a tile at that column. Must match boundary_horizontal_row in
+// path_count.wgsl.
+fn boundary_horizontal_row(path: Path, x: i32, below: i32) -> i32 {
+    let bbox = vec4<i32>(path.bbox);
+    for (var candidate = below; candidate >= below - 1; candidate -= 1) {
+        if candidate >= bbox.y && candidate < bbox.w {
+            let row = rows[path.rows + u32(candidate - bbox.y)];
+            if x >= i32(row.x0) && x < i32(row.x1) {
+                return candidate;
+            }
+        }
+    }
+
+    return -1;
+}
+
+// Returns the tile that holds a line crossing at tile (x, y). A tile inside the path bbox holds its
+// own crossings. When the path bbox touches an edge of the target, the aliased walks of the edge
+// tiles need the line pieces within half a pixel outside the target, where no tile exists. The tile
+// row or column just outside that edge then maps to the edge tile next to it. Must match
+// target_edge_tile in path_count.wgsl.
+fn target_edge_tile(path: Path, x: i32, y: i32) -> vec2<i32> {
+    let bbox = vec4<i32>(path.bbox);
+    return vec2(clamp(x, bbox.x, bbox.z - 1), clamp(y, bbox.y, bbox.w - 1));
+}
+
 // Largest f32 strictly less than 1.0; clamping b below 1 keeps the first
 // floor(a * i + b) evaluation from overshooting a boundary.
 const ONE_MINUS_ULP: f32 = 0.99999994;
@@ -71,6 +99,10 @@ fn main(
     }
 
     let seg_count = seg_counts[global_id.x];
+    if seg_count.line_ix == SKIPPED_SEGMENT_LINE {
+        return;
+    }
+
     let line = lines[seg_count.line_ix];
     let counts = seg_count.counts;
     let seg_within_slice = counts >> 16u;
@@ -85,6 +117,31 @@ fn main(
     let count = count_x + span(s0.y, s1.y);
     let dx = abs(s1.x - s0.x);
     let dy = s1.y - s0.y;
+
+    // path_count keeps a horizontal line exactly on a tile row boundary only for the aliased column
+    // walk. Record i is tile column tx0 + i, in the row that boundary_horizontal_row chooses. The
+    // halo-only marker keeps it out of every winding calculation.
+    if dy == 0.0 && floor(s0.y) == s0.y {
+        let path = paths[line.path_ix];
+        let bbox = vec4<i32>(path.bbox);
+        let tx0 = max(i32(floor(min(s0.x, s1.x))), bbox.x);
+        let x = tx0 + i32(seg_within_line);
+        let y = boundary_horizontal_row(path, x, i32(s0.y));
+        let row = rows[path.rows + u32(y - bbox.y)];
+        let tile = tiles[row.tiles + u32(x) - row.x0];
+        let seg_start = ~tile.segment_count_or_ix;
+        if i32(seg_start) < 0 {
+            return;
+        }
+
+        let tile_xy = vec2(f32(x) * f32(TILE_WIDTH), f32(y) * f32(TILE_HEIGHT));
+        let tile_xy1 = tile_xy + vec2(f32(TILE_WIDTH), f32(TILE_HEIGHT));
+        let p0 = vec2(clamp(line.p0.x, tile_xy.x, tile_xy1.x), line.p0.y) - tile_xy;
+        let p1 = vec2(clamp(line.p1.x, tile_xy.x, tile_xy1.x), line.p1.y) - tile_xy;
+        segments[seg_start + seg_within_slice] = Segment(p0, p1, HALO_ONLY_Y_EDGE, line.tag);
+        return;
+    }
+
     let idxdy = 1.0 / (dx + dy);
     var a = dx * idxdy;
     let is_positive_slope = s1.x >= s0.x;
@@ -104,8 +161,12 @@ fn main(
     let y = i32(y0i + f32(seg_within_line) - z);
 
     let path = paths[line.path_ix];
-    let row = rows[path.rows + u32(y) - path.bbox.y];
-    let tile_ix = row.tiles + u32(x) - row.x0;
+
+    // A crossing in the tile row or column just outside the target belongs to the edge tile next
+    // to it, as a halo-only piece. Must match target_edge_tile in path_count.wgsl.
+    let edge_tile = target_edge_tile(path, x, y);
+    let row = rows[path.rows + u32(edge_tile.y) - path.bbox.y];
+    let tile_ix = row.tiles + u32(edge_tile.x) - row.x0;
     let tile = tiles[tile_ix];
     // Coarse stores the inverted segment base index; a non-inverted value
     // (negative after ~) means the tile was never allocated, so the
@@ -160,11 +221,43 @@ fn main(
     var p0 = xy0 - tile_xy;
     var p1 = xy1 - tile_xy;
     let EPSILON = 1e-6;
-    if p0.x == 0.0 {
+
+    // The piece outside the target is stored in the coordinates of the edge tile and only feeds the
+    // aliased walks, which read it as a halo crossing. Its winding reaches the edge tile through the
+    // row backdrop and the y_edge values, as for any line outside the path bbox.
+    if edge_tile.x != x || edge_tile.y != y {
+        let offset = tile_xy - vec2(f32(edge_tile.x) * f32(TILE_WIDTH), f32(edge_tile.y) * f32(TILE_HEIGHT));
+        p0 += offset;
+        p1 += offset;
+        if !is_down {
+            let tmp = p0;
+            p0 = p1;
+            p1 = tmp;
+        }
+
+        segments[seg_start + seg_within_slice] = Segment(p0, p1, HALO_ONLY_Y_EDGE, line.tag);
+        return;
+    }
+
+    // path_count keeps a vertical line exactly on the bbox's left edge only for the aliased row
+    // walk. Its winding reaches the tile through the row backdrop and the y_edge values of the
+    // lines that meet it, so the tile must ignore it as a boundary edge, even when it starts on the
+    // tile's top edge.
+    let on_bbox_left = s0.x == s1.x && s0.x == f32(path.bbox.x);
+    if on_bbox_left {
+        p0.x = EPSILON;
+        p1.x = EPSILON;
+        y_edge = HALO_ONLY_Y_EDGE;
+    } else if p0.x == 0.0 {
         if p1.x == 0.0 {
             p0.x = EPSILON;
             if p0.y == 0.0 {
-                // Vertical line covering the entire left edge of the tile.
+                // Vertical line covering the entire left edge of the tile. A line that ends
+                // inside the tile is stretched too; the y_edge of the line that meets its end
+                // cancels the extra winding below that end. The aliased row walk of the tile on
+                // the left reads this segment as a halo crossing and needs the real end, so
+                // y_edge keeps it. delta.x is 0, so y_edge adds no winding to this segment.
+                y_edge = p1.y;
                 p1.x = EPSILON;
                 p1.y = f32(TILE_HEIGHT);
             } else {
