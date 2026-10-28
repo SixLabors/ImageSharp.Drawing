@@ -12,10 +12,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <remarks>
 /// <para>
 /// The per-chunk scratch buffers are the path rows, path tiles, segment counts, segments and PTCL.
-/// They hold only the work of the draws whose clipped bounds reach the chunk rows, because
-/// path_row_alloc clips each path to the chunk window. A share of the target height is not a bound
-/// when the draws are in a few rows. AddDraw therefore adds O(1) entries for each draw, a walked
-/// draw adds one entry for each row, and a window query is O(1).
+/// They hold only the work of the draws whose clipped bounds reach the chunk rows. path_row_alloc
+/// clips each path to the chunk rows and one tile row on each side, and coarse writes the PTCL of
+/// the chunk rows only. A share of the target height is not a bound when the draws are in a few
+/// rows. AddDraw therefore adds O(1) entries for each draw, a walked draw adds one entry for each
+/// row, and a window query is O(1).
 /// </para>
 /// <para>
 /// The entries are kept for each tile row, so a window of any rows, also a chunk smaller than one

@@ -163,6 +163,29 @@ fn solid_tile_has_coverage(draw_flags: u32, backdrop: i32) -> bool {
     return coverage != 0.0;
 }
 
+// Returns the path-tile index of the tile above or below an aliased fill tile for the column walk
+// halo, or INVALID_TILE_INDEX when that tile has no segments. Coarse allocates the segments of the
+// tiles in the chunk rows when it writes their commands. A tile in the row above or below the chunk
+// gets no command, so the fill tile next to it allocates its segments here. Only that one fill tile
+// of the path reads it, so the allocation needs no synchronization.
+fn neighbor_tile(tile_ix: u32, outside_chunk: bool) -> u32 {
+    let n_segs = tiles[tile_ix].segment_count_or_ix;
+    if n_segs == 0u {
+        return INVALID_TILE_INDEX;
+    }
+
+    if outside_chunk {
+        let seg_ix = atomicAdd(&bump.segments, n_segs);
+        tiles[tile_ix].segment_count_or_ix = ~seg_ix;
+
+        // Fine reads the segment count of a neighboring tile from its backdrop field, as for the
+        // tiles that write_path allocates.
+        tiles[tile_ix].backdrop = i32(n_segs);
+    }
+
+    return tile_ix;
+}
+
 // Writes the coverage command for a tile: CMD_FILL when line segments cross
 // it (also reserving the tile's segment allocation and storing the inverted
 // index back into the tile so path_tiling can find it), otherwise CMD_SOLID.
@@ -232,15 +255,15 @@ fn write_path(tile: Tile, tile_ix: u32, path: Path, global_x: u32, global_y: u32
             var above = INVALID_TILE_INDEX;
             if global_y > 0u {
                 let up = lookup_tile(path, global_x, global_y - 1u);
-                if up.valid != 0u && tiles[up.tile_ix].segment_count_or_ix != 0u {
-                    above = up.tile_ix;
+                if up.valid != 0u {
+                    above = neighbor_tile(up.tile_ix, global_y == config.chunk_tile_y_start);
                 }
             }
 
             var below = INVALID_TILE_INDEX;
             let down = lookup_tile(path, global_x, global_y + 1u);
-            if down.valid != 0u && tiles[down.tile_ix].segment_count_or_ix != 0u {
-                below = down.tile_ix;
+            if down.valid != 0u {
+                below = neighbor_tile(down.tile_ix, global_y + 1u == config.chunk_tile_y_start + config.chunk_tile_height);
             }
 
             ptcl[cmd_offset] = above;
@@ -333,12 +356,19 @@ fn write_end_clip(end_clip: CmdEndClip) {
     cmd_offset += 3u;
 }
 
+// Returns the tile row after the rows of this bin that the chunk renders. A path also has tiles
+// in the row above and the row below the chunk, which only the aliased column walk reads, so
+// coarse writes no commands for them.
+fn bin_tile_y_end(path: Path, bin_tile_y: u32) -> u32 {
+    return min(min(path.bbox.w, bin_tile_y + N_TILE_Y), config.chunk_tile_y_start + config.chunk_tile_height);
+}
+
 // Counts how many of the path's sparse tiles fall inside the bin whose
 // top-left tile is (bin_tile_x, bin_tile_y), by clipping each row span to
 // the bin's horizontal range.
 fn get_bin_tile_count(path: Path, bin_tile_x: u32, bin_tile_y: u32) -> u32 {
     let y0 = max(path.bbox.y, bin_tile_y);
-    let y1 = min(path.bbox.w, bin_tile_y + N_TILE_Y);
+    let y1 = bin_tile_y_end(path, bin_tile_y);
     var count = 0u;
     for (var y = y0; y < y1; y += 1u) {
         let row = rows[path.rows + y - path.bbox.y];
@@ -358,7 +388,7 @@ fn get_bin_tile_count(path: Path, bin_tile_x: u32, bin_tile_y: u32) -> u32 {
 // when seq_ix falls outside the path's coverage of the bin.
 fn decode_bin_tile(path: Path, bin_tile_x: u32, bin_tile_y: u32, seq_ix: u32) -> SparseBinTileRef {
     let y0 = max(path.bbox.y, bin_tile_y);
-    let y1 = min(path.bbox.w, bin_tile_y + N_TILE_Y);
+    let y1 = bin_tile_y_end(path, bin_tile_y);
     var remaining = seq_ix;
     for (var y = y0; y < y1; y += 1u) {
         let row = rows[path.rows + y - path.bbox.y];

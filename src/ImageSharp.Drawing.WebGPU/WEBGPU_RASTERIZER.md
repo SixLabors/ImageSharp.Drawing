@@ -304,8 +304,9 @@ the winding just above the centre of the tile's first row, and it reads the colu
 half a pixel above and below the tile from the path tiles above and below, whose indices an aliased
 `CMD_FILL` holds in two more words. A vertical line exactly on the left edge of a path's tile bbox,
 and a horizontal line exactly on a tile row boundary, are kept as halo-only segments, so the row and
-column walks see their crossings. In a chunked render the tiles outside the chunk rows do not exist, so the column
-walk does not read across a chunk edge. The aliased bit in `CmdFill.size_and_rule` selects the
+column walks see their crossings. In a chunked render `path_row_alloc` keeps one tile row on each
+side of the chunk, and coarse allocates the segments of such a tile for the fill tile next to it, so
+the column walk also reads across a chunk edge. The aliased bit in `CmdFill.size_and_rule` selects the
 coverage path. Each fill also carries a raster interest rectangle; coverage outside it is zeroed.
 
 For antialiased fills the `CmdFill.coverage_data` word carries the perceptual coverage boost

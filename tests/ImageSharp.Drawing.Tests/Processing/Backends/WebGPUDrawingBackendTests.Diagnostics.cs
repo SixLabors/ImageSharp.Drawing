@@ -158,6 +158,47 @@ public partial class WebGPUDrawingBackendTests
         Assert.True(grown.BlendSpill > submitted.BlendSpill);
     }
 
+    // A chunk of 16 tile rows holds the path rows, tiles and segments of 18 rows: the chunk rows and
+    // one tile row on each side for the aliased column walk. Its PTCL and blend spill hold the 16
+    // chunk rows only. A chunk that used one unit for each of those rows equals a scene budget of one
+    // unit for each of the 69 target rows, so the budget does not grow from one flush to the next.
+    [Fact]
+    public void ChunkSchedulingScratch_ScalesPathDataByChunkAndHaloRows()
+    {
+        WebGPUSceneBumpSizes submitted = new(100, 100, 18, 18, 18, 18, 16, 16);
+        GpuSceneBumpAllocators[] statuses =
+        [
+            new GpuSceneBumpAllocators
+            {
+                Lines = 100,
+                Binning = 100,
+                PathRows = 18,
+                Tile = 18,
+                SegCounts = 18,
+                Segments = 18,
+                BlendSpill = 16,
+                Ptcl = 16
+            }
+        ];
+        WebGPUSceneBumpSizes[] submittedSizes = [submitted];
+        uint[] chunkTileHeights = [16];
+
+        bool requiresGrowth = WebGPUSceneDispatch.ResolveChunkSchedulingStatuses(
+            statuses,
+            submittedSizes,
+            chunkTileHeights,
+            69,
+            out WebGPUSceneBumpSizes scene);
+
+        Assert.False(requiresGrowth);
+        Assert.Equal(69U, scene.PathRows);
+        Assert.Equal(69U, scene.PathTiles);
+        Assert.Equal(69U, scene.SegCounts);
+        Assert.Equal(69U, scene.Segments);
+        Assert.Equal(69U, scene.BlendSpill);
+        Assert.Equal(69U, scene.Ptcl);
+    }
+
     // 100k random stroked lines, the same scene as the 100k run of the DrawingBackendBenchmark sample,
     // render in tile-row chunks at the 128 MiB default binding limit. One bin of 16 tile rows does
     // not fit the limit, so the chunks are 12 and 4 rows. Each chunk must be sized from the draws in
@@ -329,6 +370,53 @@ public partial class WebGPUDrawingBackendTests
 
         Assert.True(target.Backend.DiagnosticLastFlushUsedChunking, "The binding limit must force chunked rendering.");
         Assert.Equal(0, target.Backend.DiagnosticScratchOverflowCount);
+        Assert.Equal(0, CountDifferingPixels(expected, chunked));
+    }
+
+    // The 100k-line scene of FillManyLines_ChunksSmallerThanOneBin_MatchUnchunkedRender renders in
+    // tile-row chunks at the 128 MiB binding limit. Aliased bars 0.3 pixels high are drawn over it
+    // across every tile row boundary. Each bar holds no row centre, so the column walk of the tile
+    // below the boundary sets the midpoint row from the crossings within half a pixel above that
+    // tile, also when the tile is the first row of a chunk. The chunked image must equal the image
+    // rendered without the limit.
+    [WebGPUFact]
+    public void FillPath_AliasedThinBarsAcrossChunkEdges_MatchUnchunkedRender()
+    {
+        const int width = 1600;
+        const int height = 1100;
+        (PointF Start, PointF End, Color Color, float Width)[] lines = CreateRandomLines(width, height, 100_000);
+        Brush background = Brushes.Solid(Color.ParseHex("#003366"));
+        DrawingOptions options = new() { GraphicsOptions = new GraphicsOptions { Antialias = false } };
+        IPath[] bars = new IPath[(height - 1) / 16];
+        for (int i = 0; i < bars.Length; i++)
+        {
+            bars[i] = new RectanglePolygon(4, (16 * (i + 1)) - 0.15F, width - 8, 0.3F);
+        }
+
+        ComplexPolygon path = new(bars);
+
+        void Draw(WebGPURenderTarget target)
+        {
+            using DrawingCanvas canvas = target.CreateCanvas(options);
+            canvas.Fill(background);
+            foreach ((PointF start, PointF end, Color color, float lineWidth) in lines)
+            {
+                canvas.DrawLine(new SolidPen(color, lineWidth), start, end);
+            }
+
+            canvas.Fill(Brushes.Solid(Color.White), path);
+        }
+
+        using WebGPURenderTarget expectedTarget = new(WebGPUTextureFormat.Bgra8Unorm, width, height);
+        Draw(expectedTarget);
+        using Image<Rgba32> expected = expectedTarget.ReadbackImage().CloneAs<Rgba32>();
+
+        using WebGPURenderTarget target = new(WebGPUTextureFormat.Bgra8Unorm, width, height);
+        target.Backend.ScratchBufferBindingSizeLimit = 128U * 1024U * 1024U;
+        Draw(target);
+        using Image<Rgba32> chunked = target.ReadbackImage().CloneAs<Rgba32>();
+
+        Assert.True(target.Backend.DiagnosticLastFlushUsedChunking, "The binding limit must force chunked rendering.");
         Assert.Equal(0, CountDifferingPixels(expected, chunked));
     }
 
