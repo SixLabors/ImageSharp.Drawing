@@ -602,7 +602,8 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
             pathClipState,
             destinationOffset,
             state.BrushWorkspace,
-            state);
+            state,
+            bandInfo.Interest);
 
         DefaultRasterizer.ExecuteRasterizableItem(
             ref context,
@@ -648,7 +649,8 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
             pathClipState,
             destinationOffset,
             state.BrushWorkspace,
-            state);
+            state,
+            bandInfo.Interest);
 
         Span<float> strokeBandCoverage = item.Rasterizable.RequiresBandCoverage ? scratch.StrokeBandCoverage : [];
         DefaultRasterizer.ExecuteStrokeRasterizableItem(

@@ -306,7 +306,12 @@ half a pixel above and below the tile from the path tiles above and below, whose
 and a horizontal line exactly on a tile row boundary, are kept as halo-only segments, so the row and
 column walks see their crossings. In a chunked render `path_row_alloc` keeps one tile row on each
 side of the chunk, and coarse allocates the segments of such a tile for the fill tile next to it, so
-the column walk also reads across a chunk edge. The aliased bit in `CmdFill.size_and_rule` selects the
+the column walk also reads across a chunk edge. Binning keeps one more pixel around the interest and
+the clips of an aliased fill, and fine clears the coverage outside the interest. Where a path touches
+an edge of the target, `path_count` and `path_tiling` also walk the tile row or column just outside
+it and store those line pieces in the edge tile as halo-only segments. So a thin feature that crosses
+the edge of the image or of a clip sets the same pixels inside it as it does with no edge, as on the
+CPU. The aliased bit in `CmdFill.size_and_rule` selects the
 coverage path. Each fill also carries a raster interest rectangle; coverage outside it is zeroed.
 
 For antialiased fills the `CmdFill.coverage_data` word carries the perceptual coverage boost

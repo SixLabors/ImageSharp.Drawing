@@ -27,6 +27,7 @@ public sealed partial class DefaultDrawingBackend
         private readonly Point destinationOffset;
         private readonly BrushWorkspace<TPixel> brushWorkspace;
         private readonly WorkerState<TPixel> workerState;
+        private readonly Rectangle interest;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="FillCoverageRowHandler{TPixel}"/> struct.
@@ -38,6 +39,10 @@ public sealed partial class DefaultDrawingBackend
         /// <param name="destinationOffset">The destination offset used to place clip descriptors.</param>
         /// <param name="brushWorkspace">The worker-local brush workspace.</param>
         /// <param name="workerState">The worker-local execution state.</param>
+        /// <param name="interest">
+        /// The absolute bounds that the item can write. A region canvas narrows only this rectangle,
+        /// and an aliased item rasterizes one pixel outside it, so every span is clipped to it.
+        /// </param>
         public FillCoverageRowHandler(
             BrushRenderer<TPixel> renderer,
             BandTarget<TPixel> target,
@@ -45,8 +50,10 @@ public sealed partial class DefaultDrawingBackend
             PreparedPathClipState? pathClipState,
             Point destinationOffset,
             BrushWorkspace<TPixel> brushWorkspace,
-            WorkerState<TPixel> workerState)
+            WorkerState<TPixel> workerState,
+            Rectangle interest)
         {
+            this.interest = interest;
             this.renderer = renderer;
             this.target = target;
             this.clipState = clipState;
@@ -65,13 +72,13 @@ public sealed partial class DefaultDrawingBackend
         public void Handle(int y, int startX, Span<float> coverage)
         {
             int localY = y - this.target.AbsoluteTop;
-            if ((uint)localY >= (uint)this.target.Region.Height)
+            if ((uint)localY >= (uint)this.target.Region.Height || y < this.interest.Top || y >= this.interest.Bottom)
             {
                 return;
             }
 
-            int clipStartX = Math.Max(startX, this.target.AbsoluteLeft);
-            int clipEndX = Math.Min(startX + coverage.Length, this.target.AbsoluteLeft + this.target.Region.Width);
+            int clipStartX = Math.Max(startX, Math.Max(this.target.AbsoluteLeft, this.interest.Left));
+            int clipEndX = Math.Min(startX + coverage.Length, Math.Min(this.target.AbsoluteLeft + this.target.Region.Width, this.interest.Right));
             if (clipEndX <= clipStartX)
             {
                 return;

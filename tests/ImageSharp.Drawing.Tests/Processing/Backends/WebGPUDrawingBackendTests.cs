@@ -291,6 +291,153 @@ public partial class WebGPUDrawingBackendTests
         }
     }
 
+    // A bar 0.3 pixels thick is centred on the image edge or on the edge of a clip rectangle. It holds
+    // no pixel centre, so it sets its midpoint row or column, which is inside the image and the clip.
+    // The geometry outside the image or the clip must not change that, on both backends.
+    [WebGPUTheory]
+    [WithSolidFilledImages(64, 64, "White", PixelTypes.Rgba32, 0, -1F, false)]
+    [WithSolidFilledImages(64, 64, "White", PixelTypes.Rgba32, 0, -1F, true)]
+    [WithSolidFilledImages(64, 64, "White", PixelTypes.Rgba32, 64, -1F, false)]
+    [WithSolidFilledImages(64, 64, "White", PixelTypes.Rgba32, 64, -1F, true)]
+    [WithSolidFilledImages(64, 64, "White", PixelTypes.Rgba32, 16, 16F, false)]
+    [WithSolidFilledImages(64, 64, "White", PixelTypes.Rgba32, 16, 16F, true)]
+    [WithSolidFilledImages(64, 64, "White", PixelTypes.Rgba32, 16, 16.3F, false)]
+    public void FillPath_AliasedThinBarAcrossEdge_SetsMidpointLine<TPixel>(TestImageProvider<TPixel> provider, int line, float clipStart, bool vertical)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
+        };
+
+        // A bar on the far edge at 64 has its midpoint on the edge, so it sets the last row or
+        // column, 63, only when the midpoint is just inside. It is centred at 63.9 instead.
+        float centre = line == 64 ? 63.9F : line;
+        int expected = line == 64 ? 63 : line;
+        IPath bar = vertical
+            ? new RectanglePolygon(centre - 0.15F, 4, 0.3F, 56)
+            : new RectanglePolygon(4, centre - 0.15F, 56, 0.3F);
+
+        void DrawAction(DrawingCanvas canvas)
+        {
+            if (clipStart >= 0)
+            {
+                canvas.Clip(vertical
+                    ? new RectanglePolygon(clipStart, 0, 64 - clipStart, 64)
+                    : new RectanglePolygon(0, clipStart, 64, 64 - clipStart));
+            }
+
+            canvas.Fill(Brushes.Solid(Color.Black), bar);
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        foreach ((string backend, Image<TPixel> image) in new[] { ("Default", defaultImage), ("WebGPU", nativeSurfaceImage) })
+        {
+            for (int i = 8; i < 56; i++)
+            {
+                int x = vertical ? expected : i;
+                int y = vertical ? i : expected;
+                Assert.True(image[x, y].ToRgba32().R == 0, $"{backend}: pixel ({x}, {y}) must be set.");
+            }
+        }
+    }
+
+    // An aliased square from -8 to 72 covers the whole image. Its edges pass through the tile rows
+    // and columns just outside every edge of the target, and through the corner tiles outside two
+    // edges, which hold none of its crossings. Every pixel is set on both backends.
+    [WebGPUTheory]
+    [WithSolidFilledImages(64, 64, "White", PixelTypes.Rgba32)]
+    public void FillPath_AliasedSquarePastEveryEdge_SetsEveryPixel<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
+        };
+
+        void Square(DrawingCanvas canvas) => canvas.Fill(Brushes.Solid(Color.Black), new RectanglePolygon(-8, -8, 80, 80));
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, Square);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(64, 64, nativeSurfaceBackend, drawingOptions, Square, nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        foreach ((string backend, Image<TPixel> image) in new[] { ("Default", defaultImage), ("WebGPU", nativeSurfaceImage) })
+        {
+            for (int y = 0; y < image.Height; y++)
+            {
+                for (int x = 0; x < image.Width; x++)
+                {
+                    Assert.True(image[x, y].ToRgba32().R == 0, $"{backend}: pixel ({x}, {y}) must be set.");
+                }
+            }
+        }
+    }
+
+    // An aliased fill on a region canvas covers the whole region and more. Only the pixels of the
+    // region are set; the pixel ring that an aliased fill rasterizes outside its interest is never
+    // written, on both backends.
+    [WebGPUTheory]
+    [WithSolidFilledImages(64, 64, "White", PixelTypes.Rgba32)]
+    public void FillPath_AliasedOnRegionCanvas_SetsOnlyRegionPixels<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
+        };
+
+        Rectangle region = new(16, 16, 32, 32);
+
+        void DrawAction(DrawingCanvas canvas)
+        {
+            using DrawingCanvas regionCanvas = canvas.CreateRegion(region);
+            regionCanvas.Fill(Brushes.Solid(Color.Black), new RectanglePolygon(-8, -8, 48, 48));
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        foreach ((string backend, Image<TPixel> image) in new[] { ("Default", defaultImage), ("WebGPU", nativeSurfaceImage) })
+        {
+            for (int y = 0; y < image.Height; y++)
+            {
+                for (int x = 0; x < image.Width; x++)
+                {
+                    bool set = image[x, y].ToRgba32().R == 0;
+                    Assert.True(set == region.Contains(x, y), $"{backend}: pixel ({x}, {y}) must be {(set ? "empty" : "set")}.");
+                }
+            }
+        }
+    }
+
     // A thin sliver 0.4 pixels high rises slowly over 56 pixels. Its lower edge passes less than 1/256
     // pixel from row centres. In each column the sliver either holds a row centre or sets its midpoint
     // pixel, so every column of the interior has a set pixel on both backends.

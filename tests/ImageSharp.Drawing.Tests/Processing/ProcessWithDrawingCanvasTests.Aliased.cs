@@ -211,6 +211,56 @@ public partial class ProcessWithDrawingCanvasTests
     }
 
     /// <summary>
+    /// Verifies that a thin bar across the image edge or a clip edge sets the same pixels inside the
+    /// image and the clip as it does with no edge.
+    /// </summary>
+    /// <remarks>
+    /// The bar is 0.3 pixels thick and its centre line is on the edge at <paramref name="line"/>. It
+    /// holds no pixel centre, so it sets its midpoint row or column <paramref name="line"/>, which is
+    /// inside the image and the clip. Geometry outside the image or the clip must not change that.
+    /// </remarks>
+    /// <typeparam name="TPixel">The pixel type.</typeparam>
+    /// <param name="provider">The test image provider.</param>
+    /// <param name="line">The row or column on which the bar is centred.</param>
+    /// <param name="clipStart">The top or left of the clip rectangle, or -1 for no clip.</param>
+    /// <param name="vertical">Whether the bar is vertical.</param>
+    [Theory]
+    [WithSolidFilledImages(64, 64, nameof(Color.Black), PixelTypes.Rgba32, 0, -1F, false)]
+    [WithSolidFilledImages(64, 64, nameof(Color.Black), PixelTypes.Rgba32, 0, -1F, true)]
+    [WithSolidFilledImages(64, 64, nameof(Color.Black), PixelTypes.Rgba32, 16, 16F, false)]
+    [WithSolidFilledImages(64, 64, nameof(Color.Black), PixelTypes.Rgba32, 16, 16F, true)]
+    [WithSolidFilledImages(64, 64, nameof(Color.Black), PixelTypes.Rgba32, 16, 16.3F, false)]
+    public void Fill_AliasedThinBarAcrossEdge_SetsMidpointLine<TPixel>(TestImageProvider<TPixel> provider, int line, float clipStart, bool vertical)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        IPath bar = vertical
+            ? new RectanglePolygon(line - 0.15F, 4, 0.3F, 56)
+            : new RectanglePolygon(4, line - 0.15F, 56, 0.3F);
+
+        DrawingOptions options = new() { GraphicsOptions = new GraphicsOptions { Antialias = false } };
+
+        using Image<TPixel> image = provider.GetImage();
+        image.Mutate(ctx => ctx.Paint(options, canvas =>
+        {
+            if (clipStart >= 0)
+            {
+                canvas.Clip(vertical
+                    ? new RectanglePolygon(clipStart, 0, 64 - clipStart, 64)
+                    : new RectanglePolygon(0, clipStart, 64, 64 - clipStart));
+            }
+
+            canvas.Fill(Brushes.Solid(Color.White), bar);
+        }));
+
+        for (int i = 8; i < 56; i++)
+        {
+            int x = vertical ? line : i;
+            int y = vertical ? i : line;
+            Assert.True(image[x, y].ToRgba32().R == 255, $"Pixel ({x}, {y}) must be set.");
+        }
+    }
+
+    /// <summary>
     /// Verifies that a thin sloped sliver sets a pixel in every column of its interior.
     /// </summary>
     /// <remarks>

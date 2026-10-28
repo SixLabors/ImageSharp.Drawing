@@ -379,6 +379,30 @@ internal static partial class DefaultRasterizer
         => throw new ImageProcessingException("The rasterizer interest bounds are too large for DefaultRasterizer buffers.");
 
     /// <summary>
+    /// Gets the destination bounds that one item rasterizes.
+    /// </summary>
+    /// <remarks>
+    /// Aliased coverage sets the midpoint pixel of a thin feature that lies between two pixel
+    /// centres. Such a feature can cross the edge of the interest, and the pixel that it sets inside
+    /// the interest then depends on the geometry up to one pixel outside it. Aliased items therefore
+    /// rasterize one more pixel on each side of the interest. The coverage row handler clips every
+    /// span to the interest of the band, so the extra pixels are never written.
+    /// </remarks>
+    /// <param name="options">The rasterizer options carrying the interest bounds.</param>
+    /// <returns>The bounds to rasterize.</returns>
+    private static Rectangle GetRasterBounds(in RasterizerOptions options)
+        => options.RasterizationMode == RasterizationMode.Aliased ? Rectangle.Inflate(options.Interest, 1, 1) : options.Interest;
+
+    /// <summary>
+    /// Gets the row band that holds a destination row. Aliased bounds can start one row above the
+    /// target, so the row can be negative.
+    /// </summary>
+    /// <param name="row">The destination row.</param>
+    /// <returns>The row band index.</returns>
+    private static int GetRowBandIndex(int row)
+        => row >= 0 ? row / PreferredRowHeight : ((row + 1) / PreferredRowHeight) - 1;
+
+    /// <summary>
     /// Creates retained row-local raster payload for one lowered geometry.
     /// </summary>
     /// <param name="geometry">The lowered linear geometry to linearize into retained line blocks.</param>
@@ -409,7 +433,7 @@ internal static partial class DefaultRasterizer
             (int)MathF.Ceiling(translatedBounds.Right) + 1,
             (int)MathF.Ceiling(translatedBounds.Bottom));
 
-        Rectangle clippedBounds = Rectangle.Intersect(geometryBounds, options.Interest);
+        Rectangle clippedBounds = Rectangle.Intersect(geometryBounds, GetRasterBounds(options));
         if (clippedBounds.Width <= 0 || clippedBounds.Height <= 0)
         {
             return null;
@@ -417,8 +441,8 @@ internal static partial class DefaultRasterizer
 
         int width = clippedBounds.Width;
         int height = clippedBounds.Height;
-        int firstRowBandIndex = clippedBounds.Top / PreferredRowHeight;
-        int lastRowBandIndex = (clippedBounds.Bottom - 1) / PreferredRowHeight;
+        int firstRowBandIndex = GetRowBandIndex(clippedBounds.Top);
+        int lastRowBandIndex = GetRowBandIndex(clippedBounds.Bottom - 1);
         int rowBandCount = lastRowBandIndex - firstRowBandIndex + 1;
         int wordsPerRow = BitVectorsForMaxBitCount(width);
         int coverStride = checked(width << 1);
@@ -468,7 +492,8 @@ internal static partial class DefaultRasterizer
                     options.IntersectionRule,
                     options.RasterizationMode,
                     options.CoverageBoost,
-                    hasStartCovers);
+                    hasStartCovers,
+                    options.Interest);
             }
 
             return new RasterizableGeometry(
@@ -526,7 +551,8 @@ internal static partial class DefaultRasterizer
                     options.IntersectionRule,
                     options.RasterizationMode,
                     options.CoverageBoost,
-                    hasStartCovers);
+                    hasStartCovers,
+                    options.Interest);
             }
 
             return new RasterizableGeometry(

@@ -872,26 +872,36 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
         for (var s = 0u; s < n_segs; s++) {
             let segment = segments[fill.seg_data + s];
             if segment.y_edge == HALO_ONLY_Y_EDGE {
-                // This vertical edge lies on the tile's left edge. The backdrop and y_edge values
-                // already carry its winding to every centre of the tile, so it adds nothing to the
-                // centre windings. The CPU row list holds a crossing for this edge, and an interval
-                // that it opens can be centre-free. Add the crossing to the list only, and remove
-                // its winding from row_seed, which is the winding immediately before the first
-                // listed crossing.
+                // A halo-only segment is a vertical edge on the tile's left edge, a horizontal line
+                // on a tile row boundary, or a line piece just outside the target that path_tiling
+                // moved into this edge tile. The backdrop and y_edge values already carry the
+                // winding of a crossing left of the tile to every centre of the tile, and a crossing
+                // right of the tile adds no winding, so it adds nothing to the centre windings. The
+                // CPU crossing lists hold its crossings within half a pixel of the tile, and an
+                // interval that one opens can be centre-free. Add the crossing to the list only,
+                // and remove the winding of a crossing left of the tile from row_seed, which is the
+                // winding immediately before the first listed crossing.
+                let halo_p0 = vec2<i32>(round(segment.point0 * 256.0));
+                let halo_p1 = vec2<i32>(round(segment.point1 * 256.0));
                 if owns_row {
                     let sample_y_fixed = i32(sample_y * 256.0);
-                    let y0_fixed = i32(round(segment.point0.y * 256.0));
-                    let y1_fixed = i32(round(segment.point1.y * 256.0));
-                    if (y0_fixed < sample_y_fixed) != (y1_fixed < sample_y_fixed) {
-                        let direction = -i32(sign(segment.point1.y - segment.point0.y));
-                        insert_aliased_row_crossing(row, pack_crossing(0.0, (direction < 0), true, segment.tag >> 16u));
-                        aliased_row_seed[row] -= direction;
+                    if (halo_p0.y < sample_y_fixed) != (halo_p1.y < sample_y_fixed) {
+                        let x_cross_fixed = interpolate_crossing(halo_p0.x, halo_p1.x - halo_p0.x, sample_y_fixed - halo_p0.y, halo_p1.y - halo_p0.y);
+                        if (x_cross_fixed >= -128 && x_cross_fixed <= 0) || (x_cross_fixed >= 4096 && x_cross_fixed <= 4224) {
+                            let direction = -i32(sign(segment.point1.y - segment.point0.y));
+                            insert_aliased_row_crossing(
+                                row,
+                                pack_crossing(f32(x_cross_fixed) / 256.0, (direction < 0), halo_p0.x == halo_p1.x, segment.tag >> 16u));
+                            if x_cross_fixed <= 0 {
+                                aliased_row_seed[row] -= direction;
+                            }
+                        }
                     }
                 }
 
-                // A halo-only horizontal line on a tile row boundary is a column crossing.
+                // Its column crossings within half a pixel of the tile belong to the column walk.
                 if owns_columns {
-                    capture_aliased_column_crossings(segment, u32(xy.x), 0, -0x40000000, 0x40000000);
+                    capture_aliased_column_crossings(segment, u32(xy.x), 0, -128, 4224);
                 }
 
                 continue;

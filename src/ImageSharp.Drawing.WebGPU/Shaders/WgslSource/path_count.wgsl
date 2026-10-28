@@ -73,6 +73,14 @@ fn boundary_horizontal_row(path: Path, x: i32, below: i32) -> i32 {
     return -1;
 }
 
+// Returns the tile that holds a line crossing at tile (x, y): the tile itself inside the path bbox,
+// or the edge tile next to the tile row or column just outside the target. Must match
+// target_edge_tile in path_tiling.wgsl.
+fn target_edge_tile(path: Path, x: i32, y: i32) -> vec2<i32> {
+    let bbox = vec4<i32>(path.bbox);
+    return vec2(clamp(x, bbox.x, bbox.z - 1), clamp(y, bbox.y, bbox.w - 1));
+}
+
 // Largest f32 strictly less than 1.0; clamping b below 1 keeps the first
 // floor(a * i + b) evaluation from overshooting a boundary.
 const ONE_MINUS_ULP: f32 = 0.99999994;
@@ -176,23 +184,36 @@ fn main(
     let path = paths[line.path_ix];
     let bbox = vec4<i32>(path.bbox);
     let xmin = min(s0.x, s1.x);
-    if s0.y >= f32(bbox.w) || s1.y <= f32(bbox.y) || xmin >= f32(bbox.z) || bbox.z <= bbox.x {
+
+    // Where the path bbox touches an edge of the target, the walk also visits the tile row or
+    // column just outside it. Its crossings go to the edge tile as halo-only pieces for the aliased
+    // walks; see target_edge_tile. Tiles outside the bbox but inside the target hold no geometry
+    // that the fill can need: binning keeps one pixel around the interest and clip of an aliased
+    // fill.
+    let ext = vec4<i32>(
+        select(bbox.x, bbox.x - 1, bbox.x == 0),
+        select(bbox.y, bbox.y - 1, bbox.y == 0),
+        select(bbox.z, bbox.z + 1, bbox.z == i32(config.width_in_tiles)),
+        select(bbox.w, bbox.w + 1, bbox.w == i32(config.height_in_tiles)));
+
+    // path_row_alloc gives a path with no tiles an empty bbox, so it returns here.
+    if s0.y >= f32(ext.w) || s1.y <= f32(ext.y) || xmin >= f32(ext.z) || bbox.z <= bbox.x {
         return;
     }
 
     var imin = 0u;
-    if s0.y < f32(bbox.y) {
-        var iminf = round((f32(bbox.y) - y0 + b - a) / (1.0 - a)) - 1.0;
-        if y0 + iminf - floor(a * iminf + b) < f32(bbox.y) {
+    if s0.y < f32(ext.y) {
+        var iminf = round((f32(ext.y) - y0 + b - a) / (1.0 - a)) - 1.0;
+        if y0 + iminf - floor(a * iminf + b) < f32(ext.y) {
             iminf += 1.0;
         }
         imin = u32(iminf);
     }
 
     var imax = count;
-    if s1.y > f32(bbox.w) {
-        var imaxf = round((f32(bbox.w) - y0 + b - a) / (1.0 - a)) - 1.0;
-        if y0 + imaxf - floor(a * imaxf + b) < f32(bbox.w) {
+    if s1.y > f32(ext.w) {
+        var imaxf = round((f32(ext.w) - y0 + b - a) / (1.0 - a)) - 1.0;
+        if y0 + imaxf - floor(a * imaxf + b) < f32(ext.w) {
             imaxf += 1.0;
         }
         imax = u32(imaxf);
@@ -204,13 +225,13 @@ fn main(
     // so path_tiling keeps it in its own tile as a halo-only segment. It must not change any
     // backdrop here.
     let on_bbox_left = s0.x == s1.x && s0.x == f32(bbox.x);
-    if max(s0.x, s1.x) <= f32(bbox.x) && !on_bbox_left {
+    if max(s0.x, s1.x) <= f32(ext.x) && !on_bbox_left {
         imax = imin;
     } else {
         let fudge = select(1.0, 0.0, is_positive_slope);
-        if xmin < f32(bbox.x) {
-            var f = round((x_sign * (f32(bbox.x) - x0) - b + fudge) / a);
-            if (x0 + x_sign * floor(a * f + b) < f32(bbox.x)) == is_positive_slope {
+        if xmin < f32(ext.x) {
+            var f = round((x_sign * (f32(ext.x) - x0) - b + fudge) / a);
+            if (x0 + x_sign * floor(a * f + b) < f32(ext.x)) == is_positive_slope {
                 f += 1.0;
             }
             if is_positive_slope {
@@ -223,9 +244,9 @@ fn main(
                 }
             }
         }
-        if max(s0.x, s1.x) > f32(bbox.z) {
-            var f = round((x_sign * (f32(bbox.z) - x0) - b + fudge) / a);
-            if (x0 + x_sign * floor(a * f + b) < f32(bbox.z)) == is_positive_slope {
+        if max(s0.x, s1.x) > f32(ext.z) {
+            var f = round((x_sign * (f32(ext.z) - x0) - b + fudge) / a);
+            if (x0 + x_sign * floor(a * f + b) < f32(ext.z)) == is_positive_slope {
                 f += 1.0;
             }
             if is_positive_slope {
@@ -239,15 +260,15 @@ fn main(
     // The clip indices come from rounded f32 formulas with one correction step, so a large error
     // can leave them too wide. Index count and above are not crossings of the line. The row of
     // crossing i is y0 + i - floor(a * i + b), which does not decrease with i, so stepping each end
-    // until its row is inside the bbox makes the y clip exact. Then each line adds at most count
-    // segments, the CPU crossing bound of the line, and every row index below is inside the bbox.
+    // until its row is inside ext makes the y clip exact. Then each line adds at most count
+    // segments, the CPU crossing bound of the line, and every row index below is inside ext.
     // The loops usually run zero or one time.
     imin = min(imin, count);
     imax = clamp(imax, imin, count);
-    while imin < imax && i32(y0 + f32(imin) - floor(a * f32(imin) + b)) < bbox.y {
+    while imin < imax && i32(y0 + f32(imin) - floor(a * f32(imin) + b)) < ext.y {
         imin += 1u;
     }
-    while imax > imin && i32(y0 + f32(imax - 1u) - floor(a * f32(imax - 1u) + b)) >= bbox.w {
+    while imax > imin && i32(y0 + f32(imax - 1u) - floor(a * f32(imax - 1u) + b)) >= ext.w {
         imax -= 1u;
     }
 
@@ -259,6 +280,28 @@ fn main(
         let z = floor(zf);
         let y = i32(y0 + f32(i) - z);
         let x = i32(x0 + x_sign * z);
+
+        // A crossing outside the bbox is in the tile row or column just outside the target. It
+        // adds no winding, and a corner tile outside both edges is not next to an edge tile.
+        let seg_ix = seg_base + i - imin;
+        let edge_tile = target_edge_tile(path, x, y);
+        if edge_tile.x != x || edge_tile.y != y {
+            var edge_count = SegmentCount(SKIPPED_SEGMENT_LINE, 0u);
+            let edge_row = rows[path.rows + u32(edge_tile.y - bbox.y)];
+            if (edge_tile.x == x || edge_tile.y == y) && u32(edge_tile.x) >= edge_row.x0 && u32(edge_tile.x) < edge_row.x1 {
+                let edge_tile_ix = edge_row.tiles + u32(edge_tile.x) - edge_row.x0;
+                let edge_seg_within_slice = atomicAdd(&tile[edge_tile_ix].segment_count_or_ix, 1u);
+                edge_count = SegmentCount(line_ix, (edge_seg_within_slice << 16u) | i);
+            }
+
+            if seg_ix < config.seg_counts_size {
+                seg_counts[seg_ix] = edge_count;
+            }
+
+            last_z = z;
+            continue;
+        }
+
         let row = rows[path.rows + u32(y - bbox.y)];
         let top_edge = select(last_z == z, y0 == s0.y, i == 0u);
 
@@ -280,6 +323,10 @@ fn main(
         // No tile is allocated for columns outside the row's sparse span;
         // the crossing still advanced last_z for top-edge detection above.
         if u32(x) < row.x0 || u32(x) >= row.x1 {
+            if seg_ix < config.seg_counts_size {
+                seg_counts[seg_ix] = SegmentCount(SKIPPED_SEGMENT_LINE, 0u);
+            }
+
             last_z = z;
             continue;
         }
@@ -288,7 +335,6 @@ fn main(
         let seg_within_slice = atomicAdd(&tile[tile_ix].segment_count_or_ix, 1u);
         let counts = (seg_within_slice << 16u) | i;
         let seg_count = SegmentCount(line_ix, counts);
-        let seg_ix = seg_base + i - imin;
         if seg_ix < config.seg_counts_size {
             seg_counts[seg_ix] = seg_count;
         }
