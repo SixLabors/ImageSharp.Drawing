@@ -63,8 +63,11 @@ fn main(
     if drawtag != DRAWTAG_NOP && drawtag != DRAWTAG_END_CLIP {
         let bbox = draw_bboxes[drawobj_ix];
         if bbox.x < bbox.z && bbox.y < bbox.w {
-            let chunk_y0 = i32(config.chunk_tile_y_start);
-            let chunk_y1 = chunk_y0 + i32(config.chunk_tile_height);
+            // The aliased column walk of a tile reads the path tiles above and below it, also at
+            // the first and last rows of a chunk. Keep one tile row on each side of the chunk, so
+            // the tiles of those rows exist. Coarse writes commands only for the chunk rows.
+            let chunk_y0 = max(i32(config.chunk_tile_y_start) - 1, 0);
+            let chunk_y1 = min(i32(config.chunk_tile_y_start + config.chunk_tile_height) + 1, i32(config.height_in_tiles));
             let x0 = i32(floor(bbox.x / f32(TILE_WIDTH)));
             let y0 = i32(floor(bbox.y / f32(TILE_HEIGHT)));
             let x1 = i32(ceil(bbox.z / f32(TILE_WIDTH)));

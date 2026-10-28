@@ -2906,20 +2906,35 @@ internal static class WebGPUSceneDispatch
     private static WebGPUSceneBumpSizes ScaleChunkBumpSizes(WebGPUSceneBumpSizes sourceBumpSizes, WebGPUEncodedScene scene, uint chunkTileHeight)
     {
         uint fullTileHeight = checked((uint)scene.TileCountY);
-        uint pathRowFloor = ScaleCount((uint)Math.Max(scene.TotalPathRowCount, scene.PathCount), chunkTileHeight, fullTileHeight);
+        uint tileRowHeight = GetChunkTileRowHeight(chunkTileHeight, fullTileHeight);
+        uint pathRowFloor = ScaleCount((uint)Math.Max(scene.TotalPathRowCount, scene.PathCount), tileRowHeight, fullTileHeight);
         uint pathTileFloor = pathRowFloor;
-        uint segmentFloor = AddSizingSlack(ScaleCount((uint)scene.LineCount, chunkTileHeight, fullTileHeight));
+        uint segmentFloor = AddSizingSlack(ScaleCount((uint)scene.LineCount, tileRowHeight, fullTileHeight));
 
         return new WebGPUSceneBumpSizes(
             sourceBumpSizes.Lines,
             sourceBumpSizes.Binning,
-            Math.Max(ScaleCount(sourceBumpSizes.PathRows, chunkTileHeight, fullTileHeight), pathRowFloor),
-            Math.Max(ScaleCount(sourceBumpSizes.PathTiles, chunkTileHeight, fullTileHeight), pathTileFloor),
-            Math.Max(ScaleCount(sourceBumpSizes.SegCounts, chunkTileHeight, fullTileHeight), segmentFloor),
-            Math.Max(ScaleCount(sourceBumpSizes.Segments, chunkTileHeight, fullTileHeight), segmentFloor),
+            Math.Max(ScaleCount(sourceBumpSizes.PathRows, tileRowHeight, fullTileHeight), pathRowFloor),
+            Math.Max(ScaleCount(sourceBumpSizes.PathTiles, tileRowHeight, fullTileHeight), pathTileFloor),
+            Math.Max(ScaleCount(sourceBumpSizes.SegCounts, tileRowHeight, fullTileHeight), segmentFloor),
+            Math.Max(ScaleCount(sourceBumpSizes.Segments, tileRowHeight, fullTileHeight), segmentFloor),
             ScaleCount(sourceBumpSizes.BlendSpill, chunkTileHeight, fullTileHeight),
             ScaleCount(sourceBumpSizes.Ptcl, chunkTileHeight, fullTileHeight));
     }
+
+    /// <summary>
+    /// Gets the tile rows of one chunk that hold path rows, tiles and segments.
+    /// </summary>
+    /// <remarks>
+    /// path_row_alloc keeps one tile row on each side of the chunk, so the aliased column walk can
+    /// read the path tiles above and below the first and last chunk rows. Coarse writes commands
+    /// only for the chunk rows, so the PTCL and blend spill use the real chunk height.
+    /// </remarks>
+    /// <param name="chunkTileHeight">The real chunk height, in tile rows.</param>
+    /// <param name="fullTileHeight">The target height, in tile rows.</param>
+    /// <returns>The tile rows that hold path data.</returns>
+    private static uint GetChunkTileRowHeight(uint chunkTileHeight, uint fullTileHeight)
+        => Math.Min(chunkTileHeight + 2U, fullTileHeight);
 
     /// <summary>
     /// Scales the chunk-local scheduling capacities from the last known-good range budget.
@@ -2931,17 +2946,18 @@ internal static class WebGPUSceneDispatch
     private static WebGPUSceneBumpSizes ScaleChunkBumpSizes(WebGPUSceneBumpSizes sourceBumpSizes, WebGPUSceneRange range, uint chunkTileHeight)
     {
         uint fullTileHeight = checked((uint)((range.TargetBounds.Height + 15) / 16));
-        uint pathRowFloor = ScaleCount((uint)Math.Max(range.TotalPathRowCount, range.PathCount), chunkTileHeight, fullTileHeight);
+        uint tileRowHeight = GetChunkTileRowHeight(chunkTileHeight, fullTileHeight);
+        uint pathRowFloor = ScaleCount((uint)Math.Max(range.TotalPathRowCount, range.PathCount), tileRowHeight, fullTileHeight);
         uint pathTileFloor = pathRowFloor;
-        uint segmentFloor = AddSizingSlack(ScaleCount((uint)range.LineCount, chunkTileHeight, fullTileHeight));
+        uint segmentFloor = AddSizingSlack(ScaleCount((uint)range.LineCount, tileRowHeight, fullTileHeight));
 
         return new WebGPUSceneBumpSizes(
             sourceBumpSizes.Lines,
             sourceBumpSizes.Binning,
-            Math.Max(ScaleCount(sourceBumpSizes.PathRows, chunkTileHeight, fullTileHeight), pathRowFloor),
-            Math.Max(ScaleCount(sourceBumpSizes.PathTiles, chunkTileHeight, fullTileHeight), pathTileFloor),
-            Math.Max(ScaleCount(sourceBumpSizes.SegCounts, chunkTileHeight, fullTileHeight), segmentFloor),
-            Math.Max(ScaleCount(sourceBumpSizes.Segments, chunkTileHeight, fullTileHeight), segmentFloor),
+            Math.Max(ScaleCount(sourceBumpSizes.PathRows, tileRowHeight, fullTileHeight), pathRowFloor),
+            Math.Max(ScaleCount(sourceBumpSizes.PathTiles, tileRowHeight, fullTileHeight), pathTileFloor),
+            Math.Max(ScaleCount(sourceBumpSizes.SegCounts, tileRowHeight, fullTileHeight), segmentFloor),
+            Math.Max(ScaleCount(sourceBumpSizes.Segments, tileRowHeight, fullTileHeight), segmentFloor),
             ScaleCount(sourceBumpSizes.BlendSpill, chunkTileHeight, fullTileHeight),
             ScaleCount(sourceBumpSizes.Ptcl, chunkTileHeight, fullTileHeight));
     }
@@ -3063,10 +3079,15 @@ internal static class WebGPUSceneDispatch
 
             int y0 = checked(originY + ((int)start * WebGPUSceneEncoder.TileHeight));
             int y1 = checked(originY + ((int)end * WebGPUSceneEncoder.TileHeight));
+
+            // path_row_alloc keeps one tile row on each side of the chunk for the aliased column
+            // walk, so the path rows, tiles and crossings come from the window with those rows.
+            // Coarse writes commands only for the chunk rows.
             WebGPUSceneWindowBounds window = rowBounds.GetWindow(y0, y1);
-            pathRows = Math.Max(pathRows, window.PathRows);
-            tiles = Math.Max(tiles, window.Tiles);
-            crossings = Math.Max(crossings, window.Crossings);
+            WebGPUSceneWindowBounds tileWindow = rowBounds.GetWindow(y0 - WebGPUSceneEncoder.TileHeight, y1 + WebGPUSceneEncoder.TileHeight);
+            pathRows = Math.Max(pathRows, tileWindow.PathRows);
+            tiles = Math.Max(tiles, tileWindow.Tiles);
+            crossings = Math.Max(crossings, tileWindow.Crossings);
             ptclWords = Math.Max(ptclWords, window.PtclWords);
             if (scene is not null)
             {
@@ -3088,7 +3109,7 @@ internal static class WebGPUSceneDispatch
     /// <param name="scaled">The scaled budget of the chunk.</param>
     /// <param name="window">The bounds of the draws that reach the chunk rows.</param>
     /// <param name="widthInTiles">The target width in tiles.</param>
-    /// <param name="chunkTileHeight">The real tile rows of the chunk, the rows that path_row_alloc keeps.</param>
+    /// <param name="chunkTileHeight">The real tile rows of the chunk, the rows that coarse writes commands for.</param>
     /// <param name="hasSegmentTable">Whether coarse can write a CMD_PROFILE_TABLE before an aliased fill.</param>
     /// <param name="blendSpillSlots">The blend-spill slot bound of the chunk.</param>
     /// <returns>The raised capacities.</returns>
@@ -4265,7 +4286,9 @@ internal static class WebGPUSceneDispatch
     /// </summary>
     /// <remarks>
     /// Lines and binning are produced by the shared full-scene stages and are already scene-sized,
-    /// so they pass through unscaled.
+    /// so they pass through unscaled. The path rows, tiles and segments of a chunk include one tile
+    /// row on each side of it, so they scale by the rows of <see cref="GetChunkTileRowHeight"/>, the
+    /// inverse of <see cref="ScaleChunkBumpSizes(WebGPUSceneBumpSizes, WebGPUEncodedScene, uint)"/>.
     /// </remarks>
     /// <param name="chunkSizes">The chunk-local capacities or actuals to expand.</param>
     /// <param name="fullTileHeight">The full tile-row height of the chunked target range.</param>
@@ -4273,15 +4296,18 @@ internal static class WebGPUSceneDispatch
     /// <returns>The full-scene equivalent budget.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static WebGPUSceneBumpSizes ExpandChunkBumpSizesToSceneBudget(WebGPUSceneBumpSizes chunkSizes, uint fullTileHeight, uint chunkTileHeight)
-        => new(
+    {
+        uint tileRowHeight = GetChunkTileRowHeight(chunkTileHeight, fullTileHeight);
+        return new(
             chunkSizes.Lines,
             chunkSizes.Binning,
-            ScaleChunkRequirementToSceneBudget(chunkSizes.PathRows, fullTileHeight, chunkTileHeight),
-            ScaleChunkRequirementToSceneBudget(chunkSizes.PathTiles, fullTileHeight, chunkTileHeight),
-            ScaleChunkRequirementToSceneBudget(chunkSizes.SegCounts, fullTileHeight, chunkTileHeight),
-            ScaleChunkRequirementToSceneBudget(chunkSizes.Segments, fullTileHeight, chunkTileHeight),
+            ScaleChunkRequirementToSceneBudget(chunkSizes.PathRows, fullTileHeight, tileRowHeight),
+            ScaleChunkRequirementToSceneBudget(chunkSizes.PathTiles, fullTileHeight, tileRowHeight),
+            ScaleChunkRequirementToSceneBudget(chunkSizes.SegCounts, fullTileHeight, tileRowHeight),
+            ScaleChunkRequirementToSceneBudget(chunkSizes.Segments, fullTileHeight, tileRowHeight),
             ScaleChunkRequirementToSceneBudget(chunkSizes.BlendSpill, fullTileHeight, chunkTileHeight),
             ScaleChunkRequirementToSceneBudget(chunkSizes.Ptcl, fullTileHeight, chunkTileHeight));
+    }
 
     /// <summary>
     /// Scales one chunk-local requirement up to a full-scene budget, rounding up so the scaled

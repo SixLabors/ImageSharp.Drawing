@@ -989,7 +989,14 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
                 continue;
             }
 
+            // Coarse can skip a draw in a tile, for example inside a clip with zero coverage. That
+            // tile keeps its segment count, which is not an inverted allocation, and it has no
+            // segments to read.
             let halo_data = ~path_tiles[halo_tile_ix].segment_count_or_ix;
+            if i32(halo_data) < 0 {
+                continue;
+            }
+
             let halo_count = u32(path_tiles[halo_tile_ix].backdrop);
             let offset_fixed = select(-4096, 4096, h != 0u);
             let y_low = select(-128, 4096, h != 0u);
@@ -1016,7 +1023,12 @@ fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result:
                 continue;
             }
 
+            // A tile that coarse skipped has no segment allocation, as for the vertical halo.
             let halo_data = ~path_tiles[halo_tile_ix].segment_count_or_ix;
+            if i32(halo_data) < 0 {
+                continue;
+            }
+
             let halo_count = u32(path_tiles[halo_tile_ix].backdrop);
             let fixed_offset = select(-4096, 4096, h != 0u);
             for (var s = 0u; s < halo_count; s += 1u) {
