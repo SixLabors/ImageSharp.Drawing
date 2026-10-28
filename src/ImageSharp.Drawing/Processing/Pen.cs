@@ -107,6 +107,38 @@ public abstract class Pen : IEquatable<Pen>
     /// <returns>The <see cref="IPath"/> with the pen styling applied.</returns>
     public abstract IPath GeneratePath(IPath path, float strokeWidth);
 
+    /// <summary>
+    /// Gets the largest distance from the centerline that the stroke outline can reach.
+    /// </summary>
+    /// <remarks>
+    /// A miter apex reaches the miter limit m times the half width. A <see cref="LineJoin.Miter"/>
+    /// join past the limit draws a clipped bevel, which reaches at most sqrt(m^2 + 1) half widths.
+    /// At a reversal the bevel points are one half width out from the centerline and m half widths
+    /// along it, which is that distance. The other miter joins draw a bevel or an arc past the
+    /// limit. A square cap corner reaches
+    /// sqrt(2) times the half width. Round and bevel joins and round and butt caps stay inside the
+    /// half width.
+    /// </remarks>
+    /// <param name="widthScale">The transform-derived scale applied to the stroke width.</param>
+    /// <returns>The distance in pixels.</returns>
+    internal float GetOutlineRadius(float widthScale)
+    {
+        float halfWidth = this.StrokeWidth * widthScale * 0.5F;
+        double miterLimit = Math.Max(this.StrokeOptions.MiterLimit, 1D);
+        float joinRadius = this.StrokeOptions.LineJoin switch
+        {
+            LineJoin.Miter => (float)(halfWidth * Math.Sqrt((miterLimit * miterLimit) + 1D)),
+            LineJoin.MiterRevert or LineJoin.MiterRound => (float)(halfWidth * miterLimit),
+            _ => halfWidth
+        };
+
+        float capRadius = this.StrokeOptions.LineCap == LineCap.Square
+            ? halfWidth * MathF.Sqrt(2F)
+            : halfWidth;
+
+        return MathF.Max(joinRadius, capRadius);
+    }
+
     /// <inheritdoc/>
     public virtual bool Equals(Pen? other)
         => other != null

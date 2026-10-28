@@ -57,6 +57,54 @@ public interface IDrawingBackend
         where TPixel : unmanaged, IPixel<TPixel>;
 
     /// <summary>
+    /// Clips a pixel copy the same way as <see cref="CopyPixels{TPixel}"/>: first the source rectangle
+    /// against the source frame, then the moved rectangle against the target frame.
+    /// </summary>
+    /// <param name="sourceSize">The size of the source frame.</param>
+    /// <param name="targetSize">The size of the target frame.</param>
+    /// <param name="sourceRectangle">The source rectangle in source-local coordinates.</param>
+    /// <param name="targetPoint">The target point in target-local coordinates.</param>
+    /// <param name="sourceOrigin">Receives the source-local position of the first copied pixel.</param>
+    /// <param name="targetRectangle">Receives the target-local rectangle that the copy writes.</param>
+    /// <returns><see langword="true"/> when the clipped copy is not empty.</returns>
+    internal static bool TryClipPixelCopy(
+        Size sourceSize,
+        Size targetSize,
+        Rectangle sourceRectangle,
+        Point targetPoint,
+        out Point sourceOrigin,
+        out Rectangle targetRectangle)
+    {
+        Rectangle clippedSource = Rectangle.Intersect(new Rectangle(Point.Empty, sourceSize), sourceRectangle);
+        if (clippedSource.Width <= 0 || clippedSource.Height <= 0)
+        {
+            sourceOrigin = default;
+            targetRectangle = default;
+            return false;
+        }
+
+        Rectangle movedSource = new(
+            targetPoint.X + clippedSource.X - sourceRectangle.X,
+            targetPoint.Y + clippedSource.Y - sourceRectangle.Y,
+            clippedSource.Width,
+            clippedSource.Height);
+
+        targetRectangle = Rectangle.Intersect(new Rectangle(Point.Empty, targetSize), movedSource);
+        if (targetRectangle.Width <= 0 || targetRectangle.Height <= 0)
+        {
+            sourceOrigin = default;
+            return false;
+        }
+
+        // Target-side clipping moves the source origin by the same amount.
+        sourceOrigin = new Point(
+            clippedSource.X + targetRectangle.X - movedSource.X,
+            clippedSource.Y + targetRectangle.Y - movedSource.Y);
+
+        return true;
+    }
+
+    /// <summary>
     /// Reads source pixels from the target into the destination region.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>

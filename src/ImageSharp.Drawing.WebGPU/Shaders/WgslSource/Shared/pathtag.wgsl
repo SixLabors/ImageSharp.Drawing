@@ -61,6 +61,11 @@ const STYLE_FLAGS_JOIN_ROUND: u32 = 0x20000000u;
 const STYLE_FLAGS_JOIN_MITER_REVERT: u32 = 0x00400000u;
 const STYLE_FLAGS_JOIN_MITER_ROUND: u32 = 0x00800000u;
 
+// Stroke styles only: the largest interior vertex count of one round arc. The C# encoder writes
+// the CPU count of half a turn, so the GPU line count of a round join or cap stays inside the
+// CPU line estimate.
+const STYLE_FLAGS_ARC_LIMIT_MASK: u32 = 0x000007FFu;
+
 // TODO: Declare the remaining STYLE flags here.
 
 // The scan identity: all counters zero.

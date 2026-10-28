@@ -19,6 +19,7 @@
 
 #import config
 #import pathtag
+#import scene_segment
 
 @group(0) @binding(0)
 var<uniform> config: Config;
@@ -72,7 +73,7 @@ fn main(
 #endif
 
     let ix = global_id.x;
-    let tag_word = scene[config.pathtag_base + ix];
+    let tag_word = scene[resolve_path_tag_bias(ix) + ix];
     var agg_part = reduce_tag(tag_word);
     sh_monoid[local_id.x] = agg_part;
     for (var i = 0u; i < LG_WG_SIZE; i += 1u) {

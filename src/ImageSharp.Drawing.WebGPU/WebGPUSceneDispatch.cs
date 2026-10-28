@@ -20,9 +20,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// The stage order is fixed by data dependencies: prepare (bump reset), pathtag reduce/scan,
 /// bbox_clear, path lowering, draw reduce/leaf, clip reduce/leaf, binning, then the tile stages
 /// (path_row_alloc, path_row_span, tile_alloc, path_count, backdrop, coarse, path_tiling) and
-/// finally the fine shading pass. Scratch buffers use GPU bump allocators sized from cached
-/// estimates; after each attempt the allocator counters are read back and, on overflow, the caller
-/// retries with grown capacities (see <see cref="WebGPUDrawingBackend"/>'s bounded retry loop).
+/// finally the fine shading pass. Scratch buffers use GPU bump allocators sized from the encoder
+/// bounds. When every capacity is an upper bound (see <see cref="HasScratchBounds"/>), the render
+/// cannot overflow and submits without a status readback. Otherwise the allocator counters are read
+/// back and, on overflow, the caller retries with grown capacities (see
+/// <see cref="WebGPUDrawingBackend"/>'s bounded retry loop).
 /// </para>
 /// <para>
 /// Scenes whose tile-dependent buffers exceed the device storage-buffer binding limit are rendered
@@ -67,10 +69,20 @@ internal static class WebGPUSceneDispatch
     // validation rejects deeper nesting before anything is dispatched.
     private const int MaxClipStackDepth = 256;
 
-    // Coarse allocates the dynamic PTCL tail in PTCL_INCREMENT-word chunks (Shared/ptcl.wgsl); a
-    // command that does not fit the remaining chunk starts a new one, so each tile can leave one
-    // partial chunk and each chunk can waste up to one command of headroom.
+    // Coarse allocates the dynamic PTCL tail in PTCL_INCREMENT-word chunks (Shared/ptcl.wgsl). A
+    // command that does not fit the rest of the initial slot or chunk starts a new chunk.
     private const long PtclChunkWords = 256;
+
+    // The command words a tile writes before its first chunk. The initial slot is PTCL_INITIAL_ALLOC
+    // words: one blend-spill word, then commands up to PTCL_HEADROOM words before its end. A tile
+    // starts a chunk when the used words plus the next command reach 64 - 2 - 1 = 61.
+    private const long PtclFirstChunkCommandWords = 61;
+
+    // The command words each chunk holds at least before the next one starts. A chunk holds
+    // PTCL_INCREMENT - PTCL_HEADROOM = 254 words, and the next chunk starts when the used words
+    // plus the next command reach 254. The largest command is 10 words (CMD_PROFILE_TABLE and an
+    // aliased CMD_FILL in coarse.wgsl write_path), so a chunk holds at least 254 - 10 = 244 words.
+    private const long PtclChunkCommandWords = 244;
 
     /// <summary>
     /// Identifies the staged-scene storage binding that exceeded the device limit for one flush attempt.
@@ -357,16 +369,144 @@ internal static class WebGPUSceneDispatch
     /// <param name="error">Receives the validation failure reason.</param>
     /// <returns><see langword="true"/> when the clip stream is safe for GPU scheduling.</returns>
     private static bool TryValidateEncodedClipStream(WebGPUEncodedScene encodedScene, out string? error)
-        => TryValidateEncodedClipStream(
+    {
+        if (encodedScene.Insertions.IsEmpty)
+        {
+            return TryValidateEncodedClipStream(
+                encodedScene,
+                0,
+                encodedScene.DrawTagCount,
+                encodedScene.DrawDataWordCount,
+                encodedScene.InfoWordCount,
+                encodedScene.PathCount,
+                encodedScene.ClipCount,
+                "full scene",
+                out error);
+        }
+
+        // The shaders read the joined virtual draw-tag stream, so validate that stream: the clip
+        // scopes of a layer around a retained scene open before it and close after it. The counts
+        // of the scene are already joined totals.
+        return TryValidateJoinedClipStream(
             encodedScene,
+            WebGPUSceneRange.CreateWholeScene(encodedScene, default, default),
             0,
-            encodedScene.DrawTagCount,
-            encodedScene.DrawDataWordCount,
-            encodedScene.InfoWordCount,
-            encodedScene.PathCount,
-            encodedScene.ClipCount,
+            GetOwnDrawTagCount(encodedScene),
+            encodedScene.Insertions,
             "full scene",
             out error);
+    }
+
+    /// <summary>
+    /// Validates the joined virtual draw-tag stream of a scene or range that reads retained scenes in place.
+    /// </summary>
+    /// <param name="encodedScene">The scene that owns the packed draw-tag stream.</param>
+    /// <param name="totals">The scene or range whose joined counts the stream must match.</param>
+    /// <param name="ownStart">The first own draw tag of the scene or range.</param>
+    /// <param name="ownEnd">The end of the own draw tags of the scene or range.</param>
+    /// <param name="insertions">The retained scenes of the scene or range, in stream order.</param>
+    /// <param name="label">A short label used in the validation message.</param>
+    /// <param name="error">Receives the validation failure reason.</param>
+    /// <returns><see langword="true"/> when the joined stream satisfies the shader clip-stack contract.</returns>
+    private static bool TryValidateJoinedClipStream(
+        WebGPUEncodedScene encodedScene,
+        in WebGPUSceneRange totals,
+        int ownStart,
+        int ownEnd,
+        ReadOnlySpan<WebGPUSceneInsertion> insertions,
+        string label,
+        out string? error)
+    {
+        Span<long> clipPathStack = stackalloc long[MaxClipStackDepth];
+        Span<long> clipDrawStack = stackalloc long[MaxClipStackDepth];
+        ClipStreamValidation validation = new(clipPathStack, clipDrawStack, ownStart);
+        if (!TryAddJoinedDrawTags(ref validation, totals, encodedScene, ownStart, ownEnd, insertions, label, out error))
+        {
+            return false;
+        }
+
+        return validation.TryFinish(
+            totals.DrawDataWordCount,
+            totals.InfoWordCount,
+            totals.PathCount,
+            totals.ClipCount,
+            label,
+            out error);
+    }
+
+    /// <summary>
+    /// Gets the own draw-tag count of a scene. The draw-tag count of a scene with retained scenes is
+    /// a joined total, so the own extent comes from the layout.
+    /// </summary>
+    /// <param name="scene">The encoded scene.</param>
+    /// <returns>The own draw-tag count.</returns>
+    private static int GetOwnDrawTagCount(WebGPUEncodedScene scene)
+        => (int)(scene.Layout.DrawDataBase - scene.Layout.DrawTagBase);
+
+    /// <summary>
+    /// Adds the draw tags of one scene or range to a clip-stream validation in virtual stream
+    /// order: each piece of its own draw tags, and the draw tags of each retained scene between them.
+    /// </summary>
+    /// <param name="validation">The running validation.</param>
+    /// <param name="totals">The scene or range that supplies the joined totals.</param>
+    /// <param name="scene">The scene whose draw tags are added.</param>
+    /// <param name="ownStart">The first own draw tag to add.</param>
+    /// <param name="ownEnd">The end of the own draw tags to add.</param>
+    /// <param name="insertions">The retained scenes between the own draw tags, in stream order.</param>
+    /// <param name="label">A short label used in the validation message.</param>
+    /// <param name="error">Receives the validation failure reason.</param>
+    /// <returns><see langword="true"/> when the draw tags satisfy the shader clip-stack contract so far.</returns>
+    private static bool TryAddJoinedDrawTags(
+        ref ClipStreamValidation validation,
+        in WebGPUSceneRange totals,
+        WebGPUEncodedScene scene,
+        int ownStart,
+        int ownEnd,
+        ReadOnlySpan<WebGPUSceneInsertion> insertions,
+        string label,
+        out string? error)
+    {
+        ReadOnlySpan<uint> sceneWords = scene.SceneData.Span;
+        int drawTagBase = (int)scene.Layout.DrawTagBase;
+        int start = ownStart;
+        for (int i = 0; i <= insertions.Length; i++)
+        {
+            int end = i == insertions.Length ? ownEnd : insertions[i].DrawTag;
+            if (!validation.TryAdd(
+                sceneWords.Slice(drawTagBase + start, end - start),
+                totals.DrawTagCount,
+                totals.DrawDataWordCount,
+                totals.InfoWordCount,
+                totals.PathCount,
+                label,
+                out error))
+            {
+                return false;
+            }
+
+            if (i < insertions.Length)
+            {
+                WebGPUEncodedScene retained = insertions[i].Scene.EncodedScene;
+                if (!TryAddJoinedDrawTags(
+                    ref validation,
+                    totals,
+                    retained,
+                    0,
+                    GetOwnDrawTagCount(retained),
+                    retained.Insertions,
+                    label,
+                    out error))
+                {
+                    return false;
+                }
+            }
+
+            start = end;
+        }
+
+        error = null;
+        return true;
+    }
 
     /// <summary>
     /// Validates one encoded range clip-control stream before GPU staging.
@@ -376,7 +516,27 @@ internal static class WebGPUSceneDispatch
     /// <param name="error">Receives the validation failure reason.</param>
     /// <returns><see langword="true"/> when the clip stream is safe for GPU scheduling.</returns>
     private static bool TryValidateEncodedClipStream(WebGPUEncodedScene encodedScene, WebGPUSceneRange range, out string? error)
-        => TryValidateEncodedClipStream(
+    {
+        // A whole-scene range reads the same virtual stream as a render of the full scene.
+        if (range.IsWholeScene)
+        {
+            return TryValidateEncodedClipStream(encodedScene, out error);
+        }
+
+        // A range of an ordered scene that reads retained scenes reads its joined virtual stream.
+        if (range.Segments is WebGPUSceneRangeSegments segments)
+        {
+            return TryValidateJoinedClipStream(
+                encodedScene,
+                range,
+                range.DrawTagStart,
+                range.DrawTagStart + segments.DrawTagCount,
+                encodedScene.Insertions.Slice(segments.InsertionStart, segments.InsertionCount),
+                "scene range",
+                out error);
+        }
+
+        return TryValidateEncodedClipStream(
             encodedScene,
             range.DrawTagStart,
             range.DrawTagCount,
@@ -386,6 +546,7 @@ internal static class WebGPUSceneDispatch
             range.ClipCount,
             "scene range",
             out error);
+    }
 
     /// <summary>
     /// Validates the BeginClip/EndClip sequence consumed by clip_leaf.wgsl.
@@ -428,127 +589,244 @@ internal static class WebGPUSceneDispatch
         }
 
         ReadOnlySpan<uint> drawTags = sceneWords.Slice((int)drawTagWordStart, drawTagCount);
-        int depth = 0;
-        int clipCount = 0;
-        long pathIndex = 0;
-        long clipIndex = 0;
-        long sceneOffset = 0;
-        long infoOffset = 0;
         Span<long> clipPathStack = stackalloc long[MaxClipStackDepth];
         Span<long> clipDrawStack = stackalloc long[MaxClipStackDepth];
-        for (int i = 0; i < drawTags.Length; i++)
+        ClipStreamValidation validation = new(clipPathStack, clipDrawStack, drawTagStart);
+        if (!validation.TryAdd(
+            drawTags,
+            drawTagCount,
+            expectedDrawDataWordCount,
+            expectedInfoWordCount,
+            expectedPathCount,
+            label,
+            out error))
         {
-            uint drawTag = drawTags[i];
-            GpuSceneDrawMonoid drawMonoid = GpuSceneDrawTag.Map(drawTag);
-            if (drawTag != GpuSceneDrawTag.Nop && pathIndex >= expectedPathCount)
+            return false;
+        }
+
+        return validation.TryFinish(
+            expectedDrawDataWordCount,
+            expectedInfoWordCount,
+            expectedPathCount,
+            expectedClipCount,
+            label,
+            out error);
+    }
+
+    /// <summary>
+    /// Holds the running state of one BeginClip/EndClip validation, so one stream can be
+    /// validated in pieces: one range, or the pieces of a scene that reads retained scenes in place.
+    /// </summary>
+    private ref struct ClipStreamValidation
+    {
+        private readonly Span<long> clipPathStack;
+        private readonly Span<long> clipDrawStack;
+        private readonly int drawTagStart;
+        private int depth;
+        private int clipCount;
+        private long drawIndex;
+        private long pathIndex;
+        private long clipIndex;
+        private long sceneOffset;
+        private long infoOffset;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ClipStreamValidation"/> struct.
+        /// </summary>
+        /// <param name="clipPathStack">The path-index stack, <see cref="MaxClipStackDepth"/> entries.</param>
+        /// <param name="clipDrawStack">The draw-index stack, <see cref="MaxClipStackDepth"/> entries.</param>
+        /// <param name="drawTagStart">The draw-tag index of the first validated tag, used in messages.</param>
+        public ClipStreamValidation(Span<long> clipPathStack, Span<long> clipDrawStack, int drawTagStart)
+        {
+            this.clipPathStack = clipPathStack;
+            this.clipDrawStack = clipDrawStack;
+            this.drawTagStart = drawTagStart;
+            this.depth = 0;
+            this.clipCount = 0;
+            this.drawIndex = 0;
+            this.pathIndex = 0;
+            this.clipIndex = 0;
+            this.sceneOffset = 0;
+            this.infoOffset = 0;
+        }
+
+        /// <summary>
+        /// Validates the next draw tags of the stream.
+        /// </summary>
+        /// <param name="drawTags">The next draw tags.</param>
+        /// <param name="drawTagCount">The draw-tag count of the whole stream.</param>
+        /// <param name="expectedDrawDataWordCount">The draw-data word count declared for the whole stream.</param>
+        /// <param name="expectedInfoWordCount">The info word count declared for the whole stream.</param>
+        /// <param name="expectedPathCount">The path count declared for the whole stream.</param>
+        /// <param name="label">A short label used in the validation message.</param>
+        /// <param name="error">Receives the validation failure reason.</param>
+        /// <returns><see langword="true"/> when the draw tags satisfy the shader clip-stack contract so far.</returns>
+        public bool TryAdd(
+            ReadOnlySpan<uint> drawTags,
+            int drawTagCount,
+            int expectedDrawDataWordCount,
+            int expectedInfoWordCount,
+            int expectedPathCount,
+            string label,
+            out string? error)
+        {
+            // The loop runs once for each draw tag of every staged stream, so it works on locals
+            // and stores the running state once at the end. A failed validation stops the stream,
+            // so a return with an error does not store it.
+            Span<long> clipPathStack = this.clipPathStack;
+            Span<long> clipDrawStack = this.clipDrawStack;
+            int depth = this.depth;
+            int clipCount = this.clipCount;
+            long drawIndex = this.drawIndex;
+            long pathIndex = this.pathIndex;
+            long clipIndex = this.clipIndex;
+            long sceneOffset = this.sceneOffset;
+            long infoOffset = this.infoOffset;
+            for (int i = 0; i < drawTags.Length; i++, drawIndex++)
             {
-                error = $"The WebGPU {label} draw tag {drawTagStart + i} references path {pathIndex}, but the stream declares {expectedPathCount} paths.";
+                long tagIndex = this.drawTagStart + drawIndex;
+                uint drawTag = drawTags[i];
+                GpuSceneDrawMonoid drawMonoid = GpuSceneDrawTag.Map(drawTag);
+                if (drawTag != GpuSceneDrawTag.Nop && pathIndex >= expectedPathCount)
+                {
+                    error = $"The WebGPU {label} draw tag {tagIndex} references path {pathIndex}, but the stream declares {expectedPathCount} paths.";
+                    return false;
+                }
+
+                if (sceneOffset + drawMonoid.SceneOffset > expectedDrawDataWordCount)
+                {
+                    error = $"The WebGPU {label} draw tag {tagIndex} reads draw-data words " +
+                        $"[{sceneOffset}, {sceneOffset + drawMonoid.SceneOffset}), " +
+                        $"but the stream declares {expectedDrawDataWordCount} words.";
+                    return false;
+                }
+
+                if (infoOffset + drawMonoid.InfoOffset > expectedInfoWordCount)
+                {
+                    error = $"The WebGPU {label} draw tag {tagIndex} writes info words [{infoOffset}, {infoOffset + drawMonoid.InfoOffset}), " +
+                        $"but the stream declares {expectedInfoWordCount} words.";
+                    return false;
+                }
+
+                if (drawTag == GpuSceneDrawTag.BeginClip)
+                {
+                    // clip_leaf.wgsl reconstructs clip parents with one 256-entry workgroup stack.
+                    if (depth == MaxClipStackDepth)
+                    {
+                        error = $"The WebGPU {label} clip stack exceeds {MaxClipStackDepth} entries at draw tag {tagIndex}.";
+                        return false;
+                    }
+
+                    clipPathStack[depth] = pathIndex;
+                    clipDrawStack[depth] = drawIndex;
+                    depth++;
+                    clipCount++;
+                }
+                else if (drawTag == GpuSceneDrawTag.EndClip)
+                {
+                    if (depth == 0)
+                    {
+                        error = $"The WebGPU {label} has an EndClip without a matching BeginClip at draw tag {tagIndex}.";
+                        return false;
+                    }
+
+                    depth--;
+
+                    // This mirrors Vello's CPU clip_leaf stack: EndClip must pop a BeginClip whose
+                    // path and draw indices remain valid inside the range-local GPU buffers.
+                    long parentPathIndex = clipPathStack[depth];
+                    long parentDrawIndex = clipDrawStack[depth];
+                    if (parentPathIndex < 0 || parentPathIndex >= expectedPathCount)
+                    {
+                        error = $"The WebGPU {label} EndClip at draw tag {tagIndex} resolves to path {parentPathIndex}, " +
+                            $"but the stream declares {expectedPathCount} paths.";
+                        return false;
+                    }
+
+                    if (parentDrawIndex < 0 || parentDrawIndex >= drawTagCount)
+                    {
+                        error = $"The WebGPU {label} EndClip at draw tag {tagIndex} resolves to draw tag {parentDrawIndex}, " +
+                            $"but the stream contains {drawTagCount} draw tags.";
+                        return false;
+                    }
+
+                    clipCount++;
+                }
+
+                pathIndex += drawMonoid.PathIndex;
+                clipIndex += drawMonoid.ClipIndex;
+                sceneOffset += drawMonoid.SceneOffset;
+                infoOffset += drawMonoid.InfoOffset;
+            }
+
+            this.depth = depth;
+            this.clipCount = clipCount;
+            this.drawIndex = drawIndex;
+            this.pathIndex = pathIndex;
+            this.clipIndex = clipIndex;
+            this.sceneOffset = sceneOffset;
+            this.infoOffset = infoOffset;
+            error = null;
+            return true;
+        }
+
+        /// <summary>
+        /// Checks the totals after the last draw tag of the stream.
+        /// </summary>
+        /// <param name="expectedDrawDataWordCount">The draw-data word count declared for the stream.</param>
+        /// <param name="expectedInfoWordCount">The info word count declared for the stream.</param>
+        /// <param name="expectedPathCount">The path count declared for the stream.</param>
+        /// <param name="expectedClipCount">The clip record count declared for the stream.</param>
+        /// <param name="label">A short label used in the validation message.</param>
+        /// <param name="error">Receives the validation failure reason.</param>
+        /// <returns><see langword="true"/> when the stream satisfies the shader clip-stack contract.</returns>
+        public readonly bool TryFinish(
+            int expectedDrawDataWordCount,
+            int expectedInfoWordCount,
+            int expectedPathCount,
+            int expectedClipCount,
+            string label,
+            out string? error)
+        {
+            if (this.depth != 0)
+            {
+                error = $"The WebGPU {label} closes with {this.depth} unmatched BeginClip records.";
                 return false;
             }
 
-            if (sceneOffset + drawMonoid.SceneOffset > expectedDrawDataWordCount)
+            if (this.pathIndex != expectedPathCount)
             {
-                error = $"The WebGPU {label} draw tag {drawTagStart + i} reads draw-data words [{sceneOffset}, {sceneOffset + drawMonoid.SceneOffset}), " +
-                    $"but the stream declares {expectedDrawDataWordCount} words.";
+                error = $"The WebGPU {label} declares {expectedPathCount} paths but the draw-tag stream encodes {this.pathIndex}.";
                 return false;
             }
 
-            if (infoOffset + drawMonoid.InfoOffset > expectedInfoWordCount)
+            if (this.clipIndex != expectedClipCount)
             {
-                error = $"The WebGPU {label} draw tag {drawTagStart + i} writes info words [{infoOffset}, {infoOffset + drawMonoid.InfoOffset}), " +
-                    $"but the stream declares {expectedInfoWordCount} words.";
+                error = $"The WebGPU {label} declares {expectedClipCount} clip records but the draw-tag monoid encodes {this.clipIndex}.";
                 return false;
             }
 
-            if (drawTag == GpuSceneDrawTag.BeginClip)
+            if (this.sceneOffset != expectedDrawDataWordCount)
             {
-                // clip_leaf.wgsl reconstructs clip parents with one 256-entry workgroup stack.
-                if (depth == MaxClipStackDepth)
-                {
-                    error = $"The WebGPU {label} clip stack exceeds {MaxClipStackDepth} entries at draw tag {drawTagStart + i}.";
-                    return false;
-                }
-
-                clipPathStack[depth] = pathIndex;
-                clipDrawStack[depth] = i;
-                depth++;
-                clipCount++;
-            }
-            else if (drawTag == GpuSceneDrawTag.EndClip)
-            {
-                if (depth == 0)
-                {
-                    error = $"The WebGPU {label} has an EndClip without a matching BeginClip at draw tag {drawTagStart + i}.";
-                    return false;
-                }
-
-                depth--;
-
-                // This mirrors Vello's CPU clip_leaf stack: EndClip must pop a BeginClip whose
-                // path and draw indices remain valid inside the range-local GPU buffers.
-                long parentPathIndex = clipPathStack[depth];
-                long parentDrawIndex = clipDrawStack[depth];
-                if (parentPathIndex < 0 || parentPathIndex >= expectedPathCount)
-                {
-                    error = $"The WebGPU {label} EndClip at draw tag {drawTagStart + i} resolves to path {parentPathIndex}, " +
-                        $"but the stream declares {expectedPathCount} paths.";
-                    return false;
-                }
-
-                if (parentDrawIndex < 0 || parentDrawIndex >= drawTagCount)
-                {
-                    error = $"The WebGPU {label} EndClip at draw tag {drawTagStart + i} resolves to draw tag {parentDrawIndex}, " +
-                        $"but the stream contains {drawTagCount} draw tags.";
-                    return false;
-                }
-
-                clipCount++;
+                error = $"The WebGPU {label} declares {expectedDrawDataWordCount} draw-data words but the draw-tag stream encodes {this.sceneOffset}.";
+                return false;
             }
 
-            pathIndex += drawMonoid.PathIndex;
-            clipIndex += drawMonoid.ClipIndex;
-            sceneOffset += drawMonoid.SceneOffset;
-            infoOffset += drawMonoid.InfoOffset;
-        }
+            if (this.infoOffset != expectedInfoWordCount)
+            {
+                error = $"The WebGPU {label} declares {expectedInfoWordCount} info words but the draw-tag stream encodes {this.infoOffset}.";
+                return false;
+            }
 
-        if (depth != 0)
-        {
-            error = $"The WebGPU {label} closes with {depth} unmatched BeginClip records.";
-            return false;
-        }
+            if (this.clipCount != expectedClipCount)
+            {
+                error = $"The WebGPU {label} declares {expectedClipCount} clip records but contains {this.clipCount} BeginClip/EndClip draw tags.";
+                return false;
+            }
 
-        if (pathIndex != expectedPathCount)
-        {
-            error = $"The WebGPU {label} declares {expectedPathCount} paths but the draw-tag stream encodes {pathIndex}.";
-            return false;
+            error = null;
+            return true;
         }
-
-        if (clipIndex != expectedClipCount)
-        {
-            error = $"The WebGPU {label} declares {expectedClipCount} clip records but the draw-tag monoid encodes {clipIndex}.";
-            return false;
-        }
-
-        if (sceneOffset != expectedDrawDataWordCount)
-        {
-            error = $"The WebGPU {label} declares {expectedDrawDataWordCount} draw-data words but the draw-tag stream encodes {sceneOffset}.";
-            return false;
-        }
-
-        if (infoOffset != expectedInfoWordCount)
-        {
-            error = $"The WebGPU {label} declares {expectedInfoWordCount} info words but the draw-tag stream encodes {infoOffset}.";
-            return false;
-        }
-
-        if (clipCount != expectedClipCount)
-        {
-            error = $"The WebGPU {label} declares {expectedClipCount} clip records but contains {clipCount} BeginClip/EndClip draw tags.";
-            return false;
-        }
-
-        error = null;
-        return true;
     }
 
     /// <summary>
@@ -587,7 +865,7 @@ internal static class WebGPUSceneDispatch
                 out bindingLimitFailure,
                 out error) ||
             !TryValidateBufferSize(
-                GetBindingByteLength<uint>(encodedScene.SceneWordCount),
+                GetBindingByteLength<uint>(encodedScene.SceneBufferWordCount),
                 "scene data",
                 BindingLimitBuffer.None,
                 maxStorageBufferBindingSize,
@@ -803,7 +1081,7 @@ internal static class WebGPUSceneDispatch
         WebGPUSceneConfig config = stagedScene.Config;
         WebGPUSceneBufferSizes bufferSizes = config.BufferSizes;
         WebGPUSceneWorkgroupCounts workgroupCounts = config.WorkgroupCounts;
-        nuint sceneBufferSize = GetBindingByteLength<uint>(encodedScene.SceneWordCount);
+        nuint sceneBufferSize = GetBindingByteLength<uint>(encodedScene.SceneBufferWordCount);
         nuint pathReducedBufferSize = bufferSizes.PathReduced.ByteLength;
         nuint pathReduced2BufferSize = bufferSizes.PathReduced2.ByteLength;
         nuint pathReducedScanBufferSize = bufferSizes.PathReducedScan.ByteLength;
@@ -1064,10 +1342,9 @@ internal static class WebGPUSceneDispatch
         WebGPUSceneConfig config = stagedScene.Config;
         WebGPUSceneBufferSizes bufferSizes = config.BufferSizes;
         WebGPUSceneWorkgroupCounts workgroupCounts = config.WorkgroupCounts;
-        nuint sceneBufferSize = GetBindingByteLength<uint>(encodedScene.SceneWordCount);
+        nuint sceneBufferSize = GetBindingByteLength<uint>(encodedScene.SceneBufferWordCount);
         nuint drawMonoidBufferSize = bufferSizes.DrawMonoids.ByteLength;
         nuint infoBinDataBufferSize = checked(bufferSizes.Info.ByteLength + bufferSizes.BinData.ByteLength + bufferSizes.BinHeaders.ByteLength);
-        nuint pathBboxBufferSize = bufferSizes.PathBboxes.ByteLength;
         nuint drawBboxBufferSize = bufferSizes.DrawBboxes.ByteLength;
         nuint pathBufferSize = bufferSizes.Paths.ByteLength;
         nuint lineBufferSize = bufferSizes.Lines.ByteLength;
@@ -1124,7 +1401,6 @@ internal static class WebGPUSceneDispatch
                 stagedScene.Resources,
                 sceneBufferSize,
                 drawBboxBufferSize,
-                pathBboxBufferSize,
                 pathBufferSize,
                 pathRowBuffer,
                 pathRowBufferSize,
@@ -1405,7 +1681,7 @@ internal static class WebGPUSceneDispatch
                 flushContext,
                 stagedScene.Resources,
                 stagedScene.Config.BufferSizes,
-                GetBindingByteLength<uint>(stagedScene.EncodedScene.SceneWordCount),
+                GetBindingByteLength<uint>(stagedScene.EncodedScene.SceneBufferWordCount),
                 scheduling,
                 outputTextureView,
                 backdropTarget.TextureView,
@@ -1497,8 +1773,8 @@ internal static class WebGPUSceneDispatch
             {
                 WebGPUSceneChunkWindow chunkWindow = CreateChunkWindow(tileYStart, requestedTileHeight, remainingTileHeight);
                 WebGPUSceneBumpSizes chunkBumpSize = stagedScene.Range.HasValue
-                    ? ScaleChunkBumpSizes(stagedScene.Config.BumpSizes, stagedScene.Range.Value, chunkWindow.TileHeight)
-                    : ScaleChunkBumpSizes(stagedScene.Config.BumpSizes, encodedScene, chunkWindow.TileHeight);
+                    ? GetChunkBumpSizes(stagedScene.Config.BumpSizes, stagedScene.Range.Value, chunkWindow)
+                    : GetChunkBumpSizes(stagedScene.Config.BumpSizes, encodedScene, chunkWindow);
 
                 WebGPUSceneConfig chunkConfig = stagedScene.Range.HasValue
                     ? WebGPUSceneConfig.Create(encodedScene, stagedScene.Range.Value, chunkBumpSize, chunkWindow)
@@ -1678,7 +1954,8 @@ internal static class WebGPUSceneDispatch
     /// <param name="schedulingArena">The reusable scheduling arena slot for this render.</param>
     /// <param name="initialChunkTileHeightHint">The advisory chunk height to try first when this scene requires chunking.</param>
     /// <param name="deferOverflowCheck">
-    /// Whether to defer the scratch-overflow readback instead of blocking on the GPU.
+    /// Whether to defer the scratch-overflow readback instead of blocking on the GPU. A render whose
+    /// capacities are upper bounds reads no status.
     /// </param>
     /// <param name="requiresGrowth">Receives whether the caller should retry with larger scratch capacities.</param>
     /// <param name="grownBumpSizes">Receives the scratch capacities reported by the render attempt.</param>
@@ -1742,7 +2019,8 @@ internal static class WebGPUSceneDispatch
     /// <param name="schedulingArena">The reusable scheduling arena slot for this render.</param>
     /// <param name="initialChunkTileHeightHint">The advisory chunk height to try first when this scene requires chunking.</param>
     /// <param name="deferOverflowCheck">
-    /// Whether to defer the scratch-overflow readback instead of blocking on the GPU.
+    /// Whether to defer the scratch-overflow readback instead of blocking on the GPU. A render whose
+    /// capacities are upper bounds reads no status.
     /// </param>
     /// <param name="requiresGrowth">Receives whether the caller should retry with larger scratch capacities.</param>
     /// <param name="grownBumpSizes">Receives the scratch capacities reported by the render attempt.</param>
@@ -1831,7 +2109,7 @@ internal static class WebGPUSceneDispatch
                 flushContext,
                 stagedScene.Resources,
                 stagedScene.Config.BufferSizes,
-                GetBindingByteLength<uint>(stagedScene.EncodedScene.SceneWordCount),
+                GetBindingByteLength<uint>(stagedScene.EncodedScene.SceneBufferWordCount),
                 scheduling,
                 outputTextureView,
                 backdropTarget.TextureView,
@@ -1840,6 +2118,20 @@ internal static class WebGPUSceneDispatch
                 out error))
         {
             return false;
+        }
+
+        if (HasScratchBounds(stagedScene))
+        {
+            // The capacities are upper bounds of the GPU scratch use, so the GPU cannot overflow.
+            // The fine output and the target copy go in one submission, and no status is read.
+            CopyToTarget(ref stagedScene, target, outputTexture, targetWidth, targetHeight);
+            if (!WebGPUDrawingBackend.TrySubmitPendingCommands(flushContext))
+            {
+                error = "Failed to submit the staged-scene frame.";
+                return false;
+            }
+
+            return true;
         }
 
         if (deferOverflowCheck)
@@ -1984,7 +2276,10 @@ internal static class WebGPUSceneDispatch
     /// <param name="target">The render-time target receiving the chunked output.</param>
     /// <param name="schedulingArena">The flush-local reusable scheduling scratch and readback arena.</param>
     /// <param name="initialChunkTileHeightHint">The advisory chunk height to try before estimating from the full-scene overflow.</param>
-    /// <param name="deferOverflowCheck">Whether to defer the scratch-overflow readback instead of blocking on the GPU.</param>
+    /// <param name="deferOverflowCheck">
+    /// Whether to defer the scratch-overflow readback instead of blocking on the GPU. A render whose
+    /// capacities are upper bounds reads no status.
+    /// </param>
     /// <param name="requiresGrowth">Receives whether the chunked path needs the caller to retry with larger global scratch capacities.</param>
     /// <param name="grownBumpSizes">Receives the enlarged scratch capacities when <paramref name="requiresGrowth"/> is <see langword="true"/>.</param>
     /// <param name="successfulChunkTileHeight">Receives the largest chunk height that rendered successfully.</param>
@@ -2015,6 +2310,10 @@ internal static class WebGPUSceneDispatch
         int targetWidth = target.Bounds.Width;
         int targetHeight = target.Bounds.Height;
         nuint maxStorageBufferBindingSize = flushContext.ScratchBufferBindingSizeLimit;
+
+        // A render with bounded capacities cannot overflow, so it reads no status, now or later.
+        bool hasScratchBounds = HasScratchBounds(stagedScene);
+        bool deferStatus = deferOverflowCheck && !hasScratchBounds;
 
         if (!WebGPUDrawingBackend.TryCreateCompositionTexture(
             flushContext,
@@ -2054,7 +2353,7 @@ internal static class WebGPUSceneDispatch
         nuint readbackByteLength = checked(Math.Max(totalTileHeight, 1U) * (uint)sizeof(GpuSceneBumpAllocators));
         WGPUBufferImpl* deferredReadbackBuffer = null;
         bool deferredReadbackBufferTransferred = false;
-        if (deferOverflowCheck)
+        if (deferStatus)
         {
             deferredReadbackBuffer = flushContext.DeviceState.RentStatusReadbackBuffer(readbackByteLength);
             if (deferredReadbackBuffer is null)
@@ -2093,8 +2392,8 @@ internal static class WebGPUSceneDispatch
                 {
                     WebGPUSceneChunkWindow chunkWindow = CreateChunkWindow(tileYStart, requestedTileHeight, remainingTileHeight);
                     WebGPUSceneBumpSizes chunkBumpSize = stagedScene.Range.HasValue
-                        ? ScaleChunkBumpSizes(stagedScene.Config.BumpSizes, stagedScene.Range.Value, chunkWindow.TileHeight)
-                        : ScaleChunkBumpSizes(stagedScene.Config.BumpSizes, encodedScene, chunkWindow.TileHeight);
+                        ? GetChunkBumpSizes(stagedScene.Config.BumpSizes, stagedScene.Range.Value, chunkWindow)
+                        : GetChunkBumpSizes(stagedScene.Config.BumpSizes, encodedScene, chunkWindow);
 
                     WebGPUSceneConfig chunkConfig = stagedScene.Range.HasValue
                         ? WebGPUSceneConfig.Create(encodedScene, stagedScene.Range.Value, chunkBumpSize, chunkWindow)
@@ -2139,7 +2438,7 @@ internal static class WebGPUSceneDispatch
                         readbackByteLength,
                         ref schedulingArena);
 
-                    WGPUBufferImpl* statusReadbackBuffer = deferOverflowCheck ? deferredReadbackBuffer : currentArena.ReadbackBuffer;
+                    WGPUBufferImpl* statusReadbackBuffer = deferStatus ? deferredReadbackBuffer : currentArena.ReadbackBuffer;
 
                     // A first chunk that already covers the full tile height renders through the
                     // monolithic scheduling path below; genuine multi-chunk renders run the shared
@@ -2209,7 +2508,7 @@ internal static class WebGPUSceneDispatch
                 return false;
             }
 
-            if (!deferOverflowCheck)
+            if (!hasScratchBounds && !deferStatus)
             {
                 // All chunks submitted. Map the readback buffer once and check every chunk's
                 // bump allocators. If any overflowed, grow sizes and the outer retry loop re-runs.
@@ -2248,7 +2547,7 @@ internal static class WebGPUSceneDispatch
                 return false;
             }
 
-            if (deferOverflowCheck)
+            if (deferStatus)
             {
                 pendingStatus = new WebGPUPendingSchedulingStatus(
                     flushContext.Api,
@@ -2335,7 +2634,7 @@ internal static class WebGPUSceneDispatch
                 stagedScene.FlushContext,
                 stagedScene.Resources,
                 stagedScene.Config.BufferSizes,
-                GetBindingByteLength<uint>(stagedScene.EncodedScene.SceneWordCount),
+                GetBindingByteLength<uint>(stagedScene.EncodedScene.SceneBufferWordCount),
                 scheduling,
                 outputTextureView,
                 backdropTarget.TextureView,
@@ -2403,7 +2702,7 @@ internal static class WebGPUSceneDispatch
                 stagedScene.FlushContext,
                 stagedScene.Resources,
                 stagedScene.Config.BufferSizes,
-                GetBindingByteLength<uint>(stagedScene.EncodedScene.SceneWordCount),
+                GetBindingByteLength<uint>(stagedScene.EncodedScene.SceneBufferWordCount),
                 scheduling,
                 outputTextureView,
                 backdropTarget.TextureView,
@@ -2607,20 +2906,35 @@ internal static class WebGPUSceneDispatch
     private static WebGPUSceneBumpSizes ScaleChunkBumpSizes(WebGPUSceneBumpSizes sourceBumpSizes, WebGPUEncodedScene scene, uint chunkTileHeight)
     {
         uint fullTileHeight = checked((uint)scene.TileCountY);
-        uint pathRowFloor = ScaleCount((uint)Math.Max(scene.TotalPathRowCount, scene.PathCount), chunkTileHeight, fullTileHeight);
+        uint tileRowHeight = GetChunkTileRowHeight(chunkTileHeight, fullTileHeight);
+        uint pathRowFloor = ScaleCount((uint)Math.Max(scene.TotalPathRowCount, scene.PathCount), tileRowHeight, fullTileHeight);
         uint pathTileFloor = pathRowFloor;
-        uint segmentFloor = AddSizingSlack(ScaleCount((uint)scene.LineCount, chunkTileHeight, fullTileHeight));
+        uint segmentFloor = AddSizingSlack(ScaleCount((uint)scene.LineCount, tileRowHeight, fullTileHeight));
 
         return new WebGPUSceneBumpSizes(
             sourceBumpSizes.Lines,
             sourceBumpSizes.Binning,
-            Math.Max(ScaleCount(sourceBumpSizes.PathRows, chunkTileHeight, fullTileHeight), pathRowFloor),
-            Math.Max(ScaleCount(sourceBumpSizes.PathTiles, chunkTileHeight, fullTileHeight), pathTileFloor),
-            Math.Max(ScaleCount(sourceBumpSizes.SegCounts, chunkTileHeight, fullTileHeight), segmentFloor),
-            Math.Max(ScaleCount(sourceBumpSizes.Segments, chunkTileHeight, fullTileHeight), segmentFloor),
+            Math.Max(ScaleCount(sourceBumpSizes.PathRows, tileRowHeight, fullTileHeight), pathRowFloor),
+            Math.Max(ScaleCount(sourceBumpSizes.PathTiles, tileRowHeight, fullTileHeight), pathTileFloor),
+            Math.Max(ScaleCount(sourceBumpSizes.SegCounts, tileRowHeight, fullTileHeight), segmentFloor),
+            Math.Max(ScaleCount(sourceBumpSizes.Segments, tileRowHeight, fullTileHeight), segmentFloor),
             ScaleCount(sourceBumpSizes.BlendSpill, chunkTileHeight, fullTileHeight),
             ScaleCount(sourceBumpSizes.Ptcl, chunkTileHeight, fullTileHeight));
     }
+
+    /// <summary>
+    /// Gets the tile rows of one chunk that hold path rows, tiles and segments.
+    /// </summary>
+    /// <remarks>
+    /// path_row_alloc keeps one tile row on each side of the chunk, so the aliased column walk can
+    /// read the path tiles above and below the first and last chunk rows. Coarse writes commands
+    /// only for the chunk rows, so the PTCL and blend spill use the real chunk height.
+    /// </remarks>
+    /// <param name="chunkTileHeight">The real chunk height, in tile rows.</param>
+    /// <param name="fullTileHeight">The target height, in tile rows.</param>
+    /// <returns>The tile rows that hold path data.</returns>
+    private static uint GetChunkTileRowHeight(uint chunkTileHeight, uint fullTileHeight)
+        => Math.Min(chunkTileHeight + 2U, fullTileHeight);
 
     /// <summary>
     /// Scales the chunk-local scheduling capacities from the last known-good range budget.
@@ -2632,28 +2946,205 @@ internal static class WebGPUSceneDispatch
     private static WebGPUSceneBumpSizes ScaleChunkBumpSizes(WebGPUSceneBumpSizes sourceBumpSizes, WebGPUSceneRange range, uint chunkTileHeight)
     {
         uint fullTileHeight = checked((uint)((range.TargetBounds.Height + 15) / 16));
-        uint pathRowFloor = ScaleCount((uint)Math.Max(range.TotalPathRowCount, range.PathCount), chunkTileHeight, fullTileHeight);
+        uint tileRowHeight = GetChunkTileRowHeight(chunkTileHeight, fullTileHeight);
+        uint pathRowFloor = ScaleCount((uint)Math.Max(range.TotalPathRowCount, range.PathCount), tileRowHeight, fullTileHeight);
         uint pathTileFloor = pathRowFloor;
-        uint segmentFloor = AddSizingSlack(ScaleCount((uint)range.LineCount, chunkTileHeight, fullTileHeight));
+        uint segmentFloor = AddSizingSlack(ScaleCount((uint)range.LineCount, tileRowHeight, fullTileHeight));
 
         return new WebGPUSceneBumpSizes(
             sourceBumpSizes.Lines,
             sourceBumpSizes.Binning,
-            Math.Max(ScaleCount(sourceBumpSizes.PathRows, chunkTileHeight, fullTileHeight), pathRowFloor),
-            Math.Max(ScaleCount(sourceBumpSizes.PathTiles, chunkTileHeight, fullTileHeight), pathTileFloor),
-            Math.Max(ScaleCount(sourceBumpSizes.SegCounts, chunkTileHeight, fullTileHeight), segmentFloor),
-            Math.Max(ScaleCount(sourceBumpSizes.Segments, chunkTileHeight, fullTileHeight), segmentFloor),
+            Math.Max(ScaleCount(sourceBumpSizes.PathRows, tileRowHeight, fullTileHeight), pathRowFloor),
+            Math.Max(ScaleCount(sourceBumpSizes.PathTiles, tileRowHeight, fullTileHeight), pathTileFloor),
+            Math.Max(ScaleCount(sourceBumpSizes.SegCounts, tileRowHeight, fullTileHeight), segmentFloor),
+            Math.Max(ScaleCount(sourceBumpSizes.Segments, tileRowHeight, fullTileHeight), segmentFloor),
             ScaleCount(sourceBumpSizes.BlendSpill, chunkTileHeight, fullTileHeight),
             ScaleCount(sourceBumpSizes.Ptcl, chunkTileHeight, fullTileHeight));
     }
 
     /// <summary>
-    /// Raises the caller-provided scratch capacities to the scene-specific lower bounds already known on the CPU so the first GPU attempt does not waste a full-scene pass on allocations that cannot possibly fit.
+    /// Gets the scratch capacities of the tile-row chunks of a scene that have one height: the
+    /// scaled scene budget, raised to the largest bounds over every window of that height.
+    /// </summary>
+    /// <remarks>
+    /// The chunk loop runs the shared stages once into one scheduling arena, and a later chunk
+    /// must not need a larger arena. Chunk heights never grow during a render, and every window
+    /// of a smaller height is inside a window of a larger height, so the sizes of the first chunk
+    /// hold every later chunk.
+    /// </remarks>
+    /// <param name="sourceBumpSizes">The full-scene scratch budget.</param>
+    /// <param name="scene">The encoded scene.</param>
+    /// <param name="chunkWindow">The chunk window.</param>
+    /// <returns>The chunk-local scratch capacities.</returns>
+    private static WebGPUSceneBumpSizes GetChunkBumpSizes(WebGPUSceneBumpSizes sourceBumpSizes, WebGPUEncodedScene scene, WebGPUSceneChunkWindow chunkWindow)
+    {
+        WebGPUSceneBumpSizes scaled = ScaleChunkBumpSizes(sourceBumpSizes, scene, chunkWindow.TileHeight);
+        if (scene.RowBounds is not { } rowBounds)
+        {
+            return scaled;
+        }
+
+        // A whole-scene dispatch uses the root target grid, so its rows start at data row 0.
+        WebGPUSceneWindowBounds window = GetLargestWindowBounds(
+            rowBounds,
+            0,
+            checked((uint)scene.TileCountY),
+            chunkWindow.TileHeight,
+            scene,
+            out long blendSpillSlots);
+
+        return RaiseToWindowBounds(
+            scaled,
+            window,
+            scene.TileCountX,
+            chunkWindow.TileHeight,
+            scene.SegmentCount != 0,
+            blendSpillSlots);
+    }
+
+    /// <summary>
+    /// Gets the scratch capacities of the tile-row chunks of a range that have one height: the
+    /// scaled range budget, raised to the largest bounds over every window of that height.
+    /// </summary>
+    /// <param name="sourceBumpSizes">The range scratch budget.</param>
+    /// <param name="range">The encoded range.</param>
+    /// <param name="chunkWindow">The chunk window.</param>
+    /// <returns>The chunk-local scratch capacities.</returns>
+    private static WebGPUSceneBumpSizes GetChunkBumpSizes(WebGPUSceneBumpSizes sourceBumpSizes, WebGPUSceneRange range, WebGPUSceneChunkWindow chunkWindow)
+    {
+        WebGPUSceneBumpSizes scaled = ScaleChunkBumpSizes(sourceBumpSizes, range, chunkWindow.TileHeight);
+        if (range.RowBounds is not { } rowBounds)
+        {
+            return scaled;
+        }
+
+        // The chunk rows are rows of the range target. Origin is the position of that target in
+        // the data coordinates of the row bounds. The range keeps no blend regions, so its whole
+        // blend-spill bound applies to every chunk.
+        WebGPUSceneWindowBounds window = GetLargestWindowBounds(
+            rowBounds,
+            range.Origin.Y,
+            checked((uint)WebGPUSceneEncoder.DivideRoundUp(range.TargetBounds.Height, WebGPUSceneEncoder.TileHeight)),
+            chunkWindow.TileHeight,
+            null,
+            out _);
+
+        return RaiseToWindowBounds(
+            scaled,
+            window,
+            WebGPUSceneEncoder.DivideRoundUp(range.TargetBounds.Width, WebGPUSceneEncoder.TileWidth),
+            chunkWindow.TileHeight,
+            range.Segments is not null || range.IsWholeScene,
+            range.EstimatedBlendSpillSlots);
+    }
+
+    /// <summary>
+    /// Gets the largest bounds, for each scratch buffer, over every window of one chunk height.
+    /// </summary>
+    /// <param name="rowBounds">The sealed row bounds.</param>
+    /// <param name="originY">The data-space Y position of target tile row 0.</param>
+    /// <param name="targetTileHeight">The target height in tile rows.</param>
+    /// <param name="chunkTileHeight">The chunk height in tile rows.</param>
+    /// <param name="scene">The scene whose blend regions bound the blend spill, or <see langword="null"/>.</param>
+    /// <param name="blendSpillSlots">Receives the largest blend-spill slot bound of a window, or zero without a scene.</param>
+    /// <returns>The largest bounds.</returns>
+    private static WebGPUSceneWindowBounds GetLargestWindowBounds(
+        WebGPUSceneRowBounds rowBounds,
+        int originY,
+        uint targetTileHeight,
+        uint chunkTileHeight,
+        WebGPUEncodedScene? scene,
+        out long blendSpillSlots)
+    {
+        long pathRows = 0;
+        long tiles = 0;
+        long crossings = 0;
+        long ptclWords = 0;
+        blendSpillSlots = 0;
+
+        // A chunk of one bin or more starts on a bin and holds whole bins, except the last chunk,
+        // which ends at the target. A chunk smaller than one bin happens only when one bin alone
+        // does not fit the binding limit. It can start on any row, and CreateChunkWindow ends it
+        // at the end of its bin. The row bounds keep each tile row, so every such window gets a
+        // true bound.
+        uint binRows = WebGPUSceneRowBounds.BinRows;
+        uint step = chunkTileHeight >= binRows ? binRows : 1U;
+        for (uint start = 0; start < Math.Max(targetTileHeight, 1U); start += step)
+        {
+            uint end = start + chunkTileHeight;
+            if (chunkTileHeight < binRows)
+            {
+                end = Math.Min(end, (start | (binRows - 1U)) + 1U);
+            }
+
+            int y0 = checked(originY + ((int)start * WebGPUSceneEncoder.TileHeight));
+            int y1 = checked(originY + ((int)end * WebGPUSceneEncoder.TileHeight));
+
+            // path_row_alloc keeps one tile row on each side of the chunk for the aliased column
+            // walk, so the path rows, tiles and crossings come from the window with those rows.
+            // Coarse writes commands only for the chunk rows.
+            WebGPUSceneWindowBounds window = rowBounds.GetWindow(y0, y1);
+            WebGPUSceneWindowBounds tileWindow = rowBounds.GetWindow(y0 - WebGPUSceneEncoder.TileHeight, y1 + WebGPUSceneEncoder.TileHeight);
+            pathRows = Math.Max(pathRows, tileWindow.PathRows);
+            tiles = Math.Max(tiles, tileWindow.Tiles);
+            crossings = Math.Max(crossings, tileWindow.Crossings);
+            ptclWords = Math.Max(ptclWords, window.PtclWords);
+            if (scene is not null)
+            {
+                blendSpillSlots = Math.Max(blendSpillSlots, scene.GetBlendSpillSlots(y0, y1));
+            }
+
+            if (end >= targetTileHeight)
+            {
+                break;
+            }
+        }
+
+        return new WebGPUSceneWindowBounds(pathRows, tiles, crossings, ptclWords);
+    }
+
+    /// <summary>
+    /// Raises chunk-local scratch capacities to the bounds of one chunk window.
+    /// </summary>
+    /// <param name="scaled">The scaled budget of the chunk.</param>
+    /// <param name="window">The bounds of the draws that reach the chunk rows.</param>
+    /// <param name="widthInTiles">The target width in tiles.</param>
+    /// <param name="chunkTileHeight">The real tile rows of the chunk, the rows that coarse writes commands for.</param>
+    /// <param name="hasSegmentTable">Whether coarse can write a CMD_PROFILE_TABLE before an aliased fill.</param>
+    /// <param name="blendSpillSlots">The blend-spill slot bound of the chunk.</param>
+    /// <returns>The raised capacities.</returns>
+    private static WebGPUSceneBumpSizes RaiseToWindowBounds(
+        WebGPUSceneBumpSizes scaled,
+        WebGPUSceneWindowBounds window,
+        int widthInTiles,
+        uint chunkTileHeight,
+        bool hasSegmentTable,
+        long blendSpillSlots)
+    {
+        // The command words are the draw words and two words for each crossing when a
+        // CMD_PROFILE_TABLE can precede a fill.
+        long ptclWords = GetPtclChunkBound(
+            window.PtclWords + (hasSegmentTable ? 2L * window.Crossings : 0L),
+            widthInTiles * chunkTileHeight);
+
+        return new WebGPUSceneBumpSizes(
+            scaled.Lines,
+            scaled.Binning,
+            Math.Max(scaled.PathRows, ToBoundCount(window.PathRows)),
+            Math.Max(scaled.PathTiles, ToBoundCount(Math.Max(window.Tiles, window.PathRows))),
+            Math.Max(scaled.SegCounts, ToBoundCount(window.Crossings)),
+            Math.Max(scaled.Segments, ToBoundCount(window.Crossings)),
+            Math.Max(scaled.BlendSpill, ToBoundCount(blendSpillSlots)),
+            Math.Max(scaled.Ptcl, ToBoundCount(ptclWords)));
+    }
+
+    /// <summary>
+    /// Raises the caller-provided scratch capacities to the upper bounds that the encoder computed for the scene.
     /// </summary>
     /// <param name="currentSizes">The persisted scratch capacities carried into this flush.</param>
     /// <param name="scene">The encoded scene whose CPU-side demand estimates provide minimum capacities.</param>
     /// <param name="maxStorageBufferBindingSize">The device-reported maximum size of one storage-buffer binding, used to cap conservative estimates.</param>
-    /// <returns>The retained capacities raised to the scene's known CPU-side lower bounds.</returns>
+    /// <returns>The retained capacities raised to the CPU-side upper bounds of the scene.</returns>
     private static WebGPUSceneBumpSizes SeedSceneBumpSizes(WebGPUSceneBumpSizes currentSizes, WebGPUEncodedScene scene, ulong maxStorageBufferBindingSize)
         => SeedSceneBumpSizes(
             currentSizes,
@@ -2663,16 +3154,18 @@ internal static class WebGPUSceneDispatch
             scene.EstimatedTileCrossings,
             scene.EstimatedPtclWords,
             scene.EstimatedBinFootprint,
+            scene.EstimatedPathTiles,
+            scene.EstimatedBlendSpillSlots,
             (long)scene.TileCountX * scene.TileCountY,
             maxStorageBufferBindingSize);
 
     /// <summary>
-    /// Raises the caller-provided scratch capacities to the range-specific lower bounds already known on the CPU.
+    /// Raises the caller-provided scratch capacities to the upper bounds that the encoder computed for the range.
     /// </summary>
     /// <param name="currentSizes">The persisted scratch capacities carried into this flush.</param>
     /// <param name="range">The encoded range whose CPU-side demand estimates provide minimum capacities.</param>
     /// <param name="maxStorageBufferBindingSize">The device-reported maximum size of one storage-buffer binding, used to cap conservative estimates.</param>
-    /// <returns>The retained capacities raised to the range's known CPU-side lower bounds.</returns>
+    /// <returns>The retained capacities raised to the CPU-side upper bounds of the range.</returns>
     private static WebGPUSceneBumpSizes SeedSceneBumpSizes(WebGPUSceneBumpSizes currentSizes, WebGPUSceneRange range, ulong maxStorageBufferBindingSize)
         => SeedSceneBumpSizes(
             currentSizes,
@@ -2682,16 +3175,26 @@ internal static class WebGPUSceneDispatch
             range.EstimatedTileCrossings,
             range.EstimatedPtclWords,
             range.EstimatedBinFootprint,
+            range.EstimatedPathTiles,
+            range.EstimatedBlendSpillSlots,
             (long)((range.TargetBounds.Width + 15) / 16) * ((range.TargetBounds.Height + 15) / 16),
             maxStorageBufferBindingSize);
 
     /// <summary>
-    /// Raises scratch capacities to CPU-side lower bounds derived from encode-time demand
-    /// estimates. Tile crossings bound the segment, segment-count, and path-tile records; the
-    /// bin footprint bounds binning records; the PTCL budget derives from crossings. Estimates
-    /// are conservative upper bounds, so each is capped at the device binding limit; the GPU
-    /// overflow protocol remains the safety net for any underestimate.
+    /// Raises scratch capacities to the upper bounds that the encoder computed:
+    /// <list type="bullet">
+    /// <item><description>Tile crossings bound the segment and segment-count records.</description></item>
+    /// <item><description>The path-tile bound bounds the path-tile records.</description></item>
+    /// <item><description>The bin footprint bounds the binning records.</description></item>
+    /// <item><description>The PTCL and blend-spill bounds bound those buffers.</description></item>
+    /// </list>
     /// </summary>
+    /// <remarks>
+    /// The per-chunk buffers are not capped at the binding limit. A bound above the limit fails
+    /// binding validation, and the scene then renders in tile-row chunks, each sized by
+    /// <see cref="GetChunkBumpSizes(WebGPUSceneBumpSizes, WebGPUEncodedScene, WebGPUSceneChunkWindow)"/>.
+    /// The binning buffer does not shrink with a chunk, so it stays capped at the limit.
+    /// </remarks>
     /// <param name="currentSizes">The persisted scratch capacities carried into this flush.</param>
     /// <param name="lineCount">The encoded (or GPU-expansion estimated) line count.</param>
     /// <param name="totalPathRowCount">The estimated sparse path-row count.</param>
@@ -2699,9 +3202,11 @@ internal static class WebGPUSceneDispatch
     /// <param name="estimatedTileCrossings">The CPU-side upper bound for tile-boundary crossings.</param>
     /// <param name="estimatedPtclWords">The CPU-side upper bound for the dynamic PTCL words those crossings write.</param>
     /// <param name="estimatedBinFootprint">The CPU-side upper bound for per-(draw, bin) records.</param>
-    /// <param name="targetTileCount">The number of tiles in the target, each of which can leave one partial PTCL chunk.</param>
+    /// <param name="estimatedPathTiles">The CPU-side upper bound for path-tile records.</param>
+    /// <param name="estimatedBlendSpillSlots">The CPU-side upper bound for blend-spill slots.</param>
+    /// <param name="targetTileCount">The number of tiles in the target.</param>
     /// <param name="maxStorageBufferBindingSize">The device-reported maximum size of one storage-buffer binding.</param>
-    /// <returns>The retained capacities raised to the known CPU-side lower bounds.</returns>
+    /// <returns>The retained capacities raised to the CPU-side upper bounds.</returns>
     private static WebGPUSceneBumpSizes SeedSceneBumpSizes(
         WebGPUSceneBumpSizes currentSizes,
         int lineCount,
@@ -2710,41 +3215,68 @@ internal static class WebGPUSceneDispatch
         long estimatedTileCrossings,
         long estimatedPtclWords,
         long estimatedBinFootprint,
+        long estimatedPathTiles,
+        long estimatedBlendSpillSlots,
         long targetTileCount,
         ulong maxStorageBufferBindingSize)
     {
         uint lineFloor = AddSizingSlack(checked((uint)Math.Max(lineCount, 1)));
         uint pathRowFloor = checked((uint)Math.Max(totalPathRowCount, pathCount));
 
-        uint segCountFloor = Math.Max(
-            ClampEstimate(estimatedTileCrossings, maxStorageBufferBindingSize, (uint)Unsafe.SizeOf<GpuSegmentCount>()),
-            lineFloor);
-        uint segmentFloor = Math.Max(
-            ClampEstimate(estimatedTileCrossings, maxStorageBufferBindingSize, (uint)Unsafe.SizeOf<GpuPathSegment>()),
-            lineFloor);
-        uint pathTileFloor = Math.Max(
-            ClampEstimate(estimatedTileCrossings, maxStorageBufferBindingSize, (uint)Unsafe.SizeOf<GpuPathTile>()),
-            pathRowFloor);
+        // Each tile crossing writes one segment count and one segment, so one floor sizes both.
+        uint segmentFloor = Math.Max(ToBoundCount(estimatedTileCrossings), lineFloor);
+
+        // tile_alloc gives each path row the span of its touched tiles, so the path-tile bound of
+        // each draw (its clipped tile area or its row-span bound) bounds the path tiles.
+        uint pathTileFloor = Math.Max(ToBoundCount(estimatedPathTiles), pathRowFloor);
+        uint blendSpillFloor = ToBoundCount(estimatedBlendSpillSlots);
         uint binningFloor = ClampEstimate(estimatedBinFootprint, maxStorageBufferBindingSize, sizeof(uint));
-        long ptclWords = ((estimatedPtclWords * 105L) / 100L) + (targetTileCount * PtclChunkWords);
-        uint ptclFloor = ClampEstimate(ptclWords, maxStorageBufferBindingSize, sizeof(uint));
+        uint ptclFloor = ToBoundCount(GetPtclChunkBound(estimatedPtclWords, targetTileCount));
 
         return new WebGPUSceneBumpSizes(
             Math.Max(currentSizes.Lines, lineFloor),
             Math.Max(currentSizes.Binning, binningFloor),
             Math.Max(currentSizes.PathRows, pathRowFloor),
             Math.Max(currentSizes.PathTiles, pathTileFloor),
-            Math.Max(currentSizes.SegCounts, segCountFloor),
+            Math.Max(currentSizes.SegCounts, segmentFloor),
             Math.Max(currentSizes.Segments, segmentFloor),
-            currentSizes.BlendSpill,
+            Math.Max(currentSizes.BlendSpill, blendSpillFloor),
             Math.Max(currentSizes.Ptcl, ptclFloor));
     }
 
     /// <summary>
-    /// Converts one conservative CPU-side demand estimate into a seed capacity: sizing slack is
-    /// applied, then the count is capped so the resulting buffer cannot exceed the device's
-    /// storage-buffer binding limit (an over-cap estimate must not push an otherwise-fitting
-    /// scene onto the chunked path).
+    /// Bounds the dynamic PTCL words that coarse allocates for a set of tiles.
+    /// </summary>
+    /// <remarks>
+    /// A tile with j chunks writes at least 61 + 244 * (j - 1) command words, so it has at most
+    /// 1 + (W_t - 61) / 244 chunks. Over the tiles that start a chunk, the chunk count is at most
+    /// N + (W - 61 * N) / 244, with W the command words of the tiles and N the number of these
+    /// tiles. This grows with N, and N is at most the tile count and at most W / 61. Each chunk is
+    /// 256 words.
+    /// </remarks>
+    /// <param name="commandWords">The bound on the command words of all the tiles.</param>
+    /// <param name="tileCount">The number of tiles.</param>
+    /// <returns>The bound in words.</returns>
+    private static long GetPtclChunkBound(long commandWords, long tileCount)
+    {
+        long chunkTiles = Math.Min(tileCount, commandWords / PtclFirstChunkCommandWords);
+        long chunks = chunkTiles + ((commandWords - (PtclFirstChunkCommandWords * chunkTiles)) / PtclChunkCommandWords);
+        return chunks * PtclChunkWords;
+    }
+
+    /// <summary>
+    /// Converts one bound into an element count. A bound above the 32-bit range keeps the
+    /// largest count, which fails binding validation in the same way.
+    /// </summary>
+    /// <param name="bound">The element-count bound.</param>
+    /// <returns>The element count.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint ToBoundCount(long bound)
+        => (uint)Math.Clamp(bound, 0L, uint.MaxValue);
+
+    /// <summary>
+    /// Converts one CPU-side estimate for a buffer that does not shrink with a chunk into a seed
+    /// capacity, capped so the buffer cannot exceed the device's storage-buffer binding limit.
     /// </summary>
     /// <param name="estimate">The conservative element-count estimate.</param>
     /// <param name="maxStorageBufferBindingSize">The device-reported maximum size of one storage-buffer binding.</param>
@@ -2761,6 +3293,45 @@ internal static class WebGPUSceneDispatch
         // the element count that keeps the buffer within one storage binding.
         ulong maxElements = maxStorageBufferBindingSize / Math.Max(elementByteSize, 1U);
         return (uint)Math.Min((ulong)estimate, Math.Min(maxElements, uint.MaxValue));
+    }
+
+    /// <summary>
+    /// Determines whether the scratch capacities of a staged scene are upper bounds of its GPU
+    /// scratch use. Such a render cannot overflow, so it needs no status readback.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="SeedSceneBumpSizes(WebGPUSceneBumpSizes, WebGPUEncodedScene, ulong)"/> raises every
+    /// capacity to the bound that the encoder computed for the whole scene, and
+    /// <see cref="GetChunkBumpSizes(WebGPUSceneBumpSizes, WebGPUEncodedScene, WebGPUSceneChunkWindow)"/>
+    /// raises every chunk capacity to the bound of its rows. These cases have no bound:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>A range of an ordered scene. Its origin can move the tile grid of its
+    /// data, and the ordered path reads its status in its transaction.</description></item>
+    /// <item><description>A binning bound above the binding limit. Binning does not shrink with a
+    /// chunk, so its capacity is capped at the limit.</description></item>
+    /// <item><description>A chunked scene without row bounds. Its chunks get a share of the scene
+    /// capacities.</description></item>
+    /// </list>
+    /// </remarks>
+    /// <param name="stagedScene">The staged scene.</param>
+    /// <returns><see langword="true"/> when the capacities are upper bounds; otherwise, <see langword="false"/>.</returns>
+    private static bool HasScratchBounds(in WebGPUStagedScene stagedScene)
+    {
+        if (stagedScene.Range.HasValue)
+        {
+            return false;
+        }
+
+        WebGPUEncodedScene scene = stagedScene.EncodedScene;
+        ulong binningLimit = Math.Min(stagedScene.FlushContext.ScratchBufferBindingSizeLimit / sizeof(uint), uint.MaxValue);
+        if ((ulong)Math.Max(scene.EstimatedBinFootprint, 0L) > binningLimit)
+        {
+            return false;
+        }
+
+        return !IsChunkableBindingFailure(stagedScene.BindingLimitFailure.Buffer) || scene.RowBounds is not null;
     }
 
     /// <summary>
@@ -3715,7 +4286,9 @@ internal static class WebGPUSceneDispatch
     /// </summary>
     /// <remarks>
     /// Lines and binning are produced by the shared full-scene stages and are already scene-sized,
-    /// so they pass through unscaled.
+    /// so they pass through unscaled. The path rows, tiles and segments of a chunk include one tile
+    /// row on each side of it, so they scale by the rows of <see cref="GetChunkTileRowHeight"/>, the
+    /// inverse of <see cref="ScaleChunkBumpSizes(WebGPUSceneBumpSizes, WebGPUEncodedScene, uint)"/>.
     /// </remarks>
     /// <param name="chunkSizes">The chunk-local capacities or actuals to expand.</param>
     /// <param name="fullTileHeight">The full tile-row height of the chunked target range.</param>
@@ -3723,15 +4296,18 @@ internal static class WebGPUSceneDispatch
     /// <returns>The full-scene equivalent budget.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static WebGPUSceneBumpSizes ExpandChunkBumpSizesToSceneBudget(WebGPUSceneBumpSizes chunkSizes, uint fullTileHeight, uint chunkTileHeight)
-        => new(
+    {
+        uint tileRowHeight = GetChunkTileRowHeight(chunkTileHeight, fullTileHeight);
+        return new(
             chunkSizes.Lines,
             chunkSizes.Binning,
-            ScaleChunkRequirementToSceneBudget(chunkSizes.PathRows, fullTileHeight, chunkTileHeight),
-            ScaleChunkRequirementToSceneBudget(chunkSizes.PathTiles, fullTileHeight, chunkTileHeight),
-            ScaleChunkRequirementToSceneBudget(chunkSizes.SegCounts, fullTileHeight, chunkTileHeight),
-            ScaleChunkRequirementToSceneBudget(chunkSizes.Segments, fullTileHeight, chunkTileHeight),
+            ScaleChunkRequirementToSceneBudget(chunkSizes.PathRows, fullTileHeight, tileRowHeight),
+            ScaleChunkRequirementToSceneBudget(chunkSizes.PathTiles, fullTileHeight, tileRowHeight),
+            ScaleChunkRequirementToSceneBudget(chunkSizes.SegCounts, fullTileHeight, tileRowHeight),
+            ScaleChunkRequirementToSceneBudget(chunkSizes.Segments, fullTileHeight, tileRowHeight),
             ScaleChunkRequirementToSceneBudget(chunkSizes.BlendSpill, fullTileHeight, chunkTileHeight),
             ScaleChunkRequirementToSceneBudget(chunkSizes.Ptcl, fullTileHeight, chunkTileHeight));
+    }
 
     /// <summary>
     /// Scales one chunk-local requirement up to a full-scene budget, rounding up so the scaled
@@ -3757,7 +4333,6 @@ internal static class WebGPUSceneDispatch
     /// <param name="resources">The staged-scene resource set that provides the scene, draw-bbox, and path buffers.</param>
     /// <param name="sceneBufferSize">The byte length of the packed scene buffer binding.</param>
     /// <param name="drawBboxBufferSize">The byte length of the draw-bbox buffer binding.</param>
-    /// <param name="pathBboxBufferSize">The byte length of the original path-bbox buffer binding.</param>
     /// <param name="pathBufferSize">The byte length of the per-path buffer binding.</param>
     /// <param name="pathRowBuffer">The sparse path-row buffer to populate.</param>
     /// <param name="pathRowBufferSize">The byte length of the sparse path-row buffer binding.</param>
@@ -3771,7 +4346,6 @@ internal static class WebGPUSceneDispatch
         WebGPUSceneResourceSet resources,
         nuint sceneBufferSize,
         nuint drawBboxBufferSize,
-        nuint pathBboxBufferSize,
         nuint pathBufferSize,
         WGPUBufferImpl* pathRowBuffer,
         nuint pathRowBufferSize,
@@ -3779,16 +4353,15 @@ internal static class WebGPUSceneDispatch
         uint dispatchX,
         out string? error)
     {
-        WGPUBindGroupEntry* entries = stackalloc WGPUBindGroupEntry[7];
+        WGPUBindGroupEntry* entries = stackalloc WGPUBindGroupEntry[6];
         entries[0] = CreateBufferBinding(0, resources.HeaderBuffer, (nuint)sizeof(GpuSceneConfig));
         entries[1] = CreateBufferBinding(1, resources.SceneBuffer, sceneBufferSize);
         entries[2] = CreateBufferBinding(2, resources.DrawBboxBuffer, drawBboxBufferSize);
         entries[3] = CreateBufferBinding(3, bumpBuffer, (nuint)sizeof(GpuSceneBumpAllocators));
         entries[4] = CreateBufferBinding(4, resources.PathBuffer, pathBufferSize);
         entries[5] = CreateBufferBinding(5, pathRowBuffer, pathRowBufferSize);
-        entries[6] = CreateBufferBinding(6, resources.PathBboxBuffer, pathBboxBufferSize);
 
-        if (!recording.TryRecord(WebGPUSceneShaderId.PathRowAlloc, entries, 7, dispatchX, 1, 1, out error))
+        if (!recording.TryRecord(WebGPUSceneShaderId.PathRowAlloc, entries, 6, dispatchX, 1, 1, out error))
         {
             return false;
         }

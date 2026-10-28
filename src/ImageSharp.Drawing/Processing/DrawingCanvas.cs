@@ -457,9 +457,13 @@ public abstract partial class DrawingCanvas : IDisposable
     /// canvas queue.
     /// </summary>
     /// <remarks>
-    /// The active clip range is closed before the scene is built and reopened afterwards, so this
-    /// acts as an ordering boundary in the recorded timeline. Image resources retained for the
-    /// sealed commands are transferred to the returned scene, which owns and disposes them.
+    /// The canvas closes the active clips and layers at the end of the returned scene, and opens
+    /// them again after it. This call is therefore an ordering boundary in the recorded timeline.
+    /// A layer that is open at this call composites one time at the end of the returned scene. Its
+    /// later content composites as a second layer with the same options. Scenes recorded through
+    /// <see cref="RenderScene"/> are part of the returned scene, in their recorded order. The caller
+    /// still owns those scenes and must keep them alive while the returned scene is in use. The
+    /// returned scene owns the image resources of the sealed commands and disposes them.
     /// </remarks>
     /// <returns>The created backend scene.</returns>
     public abstract DrawingBackendScene CreateScene();
@@ -468,10 +472,11 @@ public abstract partial class DrawingCanvas : IDisposable
     /// Records a previously created backend scene into this canvas' command timeline.
     /// </summary>
     /// <remarks>
-    /// The active command range is sealed before the scene is inserted so the scene renders in
-    /// submission order relative to the commands recorded around it. Like other recorded work,
-    /// the scene is replayed into the target frame when the root canvas is disposed or otherwise
-    /// flushed, not at the point of this call.
+    /// The scene renders in submission order relative to the commands recorded around it. Inside
+    /// an open layer, the scene renders into that layer, the same as commands drawn there. Outside
+    /// every layer, the active clips do not apply to the scene. Inside a layer, the clips opened in
+    /// that layer do not apply to the scene. The scene renders into the target frame with the other
+    /// recorded work, not at the point of this call. The caller must keep the scene alive until then.
     /// </remarks>
     /// <param name="scene">The backend scene to render.</param>
     public abstract void RenderScene(DrawingBackendScene scene);
@@ -485,7 +490,7 @@ public abstract partial class DrawingCanvas : IDisposable
     /// are replayed into the target only when the root canvas is disposed, or when they are
     /// lowered explicitly through <see cref="CreateScene"/>, <see cref="RenderScene"/> or
     /// <see cref="CopyPixelsFrom"/>. Use this to establish an ordering boundary in the recorded
-    /// timeline without ending the canvas.
+    /// timeline without ending the canvas. Inside an open layer, this method does nothing.
     /// </remarks>
     public abstract void Flush();
 

@@ -35,9 +35,9 @@ public sealed unsafe partial class WebGPUDrawingBackend
         Guard.NotNull(target, nameof(target));
         Guard.NotNull(destination.Buffer, nameof(destination));
 
-        // CPU reads observe content as final, so every deferred overflow readback must be
-        // resolved first: an overflowed offscreen flush is corrected by its parked re-render
-        // before the copy below is recorded, and queue ordering makes the copy see the fix.
+        // An offscreen render checks its scratch status before it returns, so its pixels are final.
+        // The parked statuses of presentation flushes resolve here, and their observed demand grows
+        // the scratch capacities.
         this.HarvestPendingSchedulingStatuses(scene: null, drainAll: true);
 
         // Readback is only available for native WebGPU targets with valid interop handles.

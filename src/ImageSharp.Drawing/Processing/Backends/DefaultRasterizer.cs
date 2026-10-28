@@ -66,10 +66,26 @@ internal static partial class DefaultRasterizer
     private const int FixedHalf = FixedOne >> 1;
 
     /// <summary>
-    /// Maximum number of crossings stored for one column in a 16-row band. Later crossings do not
-    /// take part in the secondary column pass. The primary row result is unchanged.
+    /// Maximum number of crossings stored for one column in a 16-row band and its half-pixel halos.
+    /// A column with more crossings does not take part in the secondary column pass. The primary row
+    /// result is unchanged. Must match COLUMN_CROSSING_CAPACITY in fine.wgsl.
     /// </summary>
     private const int ColumnCrossingCapacity = 16;
+
+    /// <summary>
+    /// The context rasterizes the lines of its own band.
+    /// </summary>
+    private const int ColumnHaloNone = 0;
+
+    /// <summary>
+    /// The context reads the column halo from the lines of the band above.
+    /// </summary>
+    private const int ColumnHaloAbove = 1;
+
+    /// <summary>
+    /// The context reads the column halo from the lines of the band below.
+    /// </summary>
+    private const int ColumnHaloBelow = 2;
 
     /// <summary>
     /// Maximum number of pixels produced by the secondary column pass for one band. The fixed
@@ -88,14 +104,48 @@ internal static partial class DefaultRasterizer
     private const int ProfileIdMask = (1 << ProfileIdBits) - 1;
 
     /// <summary>
-    /// The bit inside a packed crossing that records a positive crossing direction.
+    /// The bit inside a packed column crossing that records a positive crossing direction.
     /// </summary>
     private const long CrossingDirectionBit = 1L << ProfileIdBits;
 
     /// <summary>
-    /// The left shift that positions a crossing coordinate above its direction and profile bits.
+    /// The left shift that positions a column crossing coordinate above its direction and profile bits.
     /// </summary>
     private const int CrossingShift = ProfileIdBits + 1;
+
+    /// <summary>
+    /// The bit inside a packed row crossing that records an edge whose X increases downward. The
+    /// column seed needs it for an edge that passes exactly through a column centre. It is the
+    /// lowest bit, so it does not change the order of the sorted row crossings.
+    /// </summary>
+    private const long RowCrossingFallingRightBit = 1L;
+
+    /// <summary>
+    /// The left shift that positions the profile identifier inside a packed row crossing.
+    /// </summary>
+    private const int RowCrossingProfileShift = 1;
+
+    /// <summary>
+    /// The bit inside a packed row crossing that records a downward edge.
+    /// </summary>
+    private const long RowCrossingDirectionBit = 1L << (ProfileIdBits + 1);
+
+    /// <summary>
+    /// The bit inside a packed row crossing that records a vertical edge. A vertical edge does not
+    /// own a pixel centre that lies exactly on it when the edge opens a filled interval.
+    /// </summary>
+    private const long RowCrossingVerticalBit = 1L << (ProfileIdBits + 2);
+
+    /// <summary>
+    /// The left shift that positions a row crossing coordinate above its vertical, direction, profile,
+    /// and slope bits.
+    /// </summary>
+    /// <remarks>
+    /// The sort key of crossings at one position is the vertical bit, then the direction bit, then
+    /// the profile identifier. The WebGPU row lists use the same key, so both backends find the same
+    /// intervals when crossings coincide.
+    /// </remarks>
+    private const int RowCrossingShift = ProfileIdBits + 3;
 
     /// <summary>
     /// The doubled cell area of one fully covered pixel (2 * 256 * 256), one 24.8 unit of winding.
@@ -166,6 +216,8 @@ internal static partial class DefaultRasterizer
                 LineArrayX32Y16Block? lines = item.GetLineArrayX32();
                 lines?.IterateTagged(item.GetFirstBlockLineCount(), ref context);
             }
+
+            CaptureColumnHalos(ref context, item.Rasterizable, item.LocalRowIndex, tagged: true);
         }
         else if (item.Rasterizable.IsX16)
         {
@@ -180,6 +232,54 @@ internal static partial class DefaultRasterizer
 
         context.EmitCoverageRows(bandInfo.DestinationTop, bandInfo.DestinationLeft, scanline, ref rowHandler);
         context.ResetTouchedRows();
+    }
+
+    /// <summary>
+    /// Replays the lines of the two neighbouring bands so the aliased column pass sees the column
+    /// crossings within half a pixel above and below the band.
+    /// </summary>
+    /// <param name="context">The worker-local scanner context of the band.</param>
+    /// <param name="rasterizable">The retained geometry that owns the band.</param>
+    /// <param name="localRowIndex">The band's local row index within <paramref name="rasterizable"/>.</param>
+    /// <param name="tagged">Whether the retained lines carry profile tags.</param>
+    public static void CaptureColumnHalos(ref Context context, RasterizableGeometry rasterizable, int localRowIndex, bool tagged)
+    {
+        for (int neighbor = localRowIndex - 1; neighbor <= localRowIndex + 1; neighbor += 2)
+        {
+            if ((uint)neighbor >= (uint)rasterizable.RowBandCount)
+            {
+                continue;
+            }
+
+            context.SetColumnHalo(neighbor < localRowIndex ? ColumnHaloAbove : ColumnHaloBelow);
+            int firstBlockLineCount = rasterizable.GetFirstBlockLineCountForRow(neighbor);
+            if (rasterizable.IsX16)
+            {
+                LineArrayX16Y16Block? lines = rasterizable.GetLinesX16ForRow(neighbor);
+                if (tagged)
+                {
+                    lines?.IterateTagged(firstBlockLineCount, ref context);
+                }
+                else
+                {
+                    lines?.Iterate(firstBlockLineCount, ref context);
+                }
+            }
+            else
+            {
+                LineArrayX32Y16Block? lines = rasterizable.GetLinesX32ForRow(neighbor);
+                if (tagged)
+                {
+                    lines?.IterateTagged(firstBlockLineCount, ref context);
+                }
+                else
+                {
+                    lines?.Iterate(firstBlockLineCount, ref context);
+                }
+            }
+        }
+
+        context.SetColumnHalo(ColumnHaloNone);
     }
 
     /// <summary>
@@ -279,6 +379,30 @@ internal static partial class DefaultRasterizer
         => throw new ImageProcessingException("The rasterizer interest bounds are too large for DefaultRasterizer buffers.");
 
     /// <summary>
+    /// Gets the destination bounds that one item rasterizes.
+    /// </summary>
+    /// <remarks>
+    /// Aliased coverage sets the midpoint pixel of a thin feature that lies between two pixel
+    /// centres. Such a feature can cross the edge of the interest, and the pixel that it sets inside
+    /// the interest then depends on the geometry up to one pixel outside it. Aliased items therefore
+    /// rasterize one more pixel on each side of the interest. The coverage row handler clips every
+    /// span to the interest of the band, so the extra pixels are never written.
+    /// </remarks>
+    /// <param name="options">The rasterizer options carrying the interest bounds.</param>
+    /// <returns>The bounds to rasterize.</returns>
+    private static Rectangle GetRasterBounds(in RasterizerOptions options)
+        => options.RasterizationMode == RasterizationMode.Aliased ? Rectangle.Inflate(options.Interest, 1, 1) : options.Interest;
+
+    /// <summary>
+    /// Gets the row band that holds a destination row. Aliased bounds can start one row above the
+    /// target, so the row can be negative.
+    /// </summary>
+    /// <param name="row">The destination row.</param>
+    /// <returns>The row band index.</returns>
+    private static int GetRowBandIndex(int row)
+        => row >= 0 ? row / PreferredRowHeight : ((row + 1) / PreferredRowHeight) - 1;
+
+    /// <summary>
     /// Creates retained row-local raster payload for one lowered geometry.
     /// </summary>
     /// <param name="geometry">The lowered linear geometry to linearize into retained line blocks.</param>
@@ -309,7 +433,7 @@ internal static partial class DefaultRasterizer
             (int)MathF.Ceiling(translatedBounds.Right) + 1,
             (int)MathF.Ceiling(translatedBounds.Bottom));
 
-        Rectangle clippedBounds = Rectangle.Intersect(geometryBounds, options.Interest);
+        Rectangle clippedBounds = Rectangle.Intersect(geometryBounds, GetRasterBounds(options));
         if (clippedBounds.Width <= 0 || clippedBounds.Height <= 0)
         {
             return null;
@@ -317,8 +441,8 @@ internal static partial class DefaultRasterizer
 
         int width = clippedBounds.Width;
         int height = clippedBounds.Height;
-        int firstRowBandIndex = clippedBounds.Top / PreferredRowHeight;
-        int lastRowBandIndex = (clippedBounds.Bottom - 1) / PreferredRowHeight;
+        int firstRowBandIndex = GetRowBandIndex(clippedBounds.Top);
+        int lastRowBandIndex = GetRowBandIndex(clippedBounds.Bottom - 1);
         int rowBandCount = lastRowBandIndex - firstRowBandIndex + 1;
         int wordsPerRow = BitVectorsForMaxBitCount(width);
         int coverStride = checked(width << 1);
@@ -368,7 +492,8 @@ internal static partial class DefaultRasterizer
                     options.IntersectionRule,
                     options.RasterizationMode,
                     options.CoverageBoost,
-                    hasStartCovers);
+                    hasStartCovers,
+                    options.Interest);
             }
 
             return new RasterizableGeometry(
@@ -426,7 +551,8 @@ internal static partial class DefaultRasterizer
                     options.IntersectionRule,
                     options.RasterizationMode,
                     options.CoverageBoost,
-                    hasStartCovers);
+                    hasStartCovers,
+                    options.Interest);
             }
 
             return new RasterizableGeometry(
@@ -511,6 +637,7 @@ internal static partial class DefaultRasterizer
         private RasterizationMode rasterizationMode;
         private float coverageBoost;
         private int touchedRowCount;
+        private int columnHaloMode;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Context"/> struct.
@@ -575,6 +702,7 @@ internal static partial class DefaultRasterizer
             this.rasterizationMode = rasterizationMode;
             this.coverageBoost = 0F;
             this.touchedRowCount = 0;
+            this.columnHaloMode = ColumnHaloNone;
         }
 
         /// <summary>
@@ -1028,23 +1156,25 @@ internal static partial class DefaultRasterizer
                 int row = this.touchedRows[i];
                 int count = this.crossingCounts[row];
 
-                // startCover contains signed vertical cover from edges left of this band. One full
-                // pixel of cover represents one crossing, so round it to the winding at the first
-                // pixel centre before processing the retained crossings.
-                int winding = NearestCrossingCount(this.startCover[row]);
+                // In aliased mode, the linearizer stores one full cover unit in startCover for each
+                // row centre that an edge left of this band crosses, so the value is the winding at
+                // the first pixel centre. It uses the cell sign, y0 - y1, and CaptureCrossings
+                // counts a downward edge as +1, so the value changes sign before it joins the
+                // crossings. Otherwise an edge clipped into startCover and an edge kept as a
+                // crossing add instead of cancel, and the fill runs through the gaps between contours.
+                int winding = -NearestCrossingCount(this.startCover[row]);
                 if (this.intersectionRule == IntersectionRule.EvenOdd)
                 {
                     winding &= 1;
                 }
 
-                if (count == 0)
+                // A row with no centre crossing and a zero winding can still hold a horizontal
+                // feature that lies between two row centres. Only the column pass sees that
+                // feature, so such a row continues to the dropout merge below.
+                if (count == 0 && winding != 0)
                 {
-                    if (winding != 0)
-                    {
-                        scanline[..this.width].Fill(1F);
-                        rowHandler.Handle(destinationTop + row, destinationLeft, scanline[..this.width]);
-                    }
-
+                    scanline[..this.width].Fill(1F);
+                    rowHandler.Handle(destinationTop + row, destinationLeft, scanline[..this.width]);
                     continue;
                 }
 
@@ -1073,9 +1203,9 @@ internal static partial class DefaultRasterizer
                     {
                         long crossing = rowCrossings[c];
                         currentCrossing = crossing;
-                        x = (int)(crossing >> CrossingShift);
+                        x = (int)(crossing >> RowCrossingShift);
                         winding = this.intersectionRule == IntersectionRule.NonZero
-                            ? winding + (((crossing & CrossingDirectionBit) != 0) ? 1 : -1)
+                            ? winding + (((crossing & RowCrossingDirectionBit) != 0) ? 1 : -1)
                             : winding ^ 1;
                     }
                     else
@@ -1103,21 +1233,34 @@ internal static partial class DefaultRasterizer
                         continue;
                     }
 
-                    // Coverage is closed at both ends. CeilingPixel finds the first centre at or
+                    // Coverage includes a centre on the closing edge. It includes a centre on the
+                    // opening edge only when that edge is not vertical. A centre on a vertical edge
+                    // therefore belongs to the shape left of that edge, and a 1 pixel wide
+                    // vertical feature sets one column. CeilingPixel finds the first centre at or
                     // after the start; FloorPixel finds the last centre at or before the end.
-                    int first = CeilingPixel(intervalStart);
+                    // An interval opened by the start cover has no crossing; long.MinValue has the
+                    // vertical bit clear, and its start is the band's left edge, which is never a
+                    // centre.
+                    int first = (intervalStartCrossing & RowCrossingVerticalBit) != 0
+                        ? FloorPixel(intervalStart) + 1
+                        : CeilingPixel(intervalStart);
+
                     int last = FloorPixel(x);
                     if (last < first)
                     {
                         // This interval contains no pixel centre. Normally, preserve the thin
                         // feature by lighting the pixel that contains its midpoint. Do not light it
-                        // when the two boundary profiles identify a terminating contour tip.
-                        if (intervalStartCrossing != long.MinValue && currentCrossing != long.MinValue && IsStubInterval(
+                        // when the two boundary profiles identify a terminating contour tip. An
+                        // interval opened by the start cover or closed at the right clip edge
+                        // continues outside the band, so its visible part is not a thin feature.
+                        // The WebGPU row walk applies the same rule to an interval that is open at
+                        // either end of its crossing list.
+                        if (intervalStartCrossing == long.MinValue || currentCrossing == long.MinValue || IsStubInterval(
                                 this.profiles,
                                 xAxis: false,
                                 this.rowProfileTranslate,
-                                intervalStartCrossing,
-                                currentCrossing,
+                                (int)(intervalStartCrossing >> RowCrossingProfileShift) & ProfileIdMask,
+                                (int)(currentCrossing >> RowCrossingProfileShift) & ProfileIdMask,
                                 ((destinationTop + row) << FixedShift) + FixedHalf,
                                 x - intervalStart))
                         {
@@ -1162,6 +1305,32 @@ internal static partial class DefaultRasterizer
                 {
                     int dropColumn = columnDropouts[dropoutStart++] & 0xFFFF;
                     AccumulateRun(scanline, dropColumn, dropColumn, ref runStart, ref runEnd, destinationTop + row, destinationLeft, ref rowHandler);
+                }
+
+                if (runStart >= 0)
+                {
+                    scanline[..(runEnd - runStart)].Fill(1F);
+                    rowHandler.Handle(destinationTop + row, destinationLeft + runStart, scanline[..(runEnd - runStart)]);
+                }
+            }
+
+            // A column result can also lie in a row that no edge touched, when the edges that
+            // bound the feature are horizontal or lie outside the band. The loop above does not
+            // visit that row, so its results are emitted here. Such a row has no crossing and no
+            // start cover, so its winding is zero and the column results are its only coverage.
+            for (int d = 0; d < columnDropouts.Length;)
+            {
+                int row = columnDropouts[d] >> 16;
+                bool touched = this.rowTouched[row] != 0;
+                int runStart = -1;
+                int runEnd = -1;
+                for (; d < columnDropouts.Length && (columnDropouts[d] >> 16) == row; d++)
+                {
+                    if (!touched)
+                    {
+                        int dropColumn = columnDropouts[d] & 0xFFFF;
+                        AccumulateRun(scanline, dropColumn, dropColumn, ref runStart, ref runEnd, destinationTop + row, destinationLeft, ref rowHandler);
+                    }
                 }
 
                 if (runStart >= 0)
@@ -1253,8 +1422,8 @@ internal static partial class DefaultRasterizer
         /// <param name="profiles">The geometry-space profile data.</param>
         /// <param name="xAxis">Whether to read the X-axis profile table.</param>
         /// <param name="translate">The absolute translation applied to the profile extents.</param>
-        /// <param name="enterCrossing">The packed crossing that opened the interval.</param>
-        /// <param name="exitCrossing">The packed crossing that closed the interval.</param>
+        /// <param name="a">The profile identifier of the crossing that opened the interval.</param>
+        /// <param name="b">The profile identifier of the crossing that closed the interval.</param>
         /// <param name="centre">The scanline's centre coordinate in 24.8 fixed-point.</param>
         /// <param name="intervalSpan">The interval's length along the scanline in 24.8 fixed-point.</param>
         /// <returns>
@@ -1264,14 +1433,11 @@ internal static partial class DefaultRasterizer
             LinearGeometryProfiles profiles,
             bool xAxis,
             float translate,
-            long enterCrossing,
-            long exitCrossing,
+            int a,
+            int b,
             int centre,
             int intervalSpan)
         {
-            int a = (int)(enterCrossing & ProfileIdMask);
-            int b = (int)(exitCrossing & ProfileIdMask);
-
             // The sentinel means that the segment has no usable profile. Without both profiles,
             // the interval cannot be identified as a terminating tip and must remain visible.
             if (a == ProfileIdMask || b == ProfileIdMask || profiles.IsEmpty)
@@ -1391,6 +1557,65 @@ internal static partial class DefaultRasterizer
             => FloatToFixed24Dot8(Math.Clamp(extent + translate, -8388608F, 8388607F));
 
         /// <summary>
+        /// Selects whether lines replayed into this context belong to the band or to one of its
+        /// two neighbouring bands.
+        /// </summary>
+        /// <remarks>
+        /// A line from a neighbouring band only adds the column crossings that lie within half a pixel
+        /// of this band. The aliased column pass needs them to find a thin horizontal feature that
+        /// touches or crosses the band edge.
+        /// </remarks>
+        /// <param name="mode">
+        /// <see cref="ColumnHaloNone"/>, <see cref="ColumnHaloAbove"/>, or <see cref="ColumnHaloBelow"/>.
+        /// </param>
+        public void SetColumnHalo(int mode) => this.columnHaloMode = mode;
+
+        /// <summary>
+        /// Records the column crossings of one line from a neighbouring band that lie within half a
+        /// pixel of this band.
+        /// </summary>
+        /// <remarks>
+        /// The band above has the full row height, and the band below starts at this band's bottom,
+        /// so one offset moves the line into this band's coordinates. A horizontal edge exactly on the
+        /// band edge is already a line of both bands, so the halo leaves it out. A crossing of another
+        /// line exactly on the band edge belongs to one of the two line pieces only, so the halo keeps it.
+        /// </remarks>
+        /// <param name="x0">The segment's start X in 24.8 fixed-point.</param>
+        /// <param name="y0">The segment's start Y in 24.8 fixed-point, local to the neighbouring band.</param>
+        /// <param name="x1">The segment's end X in 24.8 fixed-point.</param>
+        /// <param name="y1">The segment's end Y in 24.8 fixed-point, local to the neighbouring band.</param>
+        /// <param name="xProfileId">The segment's x-profile identifier.</param>
+        private void CaptureColumnHaloCrossings(int x0, int y0, int x1, int y1, uint xProfileId)
+        {
+            bool horizontal = y0 == y1;
+            int bottom = this.height * FixedOne;
+            int offset;
+            int yLow;
+            int yHigh;
+            if (this.columnHaloMode == ColumnHaloAbove)
+            {
+                offset = -PreferredRowHeight * FixedOne;
+                yLow = -FixedHalf;
+                yHigh = horizontal ? 0 : 1;
+            }
+            else
+            {
+                offset = bottom;
+                yLow = horizontal ? bottom + 1 : bottom;
+                yHigh = bottom + FixedHalf;
+            }
+
+            y0 += offset;
+            y1 += offset;
+            if (Math.Max(y0, y1) < yLow || Math.Min(y0, y1) >= yHigh)
+            {
+                return;
+            }
+
+            this.CaptureColumnCrossings(x0, y0, x1, y1, xProfileId, yLow, yHigh);
+        }
+
+        /// <summary>
         /// Records where one segment crosses the vertical centre line of each affected column.
         /// </summary>
         /// <param name="x0">The segment's start X in 24.8 fixed-point.</param>
@@ -1398,7 +1623,9 @@ internal static partial class DefaultRasterizer
         /// <param name="x1">The segment's end X in 24.8 fixed-point.</param>
         /// <param name="y1">The segment's end Y in 24.8 fixed-point.</param>
         /// <param name="xProfileId">The segment's x-profile identifier.</param>
-        private void CaptureColumnCrossings(int x0, int y0, int x1, int y1, uint xProfileId)
+        /// <param name="yLow">The smallest band-local crossing Y to record.</param>
+        /// <param name="yHigh">The exclusive upper bound of the band-local crossing Y to record.</param>
+        private void CaptureColumnCrossings(int x0, int y0, int x1, int y1, uint xProfileId, int yLow, int yHigh)
         {
             if (x0 == x1)
             {
@@ -1423,9 +1650,17 @@ internal static partial class DefaultRasterizer
                     continue;
                 }
 
+                int y = InterpolateCrossing(y0, y1 - y0, sampleX - x0, x1 - x0);
+                if (y < yLow || y >= yHigh)
+                {
+                    continue;
+                }
+
+                // A count above the capacity marks an overflowed column, which the column pass skips.
                 int count = this.columnCrossingCounts[column];
                 if (count >= ColumnCrossingCapacity)
                 {
+                    this.columnCrossingCounts[column] = ColumnCrossingCapacity + 1;
                     continue;
                 }
 
@@ -1434,13 +1669,12 @@ internal static partial class DefaultRasterizer
                     this.touchedColumns[this.touchedColumnCount++] = column;
                 }
 
-                int y = y0 + (int)(((long)(y1 - y0) * (sampleX - x0)) / (x1 - x0));
-
-                // Column coordinates are band-local and need at most 13 bits in 24.8 form.
-                // The complete packed crossing therefore fits in one word, unlike row crossings
-                // whose X coordinate spans the full destination width.
+                // Column coordinates are band-local, from half a pixel above the band to half a
+                // pixel below it. One pixel of bias makes them positive, so they need at most 13
+                // bits in 24.8 form. The complete packed crossing therefore fits in one word, unlike
+                // row crossings whose X coordinate spans the full destination width.
                 this.columnCrossings[(column * ColumnCrossingCapacity) + count] =
-                    ((uint)y << CrossingShift) | (direction > 0 ? (uint)CrossingDirectionBit : 0U) | xProfileId;
+                    ((uint)(y + FixedOne) << CrossingShift) | (direction > 0 ? (uint)CrossingDirectionBit : 0U) | xProfileId;
 
                 this.columnCrossingCounts[column] = count + 1;
             }
@@ -1449,6 +1683,22 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Finds closed vertical intervals that contain no row centre.
         /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Each column walks its crossings from a known winding: the winding just above the centre of
+        /// row zero, at the column centre. Row zero's sorted crossings give that winding, because
+        /// they use the (top, bottom] rule that evaluates the row just above its centre. Every edge
+        /// left of the column centre counts. An edge through the column centre counts only when the
+        /// seed point is right of it: when the edge is vertical, or when its X increases downward.
+        /// </para>
+        /// <para>
+        /// From that seed the walk goes down through the band and the half-pixel halo below it, and
+        /// up through the top of the band and the half-pixel halo above it. A centre-free interval
+        /// lies between two consecutive row centres, so these halos contain both of its ends even
+        /// when it touches or crosses the band edge. Each band lights only the midpoint pixels in its
+        /// own rows, so the two bands that see one interval light it once.
+        /// </para>
+        /// </remarks>
         /// <param name="dropouts">The destination for packed midpoint pixel coordinates.</param>
         /// <param name="destinationLeft">Absolute destination X corresponding to column zero, used to compare the column centre with absolute profile ranges.</param>
         /// <returns>
@@ -1457,12 +1707,44 @@ internal static partial class DefaultRasterizer
         /// </returns>
         private readonly int CollectColumnDropouts(Span<int> dropouts, int destinationLeft)
         {
+            // Sorting the touched columns lets one pass over row zero's sorted crossings build each
+            // column's seed.
+            Span<int> columns = this.touchedColumns[..this.touchedColumnCount];
+            columns.Sort();
+
+            int rowZeroCount = this.crossingCounts[0];
+            Span<long> rowZero = this.crossings[..rowZeroCount];
+            rowZero.Sort();
+
+            int seed = -NearestCrossingCount(this.startCover[0]);
+            int nextRowCrossing = 0;
             int count = 0;
-            for (int i = 0; i < this.touchedColumnCount; i++)
+            for (int i = 0; i < columns.Length; i++)
             {
-                int column = this.touchedColumns[i];
+                int column = columns[i];
+                int centre = (column << FixedShift) + FixedHalf;
+                while (nextRowCrossing < rowZeroCount && (int)(rowZero[nextRowCrossing] >> RowCrossingShift) < centre)
+                {
+                    seed += (rowZero[nextRowCrossing] & RowCrossingDirectionBit) != 0 ? 1 : -1;
+                    nextRowCrossing++;
+                }
+
+                // An edge that passes exactly through the column centre on the row-zero centre
+                // line is also a column crossing at that centre, which belongs to the downward walk.
+                // The seed point just above the centre is right of the edge, and the edge counts,
+                // only when the edge is vertical or its X increases downward. The crossings stay in
+                // the list for the next column, which starts right of this centre.
+                int columnSeed = seed;
+                for (int t = nextRowCrossing; t < rowZeroCount && (int)(rowZero[t] >> RowCrossingShift) == centre; t++)
+                {
+                    if ((rowZero[t] & (RowCrossingVerticalBit | RowCrossingFallingRightBit)) != 0)
+                    {
+                        columnSeed += (rowZero[t] & RowCrossingDirectionBit) != 0 ? 1 : -1;
+                    }
+                }
+
                 int crossingCount = this.columnCrossingCounts[column];
-                if (crossingCount < 2)
+                if (crossingCount < 2 || crossingCount > ColumnCrossingCapacity)
                 {
                     continue;
                 }
@@ -1470,56 +1752,73 @@ internal static partial class DefaultRasterizer
                 Span<uint> crossings = this.columnCrossings.Slice(column * ColumnCrossingCapacity, crossingCount);
                 crossings.Sort();
 
-                int winding = 0;
-                int intervalStart = 0;
-                long intervalStartCrossing = long.MinValue;
-                for (int c = 0; c < crossingCount; c++)
+                // Row crossings count a downward edge as +1, and column crossings count a rightward
+                // edge as +1. With these signs the winding of a column walk is the negative of the
+                // row winding, as the four edges of one square show. A sum of +1 and -1 steps keeps
+                // its parity in the low bit, also when it is negative.
+                int seedWinding = this.intersectionRule == IntersectionRule.NonZero ? -columnSeed : columnSeed & 1;
+
+                // The seed is the winding just above the centre of row zero, so a crossing exactly on
+                // that centre belongs to the downward walk.
+                int split = 0;
+                while (split < crossingCount && UnpackColumnY(crossings[split]) < FixedHalf)
                 {
-                    long crossing = crossings[c];
-                    int y = (int)(crossing >> CrossingShift);
-                    int previousWinding = winding;
+                    split++;
+                }
+
+                // Downward walk. An interval that is open at the seed contains the centre of row zero,
+                // and an interval that is still open at the end continues past the halo, so only
+                // intervals opened and closed by this walk can be centre-free.
+                int winding = seedWinding;
+                bool open = false;
+                int start = 0;
+                uint startCrossing = 0;
+                for (int c = split; c < crossingCount; c++)
+                {
+                    uint crossing = crossings[c];
+                    int previous = winding;
                     winding = this.intersectionRule == IntersectionRule.NonZero
                         ? winding + (((crossing & CrossingDirectionBit) != 0) ? 1 : -1)
                         : winding ^ 1;
 
-                    if (previousWinding == 0 && winding != 0)
+                    if (previous == 0 && winding != 0)
                     {
-                        intervalStart = y;
-                        intervalStartCrossing = crossing;
-                        continue;
+                        open = true;
+                        start = UnpackColumnY(crossing);
+                        startCrossing = crossing;
                     }
-
-                    if (previousWinding == 0 || winding != 0)
+                    else if (previous != 0 && winding == 0 && open)
                     {
-                        continue;
+                        open = false;
+                        this.AddColumnDropout(dropouts, ref count, column, destinationLeft, start, startCrossing, UnpackColumnY(crossing), crossing);
                     }
+                }
 
-                    if (FloorPixel(y) >= CeilingPixel(intervalStart))
+                // Upward walk. Crossing a line upward removes its winding step. An interval is found
+                // from its bottom end first.
+                winding = seedWinding;
+                open = false;
+                int end = 0;
+                uint endCrossing = 0;
+                for (int c = split - 1; c >= 0; c--)
+                {
+                    uint crossing = crossings[c];
+                    int below = winding;
+                    winding = this.intersectionRule == IntersectionRule.NonZero
+                        ? winding - (((crossing & CrossingDirectionBit) != 0) ? 1 : -1)
+                        : winding ^ 1;
+
+                    if (below == 0 && winding != 0)
                     {
-                        // The primary row pass sees this interval and needs no secondary result.
-                        continue;
+                        open = true;
+                        end = UnpackColumnY(crossing);
+                        endCrossing = crossing;
                     }
-
-                    if (IsStubInterval(
-                            this.profiles,
-                            xAxis: true,
-                            this.columnProfileTranslate,
-                            intervalStartCrossing,
-                            crossing,
-                            ((destinationLeft + column) << FixedShift) + FixedHalf,
-                            y - intervalStart))
+                    else if (below != 0 && winding == 0 && open)
                     {
-                        // The interval ends at a contour tip and must remain unlit.
-                        continue;
+                        open = false;
+                        this.AddColumnDropout(dropouts, ref count, column, destinationLeft, UnpackColumnY(crossing), crossing, end, endCrossing);
                     }
-
-                    int row = ((intervalStart >> 1) + (y >> 1)) >> FixedShift;
-                    if (row < 0 || row >= this.height || count == dropouts.Length)
-                    {
-                        continue;
-                    }
-
-                    dropouts[count++] = (row << 16) | column;
                 }
             }
 
@@ -1527,15 +1826,76 @@ internal static partial class DefaultRasterizer
         }
 
         /// <summary>
-        /// Converts a row's signed 24.8 start cover to an integer winding count.
+        /// Adds the midpoint pixel of one closed vertical interval when the interval is a thin
+        /// feature of this band.
+        /// </summary>
+        /// <param name="dropouts">The destination for packed midpoint pixel coordinates.</param>
+        /// <param name="count">The number of results already written; incremented for a new result.</param>
+        /// <param name="column">The band-local column.</param>
+        /// <param name="destinationLeft">Absolute destination X corresponding to column zero.</param>
+        /// <param name="start">The top end of the interval in band-local 24.8 fixed-point.</param>
+        /// <param name="startCrossing">The packed crossing at the top end.</param>
+        /// <param name="end">The bottom end of the interval in band-local 24.8 fixed-point.</param>
+        /// <param name="endCrossing">The packed crossing at the bottom end.</param>
+        private readonly void AddColumnDropout(
+            Span<int> dropouts,
+            ref int count,
+            int column,
+            int destinationLeft,
+            int start,
+            uint startCrossing,
+            int end,
+            uint endCrossing)
+        {
+            // The row pass excludes a centre on the top end and includes a centre on the bottom end,
+            // so it sees this interval when a centre lies in (start, end].
+            if (FloorPixel(end) > FloorPixel(start))
+            {
+                return;
+            }
+
+            // A midpoint in the band above or below belongs to that band's column pass.
+            int row = ((start >> 1) + (end >> 1)) >> FixedShift;
+            if (row < 0 || row >= this.height || count == dropouts.Length)
+            {
+                return;
+            }
+
+            if (IsStubInterval(
+                    this.profiles,
+                    xAxis: true,
+                    this.columnProfileTranslate,
+                    (int)(startCrossing & ProfileIdMask),
+                    (int)(endCrossing & ProfileIdMask),
+                    ((destinationLeft + column) << FixedShift) + FixedHalf,
+                    end - start))
+            {
+                // The interval ends at a contour tip and must remain unlit.
+                return;
+            }
+
+            dropouts[count++] = (row << 16) | column;
+        }
+
+        /// <summary>
+        /// Returns the band-local Y of a packed column crossing in 24.8 fixed-point.
+        /// </summary>
+        /// <param name="crossing">The packed column crossing.</param>
+        /// <returns>The unbiased Y coordinate.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int UnpackColumnY(uint crossing) => (int)(crossing >> CrossingShift) - FixedOne;
+
+        /// <summary>
+        /// Converts a row's signed 24.8 start cover to an integer crossing count in the cell sign,
+        /// where a downward edge counts as -1.
         /// </summary>
         /// <remarks>
-        /// One complete cover unit represents one crossing to the left of the band. A partial unit
-        /// represents an edge that crosses only part of the row. Rounding to the nearest signed
-        /// unit determines whether that edge has crossed the row centre.
+        /// One complete cover unit represents one crossing to the left of the band. In aliased mode
+        /// the linearizer stores whole units, one for each crossed row centre, so the rounding
+        /// changes no value.
         /// </remarks>
         /// <param name="startCover">The row's accumulated carry cover in 24.8 units.</param>
-        /// <returns>The signed crossing count.</returns>
+        /// <returns>The signed crossing count in the cell sign.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int NearestCrossingCount(int startCover)
             => startCover >= 0
@@ -1571,6 +1931,44 @@ internal static partial class DefaultRasterizer
         }
 
         /// <summary>
+        /// Returns where a segment crosses a centre line, as a 24.8 coordinate that has the same order
+        /// as the exact crossing relative to every pixel centre.
+        /// </summary>
+        /// <remarks>
+        /// The row pass and the column pass test each pixel centre against the same edge, from two
+        /// separate interpolations. Both must put the centre on the same side of the edge. If one pass
+        /// puts it outside and the other puts it on the edge, neither pass sets the pixel and a thin
+        /// feature gets a hole. The exact crossing is rounded down to the 24.8 grid. A rounded value
+        /// equal to a pixel centre then means only an exact hit, because an inexact one moves up by
+        /// one unit. So less than, equal to and greater than a centre are exact in both passes.
+        /// </remarks>
+        /// <param name="origin">The segment's start coordinate on the interpolated axis.</param>
+        /// <param name="delta">The segment's extent on the interpolated axis.</param>
+        /// <param name="sampleOffset">The centre line position minus the segment's start on the other axis.</param>
+        /// <param name="span">The segment's extent on the other axis. It is not zero.</param>
+        /// <returns>The crossing coordinate in 24.8 fixed-point.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int InterpolateCrossing(int origin, int delta, int sampleOffset, int span)
+        {
+            long numerator = (long)delta * sampleOffset;
+            long quotient = numerator / span;
+            long remainder = numerator - (quotient * span);
+            if (remainder == 0)
+            {
+                return origin + (int)quotient;
+            }
+
+            // Division truncates toward zero, so a negative quotient needs one more step down.
+            if ((remainder < 0) != (span < 0))
+            {
+                quotient--;
+            }
+
+            int position = origin + (int)quotient;
+            return (position & (FixedOne - 1)) == FixedHalf ? position + 1 : position;
+        }
+
+        /// <summary>
         /// Records where one segment crosses the horizontal centre line of each affected row.
         /// </summary>
         /// <remarks>
@@ -1585,7 +1983,7 @@ internal static partial class DefaultRasterizer
         /// <param name="tag">The segment's profile tag: the x-profile identifier in the low sixteen bits and the y-profile identifier in the high sixteen bits.</param>
         private void CaptureCrossings(int x0, int y0, int x1, int y1, uint tag)
         {
-            this.CaptureColumnCrossings(x0, y0, x1, y1, tag & ProfileIdMask);
+            this.CaptureColumnCrossings(x0, y0, x1, y1, tag & ProfileIdMask, int.MinValue, int.MaxValue);
 
             if (y0 == y1)
             {
@@ -1599,24 +1997,34 @@ internal static partial class DefaultRasterizer
             int firstRow = Math.Max(0, top >> FixedShift);
             int lastRow = Math.Min(this.height - 1, (bottom - 1) >> FixedShift);
 
+            long vertical = x0 == x1 ? RowCrossingVerticalBit : 0L;
+            long fallingRight = (long)(x1 - x0) * (y1 - y0) > 0 ? RowCrossingFallingRightBit : 0L;
             for (int row = firstRow; row <= lastRow; row++)
             {
                 int sampleY = (row << FixedShift) + FixedHalf;
 
                 // Use a half-open Y range so two edges meeting at a vertex do not both contribute
-                // that vertex to the winding count.
-                if (sampleY < top || sampleY >= bottom)
+                // that vertex to the winding count. The range excludes the top and includes the
+                // bottom, so a centre on a horizontal edge belongs to the shape above that edge.
+                if (sampleY <= top || sampleY > bottom)
                 {
                     continue;
                 }
 
                 int count = this.crossingCounts[row];
-                int x = x0 + (int)(((long)(x1 - x0) * (sampleY - y0)) / (y1 - y0));
+                int x = InterpolateCrossing(x0, x1 - x0, sampleY - y0, y1 - y0);
 
-                // Position, direction, and profile pack into one value ordered by position, so a
-                // row sorts with a single primitive sort. The lower bits only break ties between
-                // equal positions, where crossing order cannot change the winding result.
-                this.crossings[(row * this.crossingStride) + count] = ((long)x << CrossingShift) | (direction > 0 ? CrossingDirectionBit : 0L) | (tag >> 16);
+                // Position, vertical flag, direction, profile, and slope flag pack into one value
+                // ordered by position, so a row sorts with a single primitive sort. The lower bits
+                // order coincident crossings, which can merge or split two intervals, so they use
+                // the same key as the WebGPU row lists.
+                this.crossings[(row * this.crossingStride) + count] =
+                    ((long)x << RowCrossingShift)
+                    | vertical
+                    | (direction > 0 ? RowCrossingDirectionBit : 0L)
+                    | ((long)(tag >> 16) << RowCrossingProfileShift)
+                    | fallingRight;
+
                 this.crossingCounts[row] = count + 1;
                 this.MarkRowTouched(row);
             }
@@ -2502,6 +2910,12 @@ internal static partial class DefaultRasterizer
         /// <param name="tag">The segment's profile tag.</param>
         private void RasterizeLine(int x0, int y0, int x1, int y1, uint tag)
         {
+            if (this.columnHaloMode != ColumnHaloNone)
+            {
+                this.CaptureColumnHaloCrossings(x0, y0, x1, y1, tag & ProfileIdMask);
+                return;
+            }
+
             if (this.rasterizationMode == RasterizationMode.Aliased)
             {
                 this.CaptureCrossings(x0, y0, x1, y1, tag);

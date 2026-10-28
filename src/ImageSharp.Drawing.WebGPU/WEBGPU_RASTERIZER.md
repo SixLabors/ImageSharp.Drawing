@@ -292,11 +292,27 @@ The fine pass is where the scheduled scene becomes final pixel writes.
 
 A single fine shader (`FineAreaComputeShader`) handles every flush; its pipeline is cached per
 output texture format. Antialiased fills use analytic area coverage. Aliased fills walk sorted
-crossings at pixel row and column centres. If a closed interval contains no centre, they light its
-midpoint pixel unless the two boundary profiles show that the interval ends at a contour tip. A
-second, vertical walk finds horizontal features between row centres. The aliased bit in
-`CmdFill.size_and_rule` selects the coverage path. Each fill also carries a raster interest
-rectangle; coverage outside it is zeroed.
+crossings at pixel row and column centres, with the same tie rule as the CPU rasterizer: a centre
+on a sloped edge is covered, a centre on a vertical edge belongs to the shape left of the edge, and
+a centre on a horizontal edge belongs to the shape above the edge. If an interval contains no
+centre, they light its midpoint pixel unless the two boundary profiles show that the interval ends
+at a contour tip, or the interval is open at either end of the row's crossing list. A second,
+vertical walk finds horizontal features between row centres. Each crossing is a 24.8 value with the
+same order as the exact crossing relative to every pixel centre, as on the CPU. So the two walks put
+a centre on the same side of an edge, and a thin feature has no hole. The column walk starts from
+the winding just above the centre of the tile's first row, and it reads the column crossings within
+half a pixel above and below the tile from the path tiles above and below, whose indices an aliased
+`CMD_FILL` holds in two more words. A vertical line exactly on the left edge of a path's tile bbox,
+and a horizontal line exactly on a tile row boundary, are kept as halo-only segments, so the row and
+column walks see their crossings. In a chunked render `path_row_alloc` keeps one tile row on each
+side of the chunk, and coarse allocates the segments of such a tile for the fill tile next to it, so
+the column walk also reads across a chunk edge. Binning keeps one more pixel around the interest and
+the clips of an aliased fill, and fine clears the coverage outside the interest. Where a path touches
+an edge of the target, `path_count` and `path_tiling` also walk the tile row or column just outside
+it and store those line pieces in the edge tile as halo-only segments. So a thin feature that crosses
+the edge of the image or of a clip sets the same pixels inside it as it does with no edge, as on the
+CPU. The aliased bit in `CmdFill.size_and_rule` selects the
+coverage path. Each fill also carries a raster interest rectangle; coverage outside it is zeroed.
 
 For antialiased fills the `CmdFill.coverage_data` word carries the perceptual coverage boost
 for text. Aliased fills leave that style value at zero because their command word is used for

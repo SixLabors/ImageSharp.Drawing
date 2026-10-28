@@ -453,7 +453,7 @@ public class BarcodeDecodeTests
         image.CopyPixelDataTo(pixels);
 
         using ReaderOptions reader = new() { Formats = format, TryHarder = true, TextMode = TextMode.Plain };
-        Barcode[] barcodes = BarcodeReader.Read(new ImageView(pixels, image.Width, image.Height, ImageFormat.Lum, 0, 0), reader);
+        Barcode[] barcodes = ReadBarcodes(pixels, image.Width, image.Height, reader);
         try
         {
             Barcode barcode = Assert.Single(barcodes);
@@ -950,7 +950,7 @@ public class BarcodeDecodeTests
 
         // The plain text mode returns the data as the symbol transmits it, without the parentheses of a GS1 human readable interpretation.
         using ReaderOptions reader = new() { Formats = format, TryHarder = true, TextMode = TextMode.Plain };
-        Barcode[] barcodes = BarcodeReader.Read(new ImageView(pixels, width, height, ImageFormat.Lum, 0, 0), reader);
+        Barcode[] barcodes = ReadBarcodes(pixels, width, height, reader);
         try
         {
             Assert.True(barcodes.Length > 0, $"No decode at {options.Dpi} dpi.");
@@ -971,6 +971,27 @@ public class BarcodeDecodeTests
             {
                 barcode.Dispose();
             }
+        }
+    }
+
+    /// <summary>
+    /// Reads the barcodes in 8-bit grey pixels with zxing-cpp.
+    /// </summary>
+    /// <remarks>
+    /// The native ImageView of zxing-cpp keeps the pointer to the pixels, and <see cref="BarcodeReader.Read"/> reads through it later. The P/Invoke of the
+    /// ImageView constructor pins the array only during that call. This method therefore pins the array until the read returns. Otherwise a garbage
+    /// collection between the two calls can move the array, and the reader then reads other memory.
+    /// </remarks>
+    /// <param name="pixels">The grey pixels, row by row.</param>
+    /// <param name="width">The image width in pixels.</param>
+    /// <param name="height">The image height in pixels.</param>
+    /// <param name="reader">The reader options.</param>
+    /// <returns>The barcodes that the reader found.</returns>
+    private static unsafe Barcode[] ReadBarcodes(byte[] pixels, int width, int height, ReaderOptions reader)
+    {
+        fixed (byte* data = pixels)
+        {
+            return BarcodeReader.Read(new ImageView((IntPtr)data, width, height, ImageFormat.Lum, 0, 0), reader);
         }
     }
 

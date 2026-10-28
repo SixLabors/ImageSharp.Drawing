@@ -104,6 +104,7 @@ internal static partial class DefaultRasterizer
         /// <param name="rasterizationMode">The rasterization mode used by the band.</param>
         /// <param name="coverageBoost">The perceptual coverage boost used when the band runs in antialiased mode.</param>
         /// <param name="hasStartCovers">Indicates whether the band has non-zero start-cover seeds.</param>
+        /// <param name="interest">The absolute destination bounds that the band can write.</param>
         public RasterizableBandInfo(
             int lineCount,
             int bandHeight,
@@ -115,8 +116,10 @@ internal static partial class DefaultRasterizer
             IntersectionRule intersectionRule,
             RasterizationMode rasterizationMode,
             float coverageBoost,
-            bool hasStartCovers)
+            bool hasStartCovers,
+            Rectangle interest)
         {
+            this.Interest = interest;
             this.LineCount = lineCount;
             this.BandHeight = bandHeight;
             this.Width = width;
@@ -186,6 +189,12 @@ internal static partial class DefaultRasterizer
         /// Gets a value indicating whether the band has non-zero start-cover seeds.
         /// </summary>
         public bool HasStartCovers { get; }
+
+        /// <summary>
+        /// Gets the absolute destination bounds that the band can write. An aliased band also
+        /// rasterizes one pixel outside them, and the coverage row handler drops that pixel.
+        /// </summary>
+        public Rectangle Interest { get; }
 
         /// <summary>
         /// Gets a value indicating whether the band would emit any coverage.

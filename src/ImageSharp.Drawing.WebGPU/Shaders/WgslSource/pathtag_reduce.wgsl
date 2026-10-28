@@ -8,13 +8,15 @@
 // per workgroup to the reduced buffer. The scan stages (pathtag_scan /
 // pathtag_scan1) later turn these partials into exclusive prefixes.
 //
-// Inputs: config uniform, scene buffer (tag words at config.pathtag_base).
+// Inputs: config uniform, scene buffer (tag words read through the segment bias of
+// scene_segment.wgsl).
 // Outputs: reduced (one TagMonoid per workgroup).
 //
 // Ported from Vello's pathtag_reduce.wgsl.
 
 #import config
 #import pathtag
+#import scene_segment
 
 @group(0) @binding(0)
 var<uniform> config: Config;
@@ -41,7 +43,7 @@ fn main(
     @builtin(local_invocation_id) local_id: vec3<u32>,
 ) {
     let ix = global_id.x;
-    let tag_word = scene[config.pathtag_base + ix];
+    let tag_word = scene[resolve_path_tag_bias(ix) + ix];
     var agg = reduce_tag(tag_word);
     sh_scratch[local_id.x] = agg;
     for (var i = 0u; i < firstTrailingBit(WG_SIZE); i += 1u) {

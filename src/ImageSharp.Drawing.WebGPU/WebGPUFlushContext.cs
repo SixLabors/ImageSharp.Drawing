@@ -248,9 +248,8 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     }
 
     /// <summary>
-    /// Creates a flush context directly over a native WebGPU surface and target bounds. Used by
-    /// corrective re-renders, which outlive the per-flush canvas frame and therefore cannot go
-    /// through the frame overload.
+    /// Creates a flush context directly over a native WebGPU surface and target bounds. The staged
+    /// scene path uses it, because that path has the native surface and not a canvas frame.
     /// </summary>
     /// <param name="nativeTarget">The native surface holding the target texture handles.</param>
     /// <param name="bounds">The target bounds for the flush.</param>

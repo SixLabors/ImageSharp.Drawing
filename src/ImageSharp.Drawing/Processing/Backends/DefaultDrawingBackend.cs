@@ -75,29 +75,7 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
         FlushScene scene)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        // Warm the cached renderers before the row loop so the hot execution path only
-        // performs retained-scene work and brush application.
-        if (scene.FillItemCount > 0)
-        {
-            for (int i = 0; i < scene.FillItems.Length; i++)
-            {
-                if (scene.FillItems[i] is FlushScene.FillSceneItem item)
-                {
-                    _ = item.GetRenderer<TPixel>(configuration, destinationFrame.Width);
-                }
-            }
-        }
-
-        if (scene.StrokeItemCount > 0)
-        {
-            for (int i = 0; i < scene.StrokeItems.Length; i++)
-            {
-                if (scene.StrokeItems[i] is FlushScene.StrokeSceneItem item)
-                {
-                    _ = item.GetRenderer<TPixel>(configuration, destinationFrame.Width);
-                }
-            }
-        }
+        WarmRenderers<TPixel>(configuration, destinationFrame.Width, scene);
 
         // The root target carries null graphics options: options are only needed when a target
         // is composited back as a layer, and the root frame is never composited onto anything.
@@ -114,6 +92,53 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
         if (scene.RowCount != 0)
         {
             ExecuteSceneRows(configuration, destinationFrame.Width, scene, target);
+        }
+    }
+
+    /// <summary>
+    /// Creates the cached renderers of a retained scene and of the retained scenes whose rows it runs.
+    /// </summary>
+    /// <remarks>
+    /// This runs before the row loop so the hot execution path only performs retained-scene work
+    /// and brush application.
+    /// </remarks>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="canvasWidth">The destination canvas width.</param>
+    /// <param name="scene">The retained flush scene.</param>
+    private static void WarmRenderers<TPixel>(Configuration configuration, int canvasWidth, FlushScene scene)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        if (scene.FillItemCount > 0)
+        {
+            for (int i = 0; i < scene.FillItems.Length; i++)
+            {
+                if (scene.FillItems[i] is FlushScene.FillSceneItem item)
+                {
+                    _ = item.GetRenderer<TPixel>(configuration, canvasWidth);
+                }
+            }
+        }
+
+        if (scene.StrokeItemCount > 0)
+        {
+            for (int i = 0; i < scene.StrokeItems.Length; i++)
+            {
+                if (scene.StrokeItems[i] is FlushScene.StrokeSceneItem item)
+                {
+                    _ = item.GetRenderer<TPixel>(configuration, canvasWidth);
+                }
+            }
+        }
+
+        // The array is empty unless the batch had retained scene commands. Retained scenes with
+        // barriers are not in it. Their segment warms them before they run.
+        for (int i = 0; i < scene.RetainedScenes.Length; i++)
+        {
+            if (scene.RetainedScenes[i] is FlushScene retainedScene)
+            {
+                WarmRenderers<TPixel>(configuration, canvasWidth, retainedScene);
+            }
         }
     }
 
@@ -160,6 +185,13 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
 
                 ExecuteSceneSegments(configuration, canvasWidth, scene, layerItem.Segments, layerTarget);
                 CompositeLayerTarget(configuration, layerTarget, target);
+            }
+            else if (segment.SceneItem is FlushScene retainedScene)
+            {
+                // A retained scene with barriers runs as a whole into the current target, which is
+                // the root target or a scoped layer target, the same as when it renders on its own.
+                WarmRenderers<TPixel>(configuration, canvasWidth, retainedScene);
+                ExecuteSceneSegments(configuration, canvasWidth, retainedScene, retainedScene.Segments, target);
             }
         }
     }
@@ -348,6 +380,22 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
                         strokeSceneItem.DestinationOffset,
                         state);
                     break;
+
+                case FlushScene.SceneOperationKind.Scene:
+                    // The retained row is a balanced operation stream for the same band. It runs
+                    // with its own cursor and scene into the current target, so inside a layer it
+                    // draws into the layer band.
+                    FlushScene retainedScene = scene.RetainedScenes[operation.ItemIndex]!;
+                    SceneOperationCursor retainedCursor = new(retainedScene.Rows[operation.LocalRowIndex].FirstBlock);
+                    ExecuteSceneRowOperations(
+                        ref retainedCursor,
+                        configuration,
+                        canvasWidth,
+                        retainedScene,
+                        target,
+                        scratch,
+                        state);
+                    break;
             }
         }
     }
@@ -371,6 +419,14 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
             {
                 if (operation.Kind is FlushScene.SceneOperationKind.BeginLayer or FlushScene.SceneOperationKind.EndLayer)
                 {
+                    continue;
+                }
+
+                if (operation.Kind == FlushScene.SceneOperationKind.Scene)
+                {
+                    // The retained row shares the worker scratch, so its items count too.
+                    FlushScene retainedScene = scene.RetainedScenes[operation.ItemIndex]!;
+                    width = GetRowScratchWidth(retainedScene, retainedScene.Rows[operation.LocalRowIndex], width);
                     continue;
                 }
 
@@ -546,7 +602,8 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
             pathClipState,
             destinationOffset,
             state.BrushWorkspace,
-            state);
+            state,
+            bandInfo.Interest);
 
         DefaultRasterizer.ExecuteRasterizableItem(
             ref context,
@@ -592,7 +649,8 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
             pathClipState,
             destinationOffset,
             state.BrushWorkspace,
-            state);
+            state,
+            bandInfo.Interest);
 
         Span<float> strokeBandCoverage = item.Rasterizable.RequiresBandCoverage ? scratch.StrokeBandCoverage : [];
         DefaultRasterizer.ExecuteStrokeRasterizableItem(
@@ -811,29 +869,19 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
             throw new NotSupportedException($"{nameof(DefaultDrawingBackend)} requires CPU-accessible target frames.");
         }
 
-        Rectangle sourceBounds = new(0, 0, sourceRegion.Width, sourceRegion.Height);
-        Rectangle clippedSource = Rectangle.Intersect(sourceBounds, sourceRectangle);
-        if (clippedSource.Width <= 0 || clippedSource.Height <= 0)
+        if (!IDrawingBackend.TryClipPixelCopy(
+                new Size(sourceRegion.Width, sourceRegion.Height),
+                new Size(targetRegion.Width, targetRegion.Height),
+                sourceRectangle,
+                targetPoint,
+                out Point sourceOrigin,
+                out Rectangle clippedTarget))
         {
             return;
         }
 
-        Rectangle targetBounds = new(0, 0, targetRegion.Width, targetRegion.Height);
-        Rectangle targetRectangle = new(
-            targetPoint.X + clippedSource.X - sourceRectangle.X,
-            targetPoint.Y + clippedSource.Y - sourceRectangle.Y,
-            clippedSource.Width,
-            clippedSource.Height);
-
-        Rectangle clippedTarget = Rectangle.Intersect(targetBounds, targetRectangle);
-
-        if (clippedTarget.Width <= 0 || clippedTarget.Height <= 0)
-        {
-            return;
-        }
-
-        int sourceX = clippedSource.X + clippedTarget.X - targetRectangle.X;
-        int sourceY = clippedSource.Y + clippedTarget.Y - targetRectangle.Y;
+        int sourceX = sourceOrigin.X;
+        int sourceY = sourceOrigin.Y;
         int targetX = clippedTarget.X;
         int targetY = clippedTarget.Y;
         int width = clippedTarget.Width;
