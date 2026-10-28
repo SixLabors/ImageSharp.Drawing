@@ -397,14 +397,17 @@ public partial class WebGPUDrawingBackendTests
 
         void Draw(WebGPURenderTarget target)
         {
-            using DrawingCanvas canvas = target.CreateCanvas(options);
+            // The lines are antialiased, as in that test. Only the bars are aliased.
+            using DrawingCanvas canvas = target.CreateCanvas();
             canvas.Fill(background);
             foreach ((PointF start, PointF end, Color color, float lineWidth) in lines)
             {
                 canvas.DrawLine(new SolidPen(color, lineWidth), start, end);
             }
 
+            canvas.Save(options);
             canvas.Fill(Brushes.Solid(Color.White), path);
+            canvas.Restore();
         }
 
         using WebGPURenderTarget expectedTarget = new(WebGPUTextureFormat.Bgra8Unorm, width, height);
