@@ -67,6 +67,16 @@ fn boundary_horizontal_row(path: Path, x: i32, below: i32) -> i32 {
     return -1;
 }
 
+// Returns the tile that holds a line crossing at tile (x, y). A tile inside the path bbox holds its
+// own crossings. When the path bbox touches an edge of the target, the aliased walks of the edge
+// tiles need the line pieces within half a pixel outside the target, where no tile exists. The tile
+// row or column just outside that edge then maps to the edge tile next to it. Must match
+// target_edge_tile in path_count.wgsl.
+fn target_edge_tile(path: Path, x: i32, y: i32) -> vec2<i32> {
+    let bbox = vec4<i32>(path.bbox);
+    return vec2(clamp(x, bbox.x, bbox.z - 1), clamp(y, bbox.y, bbox.w - 1));
+}
+
 // Largest f32 strictly less than 1.0; clamping b below 1 keeps the first
 // floor(a * i + b) evaluation from overshooting a boundary.
 const ONE_MINUS_ULP: f32 = 0.99999994;
@@ -89,6 +99,10 @@ fn main(
     }
 
     let seg_count = seg_counts[global_id.x];
+    if seg_count.line_ix == SKIPPED_SEGMENT_LINE {
+        return;
+    }
+
     let line = lines[seg_count.line_ix];
     let counts = seg_count.counts;
     let seg_within_slice = counts >> 16u;
@@ -147,8 +161,12 @@ fn main(
     let y = i32(y0i + f32(seg_within_line) - z);
 
     let path = paths[line.path_ix];
-    let row = rows[path.rows + u32(y) - path.bbox.y];
-    let tile_ix = row.tiles + u32(x) - row.x0;
+
+    // A crossing in the tile row or column just outside the target belongs to the edge tile next
+    // to it, as a halo-only piece. Must match target_edge_tile in path_count.wgsl.
+    let edge_tile = target_edge_tile(path, x, y);
+    let row = rows[path.rows + u32(edge_tile.y) - path.bbox.y];
+    let tile_ix = row.tiles + u32(edge_tile.x) - row.x0;
     let tile = tiles[tile_ix];
     // Coarse stores the inverted segment base index; a non-inverted value
     // (negative after ~) means the tile was never allocated, so the
@@ -203,6 +221,23 @@ fn main(
     var p0 = xy0 - tile_xy;
     var p1 = xy1 - tile_xy;
     let EPSILON = 1e-6;
+
+    // The piece outside the target is stored in the coordinates of the edge tile and only feeds the
+    // aliased walks, which read it as a halo crossing. Its winding reaches the edge tile through the
+    // row backdrop and the y_edge values, as for any line outside the path bbox.
+    if edge_tile.x != x || edge_tile.y != y {
+        let offset = tile_xy - vec2(f32(edge_tile.x) * f32(TILE_WIDTH), f32(edge_tile.y) * f32(TILE_HEIGHT));
+        p0 += offset;
+        p1 += offset;
+        if !is_down {
+            let tmp = p0;
+            p0 = p1;
+            p1 = tmp;
+        }
+
+        segments[seg_start + seg_within_slice] = Segment(p0, p1, HALO_ONLY_Y_EDGE, line.tag);
+        return;
+    }
 
     // path_count keeps a vertical line exactly on the bbox's left edge only for the aliased row
     // walk. Its winding reaches the tile through the row backdrop and the y_edge values of the

@@ -147,15 +147,15 @@ internal static partial class DefaultRasterizer
             (int)MathF.Ceiling(translatedBounds.Right) + 1,
             (int)MathF.Ceiling(translatedBounds.Bottom));
 
-        Rectangle clippedBounds = Rectangle.Intersect(geometryBounds, options.Interest);
+        Rectangle clippedBounds = Rectangle.Intersect(geometryBounds, GetRasterBounds(options));
         if (clippedBounds.Width <= 0 || clippedBounds.Height <= 0)
         {
             return null;
         }
 
         int width = clippedBounds.Width;
-        int firstRowBandIndex = clippedBounds.Top / PreferredRowHeight;
-        int lastRowBandIndex = (clippedBounds.Bottom - 1) / PreferredRowHeight;
+        int firstRowBandIndex = GetRowBandIndex(clippedBounds.Top);
+        int lastRowBandIndex = GetRowBandIndex(clippedBounds.Bottom - 1);
         int rowBandCount = lastRowBandIndex - firstRowBandIndex + 1;
         int wordsPerRow = BitVectorsForMaxBitCount(width);
         int coverStride = checked(width << 1);
@@ -181,7 +181,8 @@ internal static partial class DefaultRasterizer
                 options.IntersectionRule,
                 options.RasterizationMode,
                 coverageBoost: 0F,
-                hasStartCovers: false);
+                hasStartCovers: false,
+                interest: options.Interest);
         }
 
         return new StrokeRasterizableGeometry(
@@ -262,7 +263,7 @@ internal static partial class DefaultRasterizer
             (int)MathF.Ceiling(translatedBounds.Right) + 1,
             (int)MathF.Ceiling(translatedBounds.Bottom) + 1);
 
-        Rectangle clippedBounds = Rectangle.Intersect(geometryBounds, options.Interest);
+        Rectangle clippedBounds = Rectangle.Intersect(geometryBounds, GetRasterBounds(options));
         if (clippedBounds.Width <= 0 || clippedBounds.Height <= 0)
         {
             return null;
@@ -270,8 +271,8 @@ internal static partial class DefaultRasterizer
 
         int width = clippedBounds.Width;
         int height = clippedBounds.Height;
-        int firstRowBandIndex = clippedBounds.Top / PreferredRowHeight;
-        int lastRowBandIndex = (clippedBounds.Bottom - 1) / PreferredRowHeight;
+        int firstRowBandIndex = GetRowBandIndex(clippedBounds.Top);
+        int lastRowBandIndex = GetRowBandIndex(clippedBounds.Bottom - 1);
         int rowBandCount = lastRowBandIndex - firstRowBandIndex + 1;
         int wordsPerRow = BitVectorsForMaxBitCount(width);
         int coverStride = checked(width << 1);
@@ -383,7 +384,8 @@ internal static partial class DefaultRasterizer
                 options.IntersectionRule,
                 options.RasterizationMode,
                 coverageBoost: 0F,
-                hasStartCovers);
+                hasStartCovers,
+                options.Interest);
         }
 
         RasterizableGeometry retained = new(
@@ -453,7 +455,8 @@ internal static partial class DefaultRasterizer
                 options.IntersectionRule,
                 options.RasterizationMode,
                 coverageBoost: 0F,
-                hasStartCovers);
+                hasStartCovers,
+                options.Interest);
         }
 
         RasterizableGeometry retained = new(

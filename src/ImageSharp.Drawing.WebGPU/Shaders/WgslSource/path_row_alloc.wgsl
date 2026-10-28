@@ -76,6 +76,17 @@ fn main(
             uy0 = u32(clamp(y0, chunk_y0, chunk_y1));
             ux1 = u32(clamp(x1, 0, i32(config.width_in_tiles)));
             uy1 = u32(clamp(y1, chunk_y0, chunk_y1));
+
+            // A draw can have tile columns and no tile rows, for example an aliased fill whose
+            // geometry is only in the pixel row that binning keeps above the target, or a draw
+            // outside the chunk rows. The tiling stages read rows inside the bbox, so give it an
+            // empty bbox.
+            if ux0 >= ux1 || uy0 >= uy1 {
+                ux0 = 0u;
+                uy0 = 0u;
+                ux1 = 0u;
+                uy1 = 0u;
+            }
         }
     }
 

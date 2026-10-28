@@ -52,6 +52,10 @@ struct LineSoup {
     p1: vec2<f32>,
 }
 
+// The line index of a SegmentCount record that path_count reserved for a crossing that no tile
+// keeps. path_tiling skips it, so every reserved record holds a written value.
+const SKIPPED_SEGMENT_LINE = 0xffffffffu;
+
 // An intermediate data structure for sorting tile segments.
 struct SegmentCount {
     // Reference to element of LineSoup array

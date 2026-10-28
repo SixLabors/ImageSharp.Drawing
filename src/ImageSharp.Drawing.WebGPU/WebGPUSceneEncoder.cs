@@ -3348,7 +3348,7 @@ internal static class WebGPUSceneEncoder
             this.lastStyle9 = style9;
             RowSpanSource spanSource = this.CreateRowSpanSource(geometry, default, default, pathDataOffset, 0F, geometryRowCrossings, 0);
             this.AccumulateDrawRowEstimate(
-                command.RasterizerOptions.Interest,
+                command.RasterizerOptions,
                 geometryLineCount,
                 geometryTileCrossings,
                 GetPtclPaintWords(drawTag),
@@ -3515,7 +3515,7 @@ internal static class WebGPUSceneEncoder
                 geometryEndCrossings);
 
             this.AccumulateDrawRowEstimate(
-                command.RasterizerOptions.Interest,
+                command.RasterizerOptions,
                 geometryLineCount,
                 geometryTileCrossings,
                 GetPtclPaintWords(drawTag),
@@ -3657,7 +3657,7 @@ internal static class WebGPUSceneEncoder
                 geometryRowCrossings,
                 geometryEndCrossings);
 
-            this.AccumulateDrawRowEstimate(rasterizerOptions.Interest, geometryLineCount, geometryTileCrossings, GetPtclPaintWords(drawTag), spanSource);
+            this.AccumulateDrawRowEstimate(rasterizerOptions, geometryLineCount, geometryTileCrossings, GetPtclPaintWords(drawTag), spanSource);
             this.FillCount++;
             this.PathCount += encodedPathCount;
             this.LineCount += geometryLineCount;
@@ -3796,7 +3796,7 @@ internal static class WebGPUSceneEncoder
                 geometryRowCrossings,
                 geometryEndCrossings);
 
-            this.AccumulateDrawRowEstimate(rasterizerOptions.Interest, geometryLineCount, geometryTileCrossings, GetPtclPaintWords(drawTag), spanSource);
+            this.AccumulateDrawRowEstimate(rasterizerOptions, geometryLineCount, geometryTileCrossings, GetPtclPaintWords(drawTag), spanSource);
             this.FillCount++;
             this.PathCount += encodedPathCount;
             this.LineCount += geometryLineCount;
@@ -4132,13 +4132,15 @@ internal static class WebGPUSceneEncoder
             // - binning adds one pixel to the right edge of an aliased (Hard) path;
             // - the GPU box is floor and ceil of the f32 points after the GPU transform, and
             //   clipBounds is floor and ceil of the transformed path bounds.
-            // One pixel on each side holds both.
+            // One pixel on each side holds both. Binning also keeps one pixel around the enclosing
+            // clips of an aliased path, so the halo covers a Hard clip inside another clip.
             this.AccumulateDrawRowEstimateLocal(
                 Rectangle.Inflate(clipBounds, 1, 1),
                 clipLineCount,
                 -1,
                 GetPtclPaintWords(GpuSceneDrawTag.EndClip),
                 true,
+                1,
                 RowSpanSource.None);
 
             this.PathCount += encodedPathCount;
@@ -4228,7 +4230,7 @@ internal static class WebGPUSceneEncoder
             this.lastStyle8 = style8;
             this.lastStyle9 = style9;
             this.blendDepth++;
-            this.AccumulateDrawRowEstimateLocal(layerBounds, clipLineCount, -1, GetPtclPaintWords(GpuSceneDrawTag.EndClip), true, RowSpanSource.None);
+            this.AccumulateDrawRowEstimateLocal(layerBounds, clipLineCount, -1, GetPtclPaintWords(GpuSceneDrawTag.EndClip), true, 0, RowSpanSource.None);
             this.PathCount += encodedPathCount;
             this.LineCount += clipLineCount;
             this.InfoWordCount += (int)GpuSceneDrawTag.Map(GpuSceneDrawTag.BeginClip).InfoOffset;
@@ -4242,7 +4244,7 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Adds one draw object's target-space interest rectangle to the sparse scratch estimates after converting it to root-target-local coordinates.
         /// </summary>
-        /// <param name="absoluteInterest">The draw object's absolute raster interest bounds.</param>
+        /// <param name="rasterizerOptions">The draw object's rasterizer options, with its absolute raster interest bounds.</param>
         /// <param name="lineCount">The draw object's linearized or GPU-expanded line count.</param>
         /// <param name="tileCrossings">
         /// The summed per-line tile-crossing bound of the geometry (fills and strokes), or a negative value
@@ -4250,13 +4252,19 @@ internal static class WebGPUSceneEncoder
         /// </param>
         /// <param name="paintWords">The PTCL word count of the draw's paint command.</param>
         /// <param name="spanSource">The source segments for the row-span tile bound.</param>
-        private void AccumulateDrawRowEstimate(Rectangle absoluteInterest, int lineCount, long tileCrossings, int paintWords, in RowSpanSource spanSource)
+        private void AccumulateDrawRowEstimate(
+            in RasterizerOptions rasterizerOptions,
+            int lineCount,
+            long tileCrossings,
+            int paintWords,
+            in RowSpanSource spanSource)
             => this.AccumulateDrawRowEstimateLocal(
-                ToTargetLocal(absoluteInterest, this.rootTargetBounds),
+                ToTargetLocal(rasterizerOptions.Interest, this.rootTargetBounds),
                 lineCount,
                 tileCrossings,
                 paintWords,
                 false,
+                rasterizerOptions.RasterizationMode == RasterizationMode.Aliased ? 1 : 0,
                 spanSource);
 
         /// <summary>
@@ -4314,6 +4322,10 @@ internal static class WebGPUSceneEncoder
         /// </param>
         /// <param name="paintWords">The PTCL word count of the draw's paint command.</param>
         /// <param name="isClip">Whether the draw opens a clip or a layer, which the GPU also closes with an EndClip.</param>
+        /// <param name="halo">
+        /// The pixels that binning keeps around the interest and the open clips of the draw: one for an
+        /// aliased draw, which needs the geometry just outside them for its thin features, otherwise zero.
+        /// </param>
         /// <param name="spanSource">The source segments for the row-span tile bound, or <see cref="RowSpanSource.None"/>.</param>
         private void AccumulateDrawRowEstimateLocal(
             Rectangle localBounds,
@@ -4321,15 +4333,16 @@ internal static class WebGPUSceneEncoder
             long tileCrossings,
             int paintWords,
             bool isClip,
+            int halo,
             in RowSpanSource spanSource)
         {
-            Rectangle clippedBounds = Rectangle.Intersect(localBounds, this.rangeDataBounds);
+            Rectangle clippedBounds = Rectangle.Intersect(Rectangle.Inflate(localBounds, halo, halo), this.rangeDataBounds);
 
             if (this.openLayerBounds is { Count: > 0 })
             {
                 for (int i = 0; i < this.openLayerBounds.Count && clippedBounds.Width > 0 && clippedBounds.Height > 0; i++)
                 {
-                    clippedBounds = Rectangle.Intersect(clippedBounds, this.openLayerBounds[i]);
+                    clippedBounds = Rectangle.Intersect(clippedBounds, Rectangle.Inflate(this.openLayerBounds[i], halo, halo));
                 }
             }
 

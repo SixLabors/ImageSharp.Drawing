@@ -138,7 +138,20 @@ internal sealed class WebGPUSceneRowBounds : IDisposable
         this.AddRows(data, PtclArea, firstRow, endRow, (long)widthTiles * ptclWordsPerTile);
         this.AddRows(data, CrossingsArea, firstRow, endRow, crossingsPerRow);
 
+        // At an edge of the target that the draw reaches, path_count also walks the tile row just
+        // outside the target and stores its crossings in the edge row. That row can hold the
+        // crossings of one more tile row.
         int lastRow = endRow - 1;
+        if (firstRow == 0)
+        {
+            this.AddRows(data, CrossingsArea, 0, 1, crossingsPerRow);
+        }
+
+        if (endRow == this.RowCount)
+        {
+            this.AddRows(data, CrossingsArea, lastRow, endRow, crossingsPerRow);
+        }
+
         data[(TilesFirst * this.stride) + firstRow] += tiles;
         data[(TilesLast * this.stride) + lastRow] += tiles;
         data[(CrossingsFirst * this.stride) + firstRow] += crossings;
