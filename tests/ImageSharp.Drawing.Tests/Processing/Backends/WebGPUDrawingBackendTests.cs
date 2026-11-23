@@ -1986,6 +1986,119 @@ public partial class WebGPUDrawingBackendTests
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
+    /// <summary>
+    /// Checks that the GPU stroke joins the ends only when the path is closed.
+    /// </summary>
+    /// <param name="isClosed">Whether the path is closed.</param>
+    /// <param name="endsMeet">Whether both ends have the same coordinates.</param>
+    [WebGPUTheory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Stroke_UsesDeclaredClosure(bool isClosed, bool endsMeet)
+    {
+        using WebGPUDrawingBackend backend = new();
+        using Image<Rgba32> image = RenderWithNativeSurfaceWebGpuBackend<Rgba32>(
+            64,
+            64,
+            backend,
+            new DrawingOptions(),
+            canvas =>
+            {
+                canvas.Clear(Brushes.Solid(Color.White));
+                DefaultRasterizerStrokeTests.DrawClosureTestPath(canvas, isClosed, endsMeet);
+            });
+
+        Rgba32 expected = (isClosed ? Color.Black : Color.White).ToPixel<Rgba32>();
+        Assert.Equal(expected, image[21, 21]);
+    }
+
+    /// <summary>
+    /// Checks that both backends preserve the dash pattern around the ellipse.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="provider">The white test image.</param>
+    [WebGPUTheory]
+    [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32)]
+    public void Stroke_EllipseWithMiterDashPattern_PreservesGaps<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => AssertStrokeMatchesOutline(
+            provider,
+            "PolygonClipper",
+            null,
+            canvas => DefaultRasterizerStrokeTests.DrawDashedEllipse(canvas),
+            canvas => DefaultRasterizerStrokeTests.DrawDashedEllipse(canvas, fillOutline: true),
+            ImageComparer.Tolerant(0F, 3 * 257));
+
+    /// <summary>
+    /// Checks the stroke of a point, a zero-length segment, and a short segment.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="provider">The white test image.</param>
+    /// <param name="cap">The stroke cap.</param>
+    [WebGPUTheory]
+    [WithSolidFilledImages(96, 32, "White", PixelTypes.Rgba32, LineCap.Butt)]
+    [WithSolidFilledImages(96, 32, "White", PixelTypes.Rgba32, LineCap.Square)]
+    [WithSolidFilledImages(96, 32, "White", PixelTypes.Rgba32, LineCap.Round)]
+    public void Stroke_DistinguishesPointFromZeroLengthSegment<TPixel>(TestImageProvider<TPixel> provider, LineCap cap)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        // The CPU samples round caps directly and the reference uses straight edges.
+        // Allow edge coverage differences in RGB. The comparer uses 16-bit channels.
+        int edgeTolerance = cap == LineCap.Round ? 36 : 2;
+        ImageComparer comparer = ImageComparer.Tolerant(0F, 3 * 257 * edgeTolerance);
+        AssertStrokeMatchesOutline(
+            provider,
+            $"{cap}_PolygonClipper",
+            $"{cap}",
+            canvas => DefaultRasterizerStrokeTests.DrawPointAndSegments(canvas, cap),
+            canvas => DefaultRasterizerStrokeTests.DrawPointAndSegments(canvas, cap, fillOutline: true),
+            comparer);
+    }
+
+    /// <summary>
+    /// Saves the two backend renders and compares them with the outline reference.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="provider">The white test image.</param>
+    /// <param name="referenceName">The details for the outline image file name.</param>
+    /// <param name="testName">The details for the stroke image file names.</param>
+    /// <param name="drawStroke">Draws the native stroke.</param>
+    /// <param name="fillOutline">Fills the PolygonClipper outline.</param>
+    /// <param name="comparer">The image comparer.</param>
+    private static void AssertStrokeMatchesOutline<TPixel>(
+        TestImageProvider<TPixel> provider,
+        string referenceName,
+        string testName,
+        CanvasAction drawStroke,
+        CanvasAction fillOutline,
+        ImageComparer comparer)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions options = new();
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, options, drawStroke);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<TPixel> initialImage = provider.GetImage();
+        using Image<TPixel> nativeImage = RenderWithNativeSurfaceWebGpuBackend(
+            initialImage.Width,
+            initialImage.Height,
+            backend,
+            options,
+            canvas => drawStroke(canvas),
+            initialImage);
+
+        using Image<TPixel> outlineImage = provider.GetImage();
+        RenderWithDefaultBackend(outlineImage, options, fillOutline);
+
+        outlineImage.DebugSave(provider, referenceName, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+        DebugSaveBackendPair(provider, testName, defaultImage, nativeImage);
+        defaultImage.CompareToReferenceOutput(comparer, provider, referenceName, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+        nativeImage.CompareToReferenceOutput(comparer, provider, referenceName, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+    }
+
     [WebGPUTheory]
     [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32, LineCap.Square)]
     [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32, LineCap.Round)]
@@ -2159,8 +2272,7 @@ public partial class WebGPUDrawingBackendTests
     // sqrt(m^2 + 1) half widths from the corner. The centerline here turns back at (100, 112.5) by
     // almost 180 degrees. For half width 5 and limit 4, the bevel then covers part of column 79,
     // outside bounds that are inflated by m half widths (x = 80). Both backends must draw the bevel
-    // pixels of column 79. The edge pixels differ by one 8-bit level between the CPU and the GPU:
-    // 0.0003% measured. A bevel column that one backend cuts gives 0.0011%.
+    // pixels of column 79. The remaining edges can differ by one 8-bit channel level.
     [WebGPUTheory]
     [WithSolidFilledImages(200, 160, "White", PixelTypes.Rgba32)]
     public void DrawPath_StrokeMiterJoinReversal_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
@@ -2203,7 +2315,9 @@ public partial class WebGPUDrawingBackendTests
         RenderWithDefaultBackend(referenceImage, drawingOptions, canvas => canvas.Fill(pen.StrokeFill, outline));
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0004F);
+        ImageComparer comparer = ImageComparer.Tolerant(0F, 3 * 257);
+        comparer.VerifySimilarity(referenceImage, defaultImage);
+        comparer.VerifySimilarity(referenceImage, nativeSurfaceImage);
         for (int y = 0; y < referenceImage.Height; y++)
         {
             Assert.Equal(referenceImage[79, y], defaultImage[79, y]);

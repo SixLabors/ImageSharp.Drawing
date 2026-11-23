@@ -86,18 +86,9 @@ internal static class WebGPUSceneEncoder
     private const int PtclClipWords = 9;
 
     /// <summary>
-    /// Half the length of the synthetic horizontal segment substituted for point-like strokes so caps
-    /// still render a dot. The full segment length equals <see cref="StrokeMicroSegmentEpsilon"/>, keeping
-    /// the substitute just above the micro-segment collapse threshold.
+    /// The square of the minimum stroke segment length used by the CPU stroker.
     /// </summary>
-    private const float PointStrokeSegmentHalfLength = 1F / 128F;
-
-    /// <summary>
-    /// The stroke micro-segment collapse threshold in pixels. Mirrors the CPU stroker's 1/64 px
-    /// preprocessing in <c>DefaultRasterizer.StrokeLinearizer</c> so GPU strokes consume the same
-    /// segment list the CPU stroker strokes.
-    /// </summary>
-    private const float StrokeMicroSegmentEpsilon = 1F / 64F;
+    private const float StrokeDirectionEpsilonSquared = DefaultRasterizer.StrokeDirectionEpsilon * DefaultRasterizer.StrokeDirectionEpsilon;
 
     /// <summary>
     /// The largest scene segment count of one encoding. A range has at most this count. coarse.wgsl stores the segment index in 8 bits.
@@ -3429,7 +3420,7 @@ internal static class WebGPUSceneEncoder
             GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
             Rectangle interestBounds = ToTargetLocal(command.RasterizerOptions.Interest, this.rootTargetBounds);
             (uint style0, uint style1, uint style2, uint style3, uint style4, uint style5, uint style6, uint style7, uint style8, uint style9) =
-                GetStrokeStyle(command.GraphicsOptions, pen, widthScale, interestBounds);
+                GetStrokeStyle(command.GraphicsOptions, pen, widthScale, interestBounds, command.RasterizerOptions.CoverageBoost);
             int pathTagCheckpoint = this.PathTags.Count;
             int styleCheckpoint = this.Styles.Count;
             bool appendStyle = !this.hasLastStyle ||
@@ -3572,7 +3563,7 @@ internal static class WebGPUSceneEncoder
             GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
             Rectangle interestBounds = ToTargetLocal(rasterizerOptions.Interest, this.rootTargetBounds);
             (uint style0, uint style1, uint style2, uint style3, uint style4, uint style5, uint style6, uint style7, uint style8, uint style9) =
-                GetStrokeStyle(graphicsOptions, pen, widthScale, interestBounds);
+                GetStrokeStyle(graphicsOptions, pen, widthScale, interestBounds, rasterizerOptions.CoverageBoost);
             int pathTagCheckpoint = this.PathTags.Count;
             int styleCheckpoint = this.Styles.Count;
             bool appendStyle = !this.hasLastStyle ||
@@ -3711,7 +3702,7 @@ internal static class WebGPUSceneEncoder
             GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
             Rectangle interestBounds = ToTargetLocal(rasterizerOptions.Interest, this.rootTargetBounds);
             (uint style0, uint style1, uint style2, uint style3, uint style4, uint style5, uint style6, uint style7, uint style8, uint style9) =
-                GetStrokeStyle(graphicsOptions, pen, widthScale, interestBounds);
+                GetStrokeStyle(graphicsOptions, pen, widthScale, interestBounds, rasterizerOptions.CoverageBoost);
             int pathTagCheckpoint = this.PathTags.Count;
             int styleCheckpoint = this.Styles.Count;
             bool appendStyle = !this.hasLastStyle ||
@@ -7448,7 +7439,7 @@ internal static class WebGPUSceneEncoder
     /// Encodes the final line segments of a stroke centreline in target-local space.
     /// </summary>
     /// <remarks>
-    /// The encoder removes duplicate and sub-1/64-pixel segments and applies the same open/closed
+    /// The encoder removes segments with no usable direction and applies the same open/closed
     /// contour rules as the CPU stroker. The shader receives lines only and expands those lines into
     /// stroke bodies, joins, and caps.
     /// </remarks>
@@ -7497,7 +7488,7 @@ internal static class WebGPUSceneEncoder
         for (int i = 0; i < contours.Length; i++)
         {
             LinearContour contour = contours[i];
-            if (contour.PointCount == 0)
+            if (contour.PointCount < 2)
             {
                 continue;
             }
@@ -7561,25 +7552,15 @@ internal static class WebGPUSceneEncoder
 
             int segmentCount = keptCount - 1;
 
-            // Match the CPU closure rule. A contour with at least three source points is closed
-            // when it is declared closed or its endpoints are within one scaled stroke width.
-            bool isClosed = false;
-            if (contourPoints.Length >= 3)
-            {
-                PointF last = contourPoints[^1];
-                float closeThreshold = MathF.Max(strokeWidth, 1E-3F);
-                isClosed = contour.IsClosed ||
-                    firstPoint == last ||
-                    Vector2.DistanceSquared(firstPoint, last) <= closeThreshold * closeThreshold;
-            }
-
-            bool duplicateClosingPoint = keptCount > 1 && lastKept == firstPoint;
-            int distinctPointCount = keptCount - (isClosed && duplicateClosingPoint ? 1 : 0);
+            bool isClosed = contour.IsClosed;
+            bool duplicateClosingPoint = isClosed && keptCount > 1 && lastKept == firstPoint;
+            int distinctPointCount = keptCount - (duplicateClosingPoint ? 1 : 0);
 
             if (segmentCount == 0)
             {
-                EncodePointStrokeContour(pointLike, pointTranslateX, pointTranslateY, ref pathTags, ref pathData);
-                outlineLength += (4D * PointStrokeSegmentHalfLength) + (2D * capChainLength);
+                Span<PointF> pointSegment = [pointLike, pointLike];
+                EncodeOpenStrokeContour(pointSegment, pointTranslateX, pointTranslateY, ref pathTags, ref pathData);
+                outlineLength += GetPointStrokeOutlineLength(pen, halfWidth);
                 encodedContourCount++;
                 continue;
             }
@@ -7598,11 +7579,10 @@ internal static class WebGPUSceneEncoder
             {
                 int emitCount = duplicateClosingPoint ? keptCount - 1 : keptCount;
 
-                // Emit the final line back to the first point only when that gap survived the
-                // micro-segment filter. A smaller gap is closed by the join alone.
+                // Add the closing segment when the path has a usable direction at the seam.
                 bool closingSegment = duplicateClosingPoint ||
                     (segmentCount > 1 &&
-                     Vector2.DistanceSquared(lastKept, firstPoint) > StrokeMicroSegmentEpsilon * StrokeMicroSegmentEpsilon);
+                     Vector2.DistanceSquared(lastKept, firstPoint) > StrokeDirectionEpsilonSquared);
 
                 if (closingSegment && !duplicateClosingPoint)
                 {
@@ -7713,11 +7693,10 @@ internal static class WebGPUSceneEncoder
 
             // The open marker stores the start point and one point on its outgoing tangent. QuadTo
             // selects this four-word marker layout; it does not represent a curve in the shader.
-            PointF tangentPoint = GetStrokeMarkerTangentPoint(firstPoint, secondPoint);
             openData[openDataIndex++] = BitcastSingle(firstPoint.X + pointTranslateX);
             openData[openDataIndex++] = BitcastSingle(firstPoint.Y + pointTranslateY);
-            openData[openDataIndex++] = BitcastSingle(tangentPoint.X + pointTranslateX);
-            openData[openDataIndex] = BitcastSingle(tangentPoint.Y + pointTranslateY);
+            openData[openDataIndex++] = BitcastSingle(secondPoint.X + pointTranslateX);
+            openData[openDataIndex] = BitcastSingle(secondPoint.Y + pointTranslateY);
             openTags[openTagIndex] = PackPathTag(PathTag.QuadToF32 | PathTag.SubpathEnd);
 
             pathData.Advance(openData.Length);
@@ -7738,7 +7717,7 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
-    /// Gets the next stroke contour point that survives exact-duplicate and micro-segment collapse.
+    /// Gets the next point that gives the stroke segment a usable direction.
     /// </summary>
     /// <param name="points">The source contour points.</param>
     /// <param name="index">The next source point index.</param>
@@ -7766,9 +7745,7 @@ internal static class WebGPUSceneEncoder
 
             pointLike = point;
 
-            // A non-duplicate micro segment updates the representative point but does not become
-            // a stroke segment. Measure the next candidate from the last point that was retained.
-            if (Vector2.DistanceSquared(previousKept, point) <= StrokeMicroSegmentEpsilon * StrokeMicroSegmentEpsilon)
+            if (Vector2.DistanceSquared(previousKept, point) <= StrokeDirectionEpsilonSquared)
             {
                 continue;
             }
@@ -7813,50 +7790,12 @@ internal static class WebGPUSceneEncoder
 
         // QuadTo selects the open-marker layout. These two points define a line tangent; no curve
         // reaches the shader.
-        PointF tangentPoint = GetStrokeMarkerTangentPoint(points[0], points[1]);
         contourData[dataIndex++] = BitcastSingle(points[0].X + pointTranslateX);
         contourData[dataIndex++] = BitcastSingle(points[0].Y + pointTranslateY);
-        contourData[dataIndex++] = BitcastSingle(tangentPoint.X + pointTranslateX);
-        contourData[dataIndex] = BitcastSingle(tangentPoint.Y + pointTranslateY);
+        contourData[dataIndex++] = BitcastSingle(points[1].X + pointTranslateX);
+        contourData[dataIndex] = BitcastSingle(points[1].Y + pointTranslateY);
         contourTags[tagIndex] = PackPathTag(PathTag.QuadToF32 | PathTag.SubpathEnd);
 
-        pathData.Advance(contourData.Length);
-        pathTags.Advance(contourTags.Length);
-    }
-
-    /// <summary>
-    /// Encodes one point-like stroke contour as a tiny centered open segment.
-    /// </summary>
-    /// <param name="point">The point the contour collapsed to.</param>
-    /// <param name="pointTranslateX">The x translation to target-local space.</param>
-    /// <param name="pointTranslateY">The y translation to target-local space.</param>
-    /// <param name="pathTags">The path-tag stream.</param>
-    /// <param name="pathData">The path-data stream.</param>
-    private static void EncodePointStrokeContour(
-        PointF point,
-        float pointTranslateX,
-        float pointTranslateY,
-        ref OwnedStream<byte> pathTags,
-        ref OwnedStream<uint> pathData)
-    {
-        // A zero-length centreline has no tangent. Use the same short horizontal segment as the
-        // CPU point-stroke path so cap construction has a stable direction.
-        PointF start = new(point.X - PointStrokeSegmentHalfLength, point.Y);
-        PointF end = new(point.X + PointStrokeSegmentHalfLength, point.Y);
-        PointF tangentEnd = GetStrokeMarkerTangentPoint(start, end);
-
-        Span<uint> contourData = pathData.GetAppendSpan(8);
-        Span<byte> contourTags = pathTags.GetAppendSpan(2);
-        contourData[0] = BitcastSingle(start.X + pointTranslateX);
-        contourData[1] = BitcastSingle(start.Y + pointTranslateY);
-        contourData[2] = BitcastSingle(end.X + pointTranslateX);
-        contourData[3] = BitcastSingle(end.Y + pointTranslateY);
-        contourTags[0] = PackPathTag(PathTag.LineToF32);
-        contourData[4] = BitcastSingle(start.X + pointTranslateX);
-        contourData[5] = BitcastSingle(start.Y + pointTranslateY);
-        contourData[6] = BitcastSingle(tangentEnd.X + pointTranslateX);
-        contourData[7] = BitcastSingle(tangentEnd.Y + pointTranslateY);
-        contourTags[1] = PackPathTag(PathTag.QuadToF32 | PathTag.SubpathEnd);
         pathData.Advance(contourData.Length);
         pathTags.Advance(contourTags.Length);
     }
@@ -7895,13 +7834,22 @@ internal static class WebGPUSceneEncoder
     {
         float pointTranslateX = destinationOffset.X - rootTargetBounds.X;
         float pointTranslateY = destinationOffset.Y - rootTargetBounds.Y;
-        NormalizePointStrokeSegment(ref start, ref end);
+        float lengthSquared = Vector2.DistanceSquared(start, end);
+        bool isPoint = lengthSquared <= StrokeDirectionEpsilonSquared;
+        if (isPoint)
+        {
+            end = start;
+        }
+
         Span<PointF> segmentPoints = [start, end];
         EncodeOpenStrokeContour(segmentPoints, pointTranslateX, pointTranslateY, ref pathTags, ref pathData);
         pathTags.Add(PackPathTag(PathTag.Path));
         lineCount = EstimateStrokeLineCountForOpenSegment(pen, widthScale);
         float halfWidth = pen.StrokeWidth * widthScale * 0.5F;
-        double outlineLength = (2D * Vector2.Distance(start, end)) + (2D * GetStrokeCapChainLength(pen, halfWidth));
+        double outlineLength = isPoint
+            ? GetPointStrokeOutlineLength(pen, halfWidth)
+            : (2D * MathF.Sqrt(lengthSquared)) + (2D * GetStrokeCapChainLength(pen, halfWidth));
+
         tileCrossings = BoundStrokeTileCrossings(outlineLength, residualStretch, lineCount);
         rowCrossings = 2L * GetRowTileCrossings(start, end);
         endCrossings = GetStrokeEndTileCrossings(lineCount, 1, pen, widthScale);
@@ -7953,21 +7901,13 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
-    /// Replaces a point-like explicit stroke segment with the tiny tangent segment used for point strokes.
+    /// Gets the perimeter of the footprint of a zero-length segment.
     /// </summary>
-    /// <param name="start">The segment start point; replaced when the segment is point-like.</param>
-    /// <param name="end">The segment end point; replaced when the segment is point-like.</param>
-    private static void NormalizePointStrokeSegment(ref PointF start, ref PointF end)
-    {
-        if (Vector2.DistanceSquared(start, end) > StrokeMicroSegmentEpsilon * StrokeMicroSegmentEpsilon)
-        {
-            return;
-        }
-
-        PointF center = new((start.X + end.X) * 0.5F, (start.Y + end.Y) * 0.5F);
-        start = new PointF(center.X - PointStrokeSegmentHalfLength, center.Y);
-        end = new PointF(center.X + PointStrokeSegmentHalfLength, center.Y);
-    }
+    /// <param name="pen">The pen that defines the cap.</param>
+    /// <param name="halfWidth">Half the stroke width.</param>
+    /// <returns>The perimeter in pixels.</returns>
+    private static double GetPointStrokeOutlineLength(Pen pen, float halfWidth)
+        => pen.StrokeOptions.LineCap == LineCap.Round ? 2D * GetStrokeCapChainLength(pen, halfWidth) : 8D * halfWidth;
 
     /// <summary>
     /// Encodes a rectangle as a fixed-size closed path.
@@ -8461,9 +8401,8 @@ internal static class WebGPUSceneEncoder
         {
             LinearContour contour = geometry.Contours[i];
 
-            // The stroke encoder can close an open contour whose ends meet, which adds one body
-            // and one join, and it draws a two-point closed contour as a capped open segment. So
-            // every contour gets the closing body, a join for each body and two caps.
+            // Reserve a join for each body and two caps. The extra body on an open path
+            // also covers the four edges of a square for a zero-length segment.
             int bodies = contour.IsClosed ? contour.SegmentCount : contour.SegmentCount + 1;
             total += (bodies * 2) + (bodies * joinCost) + (capCost * 2);
         }
@@ -8623,18 +8562,6 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
-    /// Returns the encoded tangent point used by the staged stroker's cap marker segment for one explicit open line segment.
-    /// </summary>
-    /// <param name="start">The subpath start point.</param>
-    /// <param name="end">The first segment end point.</param>
-    /// <returns>The tangent point, one third of the way from <paramref name="start"/> to <paramref name="end"/>.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static PointF GetStrokeMarkerTangentPoint(PointF start, PointF end)
-        => new(
-            start.X + ((end.X - start.X) / 3F),
-            start.Y + ((end.Y - start.Y) / 3F));
-
-    /// <summary>
     /// Reserves the exact stream growth needed for one begin-layer clip item.
     /// </summary>
     /// <param name="appendStyle">Whether a new style record will be emitted.</param>
@@ -8774,9 +8701,8 @@ internal static class WebGPUSceneEncoder
     /// </summary>
     /// <remarks>
     /// Word layout consumed by path_lowering.wgsl: 0 = style flags, 1 = device-space stroke width,
-    /// 2 = packed draw flags, 3 = miter limit, 4 = arc detail scale, 5 = zero,
+    /// 2 = packed draw flags, 3 = miter limit, 4 = arc detail scale, 5 = coverage boost,
     /// 6-9 = target-local interest rectangle as left, top, right, bottom.
-    /// Strokes do not use antialiased text coverage boost data, so word 5 is zero in both modes.
     /// <para>
     /// Bits 0-10 of word 0 hold the arc limit: the interior vertex count of a round arc of
     /// half a turn, from <see cref="GetStrokeArcLineCost"/>. The shader clamps the vertex count of
@@ -8789,6 +8715,7 @@ internal static class WebGPUSceneEncoder
     /// <param name="pen">The pen that defines stroke width, joins, caps, and miter limit.</param>
     /// <param name="widthScale">The transform-derived scale applied to the stroke width.</param>
     /// <param name="interestBounds">The target-local raster interest bounds.</param>
+    /// <param name="coverageBoost">The coverage boost for antialiased text strokes.</param>
     /// <returns>The ten packed style words.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static (
@@ -8805,7 +8732,8 @@ internal static class WebGPUSceneEncoder
         GraphicsOptions options,
         Pen pen,
         float widthScale,
-        Rectangle interestBounds)
+        Rectangle interestBounds,
+        float coverageBoost)
     {
         StyleFlags styleFlags = StyleFlags.Stroke
             | EncodeStrokeJoinFlags(pen.StrokeOptions.LineJoin)
@@ -8825,7 +8753,7 @@ internal static class WebGPUSceneEncoder
             PackStyleDrawFlags(options),
             BitcastSingle((float)pen.StrokeOptions.MiterLimit),
             BitcastSingle((float)pen.StrokeOptions.ArcDetailScale),
-            0U,
+            options.Antialias ? BitcastSingle(coverageBoost) : 0U,
             BitcastSingle(interestBounds.Left),
             BitcastSingle(interestBounds.Top),
             BitcastSingle(interestBounds.Right),

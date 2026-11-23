@@ -49,7 +49,15 @@ public class ArcLineSegment : ILineSegment
         }
         else
         {
-            this.linePoints = EllipticArcFromEndParams(from, to, radius, rotation, largeArc, sweep);
+            PointF[] points = EllipticArcFromEndParams(from, to, radius, rotation, largeArc, sweep);
+            if (points.Length == 0)
+            {
+                points = [from, to];
+            }
+
+            // Keep the requested end so the next segment starts at the same point.
+            points[^1] = to;
+            this.linePoints = points;
         }
 
         this.Bounds = CalculateBounds(this.linePoints);

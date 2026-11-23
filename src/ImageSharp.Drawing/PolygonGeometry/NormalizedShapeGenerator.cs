@@ -10,19 +10,14 @@ namespace SixLabors.ImageSharp.Drawing.PolygonGeometry;
 /// <summary>
 /// Generates normalized polygon shapes from paths.
 /// </summary>
-/// <remarks>
-/// Normalization converts the incoming path contours to a positive-winding polygon representation.
-/// This gives later boolean operations a stable contour set instead of preserving ambiguous
-/// self-intersections, overlaps, or parity-dependent contour relationships from the source path.
-/// </remarks>
 internal static class NormalizedShapeGenerator
 {
     /// <summary>
-    /// Normalizes the specified path.
+    /// Resolves self-intersections and overlaps using the non-zero fill rule.
     /// </summary>
     /// <param name="path">The path to normalize.</param>
     /// <returns>
-    /// A <see cref="ComplexPolygon"/> containing the normalized positive-winding contours.
+    /// A <see cref="ComplexPolygon"/> containing the boundaries of the filled area.
     /// </returns>
     public static ComplexPolygon NormalizeShape(IPath path)
     {
@@ -45,12 +40,6 @@ internal static class NormalizedShapeGenerator
                 ring.Add(new Vertex(p.X, p.Y));
             }
 
-            // PolygonClipper expects closed rings to repeat their start point.
-            if (sp.IsClosed)
-            {
-                ring.Add(ring[0]);
-            }
-
             rings.Add(ring);
         }
 
@@ -60,14 +49,7 @@ internal static class NormalizedShapeGenerator
             return new([]);
         }
 
-        PCPolygon result = PolygonClipperAction.Normalize(rings);
-
-        IPath[] shapes = new IPath[result.Count];
-        for (int i = 0; i < result.Count; i++)
-        {
-            shapes[i] = new Polygon(ClippedShapeGenerator.CreateContourPoints(result, i));
-        }
-
-        return new(shapes);
+        PCPolygon result = PolygonClipperAction.Normalize(rings, FillRule.NonZero);
+        return ClippedShapeGenerator.ToComplexPolygon(result);
     }
 }

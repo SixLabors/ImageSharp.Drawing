@@ -11,11 +11,11 @@ namespace SixLabors.ImageSharp.Drawing;
 public static class NormalizePathExtensions
 {
     /// <summary>
-    /// Creates a normalized positive-winding polygon representation of the specified path.
+    /// Resolves self-intersections and overlaps using the non-zero fill rule.
     /// </summary>
     /// <param name="path">The path to normalize.</param>
     /// <returns>
-    /// A path whose contours represent the normalized filled area of <paramref name="path"/> using positive winding.
+    /// A path whose contours enclose the regions of <paramref name="path"/> with non-zero winding.
     /// </returns>
     public static IPath Normalize(this IPath path) => NormalizedShapeGenerator.NormalizeShape(path);
 }

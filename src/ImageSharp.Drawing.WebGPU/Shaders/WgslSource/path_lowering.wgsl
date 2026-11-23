@@ -87,7 +87,7 @@ fn stroke_normalize_positive_angle(angle: f32) -> f32 {
 
 // Port of the CPU stroker's GetArcSubdivisionCount (round join and cap tessellation): returns the
 // number of interior vertices needed to keep the arc's chordal error within the arc detail scale.
-fn stroke_arc_subdivision_count(radius: f32, sweep: f32, arc_detail_scale: f32) -> u32 {
+fn stroke_arc_subdivision_count(radius: f32, sweep: f32, arc_detail_scale: f32, limit: u32) -> u32 {
     let safe_radius = max(radius, TANGENT_THRESH);
     let safe_scale = max(arc_detail_scale, 0.01);
     let ratio = clamp(safe_radius / (safe_radius + (0.125 / safe_scale)), -1.0, 1.0);
@@ -97,7 +97,7 @@ fn stroke_arc_subdivision_count(radius: f32, sweep: f32, arc_detail_scale: f32) 
     }
     // The f32 radius and acos can give more vertices than the CPU count. The CPU line estimate
     // allows the arc limit, so the count is clamped to it.
-    return min(u32(max(sweep / theta, 0.0)), arc_limit);
+    return min(u32(max(sweep / theta, 0.0)), limit);
 }
 
 // Port of the CPU stroker's AppendDirectedArcContour (round caps): steps through the positive
@@ -118,7 +118,7 @@ fn stroke_chain_arc(
     // must rotate the start offset; absolute angles of the offsets are not computable here.
     let cross_ft = (from_offset.x * to_offset.y) - (from_offset.y * to_offset.x);
     let sweep = stroke_normalize_positive_angle(atan2(cross_ft, dot(from_offset, to_offset)));
-    let n = stroke_arc_subdivision_count(radius, sweep, arc_detail_scale);
+    let n = stroke_arc_subdivision_count(radius, sweep, arc_detail_scale, arc_limit);
     let step = sweep / f32(n + 1u);
     let rot_c = cos(step);
     let rot_s = sin(step);
@@ -144,7 +144,7 @@ fn stroke_calc_arc(
     let cross_oo = (o1.x * o2.y) - (o1.y * o2.x);
     let sweep = stroke_normalize_positive_angle(atan2(cross_oo, dot(o1, o2)));
     stroke_chain_point(path_ix, last, v1 + o1, transform);
-    let n = stroke_arc_subdivision_count(half_width, sweep, arc_detail_scale);
+    let n = stroke_arc_subdivision_count(half_width, sweep, arc_detail_scale, arc_limit);
     let step = sweep / f32(n + 1u);
     let rot_c = cos(step);
     let rot_s = sin(step);
@@ -657,21 +657,45 @@ fn main(
                 if is_open {
                     // Start cap. The marker carries the first segment's tangent; the CPU stroker's
                     // caps chain from cap0 to cap1 so they splice into the offset edges.
-                    var tangent = pts.p1 - pts.p0;
-                    if dot(tangent, tangent) < TANGENT_THRESH * TANGENT_THRESH {
-                        tangent = vec2(TANGENT_THRESH, 0.);
+                    let tangent = pts.p1 - pts.p0;
+                    let start_cap = (style_flags & STYLE_FLAGS_START_CAP_MASK) >> 2u;
+                    if all(tangent == vec2f(0.)) {
+                        // Equal marker points denote a zero-length segment. Emit its entire
+                        // outline here because the body has no direction and emits no lines.
+                        if start_cap == STYLE_FLAGS_CAP_ROUND {
+                            // Use one full turn as PolygonClipper does. Two cap budgets
+                            // cover the full circle because each includes its final edge.
+                            let full_turn = 6.283185307179586;
+                            let count = max(4u, stroke_arc_subdivision_count(half_width, full_turn, arc_detail_scale, 2u * (arc_limit + 1u)));
+                            let step = full_turn / f32(count);
+                            let first = pts.p0 + vec2f(half_width, 0.);
+                            var last = first;
+                            for (var i = 1u; i < count; i += 1u) {
+                                let angle = step * f32(i);
+                                let next = pts.p0 + half_width * vec2f(cos(angle), sin(angle));
+                                stroke_chain_point(path_ix, &last, next, transform);
+                            }
+                            stroke_chain_point(path_ix, &last, first, transform);
+                        } else {
+                            let p0 = pts.p0 + vec2f(-half_width, -half_width);
+                            let p1 = pts.p0 + vec2f(half_width, -half_width);
+                            let p2 = pts.p0 + vec2f(half_width, half_width);
+                            let p3 = pts.p0 + vec2f(-half_width, half_width);
+                            output_two_lines_with_transform(path_ix, p0, p1, p1, p2, transform);
+                            output_two_lines_with_transform(path_ix, p2, p3, p3, p0, transform);
+                        }
+                    } else {
+                        let offset_tangent = half_width * normalize(tangent);
+                        let n = vec2(offset_tangent.y, -offset_tangent.x);
+                        draw_cap(path_ix, start_cap, arc_detail_scale,
+                                 pts.p0, pts.p0 - n, pts.p0 + n, -offset_tangent, transform);
                     }
-                    let offset_tangent = half_width * normalize(tangent);
-                    let n = vec2(offset_tangent.y, -offset_tangent.x);
-                    draw_cap(path_ix, (style_flags & STYLE_FLAGS_START_CAP_MASK) >> 2u, arc_detail_scale,
-                             pts.p0, pts.p0 - n, pts.p0 + n, -offset_tangent, transform);
                 } else {
                     // Don't draw anything if the path is closed.
                 }
             } else {
                 // CPU stroker port: stroke centerline segments are always straight lines, so the
                 // offset edges are straight offset lines; joins and caps carry all the curvature.
-                // The encoder collapses micro-segments (1/64 px) exactly like the CPU stroker.
                 let p0 = pts.p0;
                 let p1 = pts.p1;
                 let seg = p1 - p0;

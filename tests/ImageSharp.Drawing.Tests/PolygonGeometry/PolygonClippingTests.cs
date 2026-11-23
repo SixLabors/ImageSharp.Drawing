@@ -29,6 +29,62 @@ public class PolygonClippingTests
     private static ComplexPolygon Clip(IPath shape, params IPath[] hole)
         => ClippedShapeGenerator.GenerateClippedShapes(BooleanOperation.Difference, shape, hole);
 
+    /// <summary>
+    /// Checks that either operand can supply an open line.
+    /// </summary>
+    /// <param name="lineIsSubject">Whether the line is the subject.</param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Intersection_OpenLineAndRectangle_ReturnsOpenLine(bool lineIsSubject)
+    {
+        IPath line = new Path([new PointF(-5, 5), new PointF(15, 5)]);
+        IPath rectangle = new RectanglePolygon(0, 0, 10, 10);
+
+        IPath result = lineIsSubject ? line.Clip(rectangle) : rectangle.Clip(line);
+
+        ISimplePath figure = Assert.Single(result.Flatten());
+        Assert.False(figure.IsClosed);
+        Assert.Equal(new[] { new PointF(0, 5), new PointF(10, 5) }, figure.Points.ToArray());
+    }
+
+    /// <summary>
+    /// Checks that crossing lines produce a point that can be transformed and clipped again.
+    /// </summary>
+    [Fact]
+    public void Intersection_CrossingLines_ReturnsReusablePoint()
+    {
+        IPath first = new Path([new PointF(0, 0), new PointF(10, 10)]);
+        IPath second = new Path([new PointF(0, 10), new PointF(10, 0)]);
+
+        IPath point = first.Clip(second);
+        ISimplePath figure = Assert.Single(point.Flatten());
+        Assert.False(figure.IsClosed);
+        Assert.Equal(new PointF(5, 5), Assert.Single(figure.Points.ToArray()));
+
+        IPath translated = point.Transform(Matrix4x4.CreateTranslation(1, 2, 0));
+        IPath clipped = translated.Clip(new RectanglePolygon(0, 0, 10, 10));
+        ISimplePath result = Assert.Single(clipped.Flatten());
+        Assert.False(result.IsClosed);
+        Assert.Equal(new PointF(6, 7), Assert.Single(result.Points.ToArray()));
+    }
+
+    /// <summary>
+    /// Checks that internal rectangle boundaries do not split a clipped line.
+    /// </summary>
+    [Fact]
+    public void Intersection_OpenLineAcrossRegionBands_ReturnsOneOpenLine()
+    {
+        Region region = new(new Rectangle(0, 0, 10, 10));
+        region.Add(new Rectangle(0, 10, 5, 10));
+        IPath line = new Path([new PointF(2, -1), new PointF(2, 21)]);
+
+        ISimplePath result = Assert.Single(line.Clip(region.ToPath()).Flatten());
+        Assert.False(result.IsClosed);
+        Assert.Equal(new PointF(2, 0), result.Points.Span[0]);
+        Assert.Equal(new PointF(2, 20), result.Points.Span[^1]);
+    }
+
     [Fact]
     public void OverlappingTriangleCutRightSide()
     {
