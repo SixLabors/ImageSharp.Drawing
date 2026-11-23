@@ -2315,6 +2315,9 @@ public partial class WebGPUDrawingBackendTests
         RenderWithDefaultBackend(referenceImage, drawingOptions, canvas => canvas.Fill(pen.StrokeFill, outline));
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        // The measured difference between the CPU and WebGPU images is 0.00042%.
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0005F);
+
         ImageComparer comparer = ImageComparer.Tolerant(0F, 3 * 257);
         comparer.VerifySimilarity(referenceImage, defaultImage);
         comparer.VerifySimilarity(referenceImage, nativeSurfaceImage);
