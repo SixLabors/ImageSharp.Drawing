@@ -2025,11 +2025,10 @@ public partial class WebGPUDrawingBackendTests
         where TPixel : unmanaged, IPixel<TPixel>
         => AssertStrokeMatchesOutline(
             provider,
-            "PolygonClipper",
             null,
-            canvas => DefaultRasterizerStrokeTests.DrawDashedEllipse(canvas),
-            canvas => DefaultRasterizerStrokeTests.DrawDashedEllipse(canvas, fillOutline: true),
-            ImageComparer.Tolerant(0F, 3 * 257));
+            DefaultRasterizerStrokeTests.DrawDashedEllipse,
+            backendTolerancePercent: 0.002F,
+            referenceTolerancePercent: 0.0003F);
 
     /// <summary>
     /// Checks the stroke of a point, a zero-length segment, and a short segment.
@@ -2044,36 +2043,39 @@ public partial class WebGPUDrawingBackendTests
     public void Stroke_DistinguishesPointFromZeroLengthSegment<TPixel>(TestImageProvider<TPixel> provider, LineCap cap)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        // The CPU samples round caps directly and the reference uses straight edges.
-        // Allow edge coverage differences in RGB. The comparer uses 16-bit channels.
-        int edgeTolerance = cap == LineCap.Round ? 36 : 2;
-        ImageComparer comparer = ImageComparer.Tolerant(0F, 3 * 257 * edgeTolerance);
+        // The CPU samples round caps directly. The outline uses straight segments.
+        // The largest measured differences were 0.11815% for round, 0.00546% for square,
+        // and 0.00029% for butt.
+        float tolerancePercent = cap switch
+        {
+            LineCap.Round => 0.125F,
+            LineCap.Square => 0.006F,
+            _ => 0.0003F
+        };
+
         AssertStrokeMatchesOutline(
             provider,
-            $"{cap}_PolygonClipper",
             $"{cap}",
             canvas => DefaultRasterizerStrokeTests.DrawPointAndSegments(canvas, cap),
-            canvas => DefaultRasterizerStrokeTests.DrawPointAndSegments(canvas, cap, fillOutline: true),
-            comparer);
+            tolerancePercent,
+            tolerancePercent);
     }
 
     /// <summary>
-    /// Saves the two backend renders and compares them with the outline reference.
+    /// Compares the backend strokes with each other and with reference fills of the PolygonClipper outline.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="provider">The white test image.</param>
-    /// <param name="referenceName">The details for the outline image file name.</param>
     /// <param name="testName">The details for the stroke image file names.</param>
     /// <param name="drawStroke">Draws the native stroke.</param>
-    /// <param name="fillOutline">Fills the PolygonClipper outline.</param>
-    /// <param name="comparer">The image comparer.</param>
+    /// <param name="backendTolerancePercent">The maximum difference between the backends, in percent.</param>
+    /// <param name="referenceTolerancePercent">The maximum difference from each reference, in percent.</param>
     private static void AssertStrokeMatchesOutline<TPixel>(
         TestImageProvider<TPixel> provider,
-        string referenceName,
         string testName,
         CanvasAction drawStroke,
-        CanvasAction fillOutline,
-        ImageComparer comparer)
+        float backendTolerancePercent,
+        float referenceTolerancePercent)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         DrawingOptions options = new();
@@ -2090,13 +2092,9 @@ public partial class WebGPUDrawingBackendTests
             canvas => drawStroke(canvas),
             initialImage);
 
-        using Image<TPixel> outlineImage = provider.GetImage();
-        RenderWithDefaultBackend(outlineImage, options, fillOutline);
-
-        outlineImage.DebugSave(provider, referenceName, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
         DebugSaveBackendPair(provider, testName, defaultImage, nativeImage);
-        defaultImage.CompareToReferenceOutput(comparer, provider, referenceName, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
-        nativeImage.CompareToReferenceOutput(comparer, provider, referenceName, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+        AssertBackendPairSimilarity(defaultImage, nativeImage, backendTolerancePercent);
+        AssertBackendPairReferenceOutputs(provider, testName, defaultImage, nativeImage, referenceTolerancePercent);
     }
 
     [WebGPUTheory]
@@ -2316,7 +2314,7 @@ public partial class WebGPUDrawingBackendTests
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         // The measured difference between the CPU and WebGPU images is 0.00042%.
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0005F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.00043F);
 
         ImageComparer comparer = ImageComparer.Tolerant(0F, 3 * 257);
         comparer.VerifySimilarity(referenceImage, defaultImage);

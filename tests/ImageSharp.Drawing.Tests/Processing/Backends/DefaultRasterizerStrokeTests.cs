@@ -71,18 +71,11 @@ public class DefaultRasterizerStrokeTests
     /// Draws the dashed ellipse from issue 430.
     /// </summary>
     /// <param name="canvas">The canvas to draw on.</param>
-    /// <param name="fillOutline">Whether to fill the PolygonClipper outline.</param>
-    internal static void DrawDashedEllipse(DrawingCanvas canvas, bool fillOutline = false)
+    internal static void DrawDashedEllipse(DrawingCanvas canvas)
     {
         IPath ellipse = new EllipsePolygon(128, 128, 200, 200);
         StrokeOptions stroke = new() { LineJoin = LineJoin.Miter, LineCap = LineCap.Butt };
         Pen dashed = new PatternPen(new PenOptions(Color.Black, 2, [4F, 2F, 1F, 2F]) { StrokeOptions = stroke });
-        if (fillOutline)
-        {
-            canvas.Fill(dashed.StrokeFill, dashed.GeneratePath(ellipse));
-            return;
-        }
-
         canvas.Draw(dashed, ellipse);
     }
 
@@ -91,8 +84,7 @@ public class DefaultRasterizerStrokeTests
     /// </summary>
     /// <param name="canvas">The canvas to draw on.</param>
     /// <param name="cap">The stroke cap.</param>
-    /// <param name="fillOutline">Whether to fill the PolygonClipper outline.</param>
-    internal static void DrawPointAndSegments(DrawingCanvas canvas, LineCap cap, bool fillOutline = false)
+    internal static void DrawPointAndSegments(DrawingCanvas canvas, LineCap cap)
     {
         Pen pen = new SolidPen(new PenOptions(Color.Black, 10) { StrokeOptions = new StrokeOptions { LineCap = cap } });
         Path first = new([new PointF(8, 8), new PointF(24, 24)]);
@@ -106,16 +98,6 @@ public class DefaultRasterizerStrokeTests
         PointF shortLineEnd = new(80.005F, 16.005F);
         Path zeroPath = new([zeroStart, zeroStart]);
         Path shortPath = new([shortStart, shortEnd]);
-
-        if (fillOutline)
-        {
-            canvas.Fill(pen.StrokeFill, pen.GeneratePath(point));
-            canvas.Fill(pen.StrokeFill, pen.GeneratePath(zeroPath));
-            canvas.Fill(pen.StrokeFill, pen.GeneratePath(new Path([zeroLineStart, zeroLineStart])));
-            canvas.Fill(pen.StrokeFill, pen.GeneratePath(shortPath));
-            canvas.Fill(pen.StrokeFill, pen.GeneratePath(new Path([shortLineStart, shortLineEnd])));
-            return;
-        }
 
         canvas.Draw(pen, point);
         canvas.Draw(pen, zeroPath);
