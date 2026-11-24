@@ -234,3 +234,6 @@ SixLabors.Shapes.Coverage.xml
 /plans/
 
 samples/Avalonia**
+
+# Local specifications
+specs/

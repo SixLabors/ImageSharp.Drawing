@@ -106,7 +106,9 @@ internal static partial class DefaultRasterizer
                     continue;
                 }
 
-                bool isClosed = this.IsContourClosedForEmission(contourPoints, contour.IsClosed);
+                // An open path with a gap needs caps, even when the gap is shorter than the stroke width.
+                bool isClosed = contourPoints.Length >= 3 &&
+                    (contour.IsClosed || contourPoints[0] == contourPoints[^1]);
 
                 this.ProcessContour(contourPoints, isClosed, contourInterest == ContourInterest.Contained);
             }
@@ -148,47 +150,6 @@ internal static partial class DefaultRasterizer
 
             return ContourInterest.Clipped;
         }
-
-        /// <summary>
-        /// Returns whether a contour should be treated as closed when emitting stroke geometry.
-        /// A contour is closed when it is declared closed, its first and last points coincide, or
-        /// the endpoint gap is at most max(strokeWidth, 1e-3). Mirrored at encode time by
-        /// <c>WebGPUSceneEncoder.EncodeStrokePath</c>; both must stay in lockstep.
-        /// </summary>
-        /// <param name="contourPoints">The contour points.</param>
-        /// <param name="isDeclaredClosed">Indicates whether the contour is explicitly closed.</param>
-        /// <returns><see langword="true"/> when the contour should be stroked as closed; otherwise <see langword="false"/>.</returns>
-        private bool IsContourClosedForEmission(ReadOnlySpan<PointF> contourPoints, bool isDeclaredClosed)
-        {
-            // Fewer than three points cannot enclose area, so such contours always stroke open.
-            if (contourPoints.Length < 3)
-            {
-                return false;
-            }
-
-            PointF first = this.TransformPoint(contourPoints[0]);
-            PointF last = this.TransformPoint(contourPoints[^1]);
-
-            if (isDeclaredClosed || first == last)
-            {
-                return true;
-            }
-
-            // Near-closure: a gap no wider than the stroke itself is visually sealed by the
-            // stroke body, so emit a wrap join instead of two caps facing across a slit.
-            Vector2 delta = first - last;
-            float closeThreshold = MathF.Max(this.stroke.Width, 1E-3F);
-            return delta.LengthSquared() <= closeThreshold * closeThreshold;
-        }
-
-        /// <summary>
-        /// Applies the residual transform to one source point when one is present.
-        /// </summary>
-        /// <param name="point">The source point.</param>
-        /// <returns>The transformed point.</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private PointF TransformPoint(PointF point)
-            => this.HasResidual ? PointF.Transform(point, this.Residual) : point;
 
         /// <summary>
         /// Processes one centerline contour.

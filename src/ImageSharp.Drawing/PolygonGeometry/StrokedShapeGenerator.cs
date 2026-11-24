@@ -80,6 +80,8 @@ internal static class StrokedShapeGenerator
     {
         PolygonClipper.StrokeOptions o = new()
         {
+            // The conversion marks closed paths with a repeated start point.
+            CloseNearEndpoints = false,
             ArcDetailScale = options.ArcDetailScale,
             MiterLimit = options.MiterLimit,
             LineJoin = options.LineJoin switch

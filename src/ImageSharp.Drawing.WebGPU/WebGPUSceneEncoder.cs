@@ -3429,7 +3429,7 @@ internal static class WebGPUSceneEncoder
             GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
             Rectangle interestBounds = ToTargetLocal(command.RasterizerOptions.Interest, this.rootTargetBounds);
             (uint style0, uint style1, uint style2, uint style3, uint style4, uint style5, uint style6, uint style7, uint style8, uint style9) =
-                GetStrokeStyle(command.GraphicsOptions, pen, widthScale, interestBounds);
+                GetStrokeStyle(command.GraphicsOptions, pen, widthScale, interestBounds, command.RasterizerOptions.CoverageBoost);
             int pathTagCheckpoint = this.PathTags.Count;
             int styleCheckpoint = this.Styles.Count;
             bool appendStyle = !this.hasLastStyle ||
@@ -3572,7 +3572,7 @@ internal static class WebGPUSceneEncoder
             GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
             Rectangle interestBounds = ToTargetLocal(rasterizerOptions.Interest, this.rootTargetBounds);
             (uint style0, uint style1, uint style2, uint style3, uint style4, uint style5, uint style6, uint style7, uint style8, uint style9) =
-                GetStrokeStyle(graphicsOptions, pen, widthScale, interestBounds);
+                GetStrokeStyle(graphicsOptions, pen, widthScale, interestBounds, rasterizerOptions.CoverageBoost);
             int pathTagCheckpoint = this.PathTags.Count;
             int styleCheckpoint = this.Styles.Count;
             bool appendStyle = !this.hasLastStyle ||
@@ -3711,7 +3711,7 @@ internal static class WebGPUSceneEncoder
             GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
             Rectangle interestBounds = ToTargetLocal(rasterizerOptions.Interest, this.rootTargetBounds);
             (uint style0, uint style1, uint style2, uint style3, uint style4, uint style5, uint style6, uint style7, uint style8, uint style9) =
-                GetStrokeStyle(graphicsOptions, pen, widthScale, interestBounds);
+                GetStrokeStyle(graphicsOptions, pen, widthScale, interestBounds, rasterizerOptions.CoverageBoost);
             int pathTagCheckpoint = this.PathTags.Count;
             int styleCheckpoint = this.Styles.Count;
             bool appendStyle = !this.hasLastStyle ||
@@ -7561,17 +7561,9 @@ internal static class WebGPUSceneEncoder
 
             int segmentCount = keptCount - 1;
 
-            // Match the CPU closure rule. A contour with at least three source points is closed
-            // when it is declared closed or its endpoints are within one scaled stroke width.
-            bool isClosed = false;
-            if (contourPoints.Length >= 3)
-            {
-                PointF last = contourPoints[^1];
-                float closeThreshold = MathF.Max(strokeWidth, 1E-3F);
-                isClosed = contour.IsClosed ||
-                    firstPoint == last ||
-                    Vector2.DistanceSquared(firstPoint, last) <= closeThreshold * closeThreshold;
-            }
+            // An open path with a gap needs caps, even when the gap is shorter than the stroke width.
+            bool isClosed = contourPoints.Length >= 3 &&
+                (contour.IsClosed || firstPoint == contourPoints[^1]);
 
             bool duplicateClosingPoint = keptCount > 1 && lastKept == firstPoint;
             int distinctPointCount = keptCount - (isClosed && duplicateClosingPoint ? 1 : 0);
@@ -8774,9 +8766,8 @@ internal static class WebGPUSceneEncoder
     /// </summary>
     /// <remarks>
     /// Word layout consumed by path_lowering.wgsl: 0 = style flags, 1 = device-space stroke width,
-    /// 2 = packed draw flags, 3 = miter limit, 4 = arc detail scale, 5 = zero,
+    /// 2 = packed draw flags, 3 = miter limit, 4 = arc detail scale, 5 = coverage boost,
     /// 6-9 = target-local interest rectangle as left, top, right, bottom.
-    /// Strokes do not use antialiased text coverage boost data, so word 5 is zero in both modes.
     /// <para>
     /// Bits 0-10 of word 0 hold the arc limit: the interior vertex count of a round arc of
     /// half a turn, from <see cref="GetStrokeArcLineCost"/>. The shader clamps the vertex count of
@@ -8789,6 +8780,7 @@ internal static class WebGPUSceneEncoder
     /// <param name="pen">The pen that defines stroke width, joins, caps, and miter limit.</param>
     /// <param name="widthScale">The transform-derived scale applied to the stroke width.</param>
     /// <param name="interestBounds">The target-local raster interest bounds.</param>
+    /// <param name="coverageBoost">The coverage boost for antialiased text strokes.</param>
     /// <returns>The ten packed style words.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static (
@@ -8805,7 +8797,8 @@ internal static class WebGPUSceneEncoder
         GraphicsOptions options,
         Pen pen,
         float widthScale,
-        Rectangle interestBounds)
+        Rectangle interestBounds,
+        float coverageBoost)
     {
         StyleFlags styleFlags = StyleFlags.Stroke
             | EncodeStrokeJoinFlags(pen.StrokeOptions.LineJoin)
@@ -8825,7 +8818,7 @@ internal static class WebGPUSceneEncoder
             PackStyleDrawFlags(options),
             BitcastSingle((float)pen.StrokeOptions.MiterLimit),
             BitcastSingle((float)pen.StrokeOptions.ArcDetailScale),
-            0U,
+            options.Antialias ? BitcastSingle(coverageBoost) : 0U,
             BitcastSingle(interestBounds.Left),
             BitcastSingle(interestBounds.Top),
             BitcastSingle(interestBounds.Right),
