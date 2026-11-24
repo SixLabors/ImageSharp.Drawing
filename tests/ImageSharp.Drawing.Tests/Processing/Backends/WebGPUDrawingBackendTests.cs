@@ -1986,6 +1986,46 @@ public partial class WebGPUDrawingBackendTests
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
+    /// <summary>
+    /// Checks the dash pattern on the full ellipse from issue 430.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="provider">The white test image.</param>
+    [WebGPUTheory]
+    [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32)]
+    public void DrawPath_MiterDashedEllipse_PreservesGaps<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        IPath ellipse = new EllipsePolygon(128, 128, 200, 200);
+        Pen pen = new PatternPen(new PenOptions(Color.Black, 2F, [4F, 2F, 1F, 2F])
+        {
+            StrokeOptions = new StrokeOptions { LineJoin = LineJoin.Miter, LineCap = LineCap.Butt }
+        });
+
+        DrawingOptions options = new();
+        void DrawStroke(DrawingCanvas canvas) => canvas.Draw(pen, ellipse);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, options, DrawStroke);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<TPixel> initialImage = provider.GetImage();
+        using Image<TPixel> nativeImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            backend,
+            options,
+            DrawStroke,
+            initialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeImage);
+
+        // The measured difference between the CPU and WebGPU images is 0.00095%.
+        AssertBackendPairSimilarity(defaultImage, nativeImage, 0.002F);
+
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeImage);
+    }
+
     [WebGPUTheory]
     [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32, LineCap.Square)]
     [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32, LineCap.Round)]
@@ -2159,8 +2199,7 @@ public partial class WebGPUDrawingBackendTests
     // sqrt(m^2 + 1) half widths from the corner. The centerline here turns back at (100, 112.5) by
     // almost 180 degrees. For half width 5 and limit 4, the bevel then covers part of column 79,
     // outside bounds that are inflated by m half widths (x = 80). Both backends must draw the bevel
-    // pixels of column 79. The edge pixels differ by one 8-bit level between the CPU and the GPU:
-    // 0.0003% measured. A bevel column that one backend cuts gives 0.0011%.
+    // pixels of column 79. Edge coverage differs by 0.00042% between the backends.
     [WebGPUTheory]
     [WithSolidFilledImages(200, 160, "White", PixelTypes.Rgba32)]
     public void DrawPath_StrokeMiterJoinReversal_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
@@ -2203,7 +2242,7 @@ public partial class WebGPUDrawingBackendTests
         RenderWithDefaultBackend(referenceImage, drawingOptions, canvas => canvas.Fill(pen.StrokeFill, outline));
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0004F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.00043F);
         for (int y = 0; y < referenceImage.Height; y++)
         {
             Assert.Equal(referenceImage[79, y], defaultImage[79, y]);

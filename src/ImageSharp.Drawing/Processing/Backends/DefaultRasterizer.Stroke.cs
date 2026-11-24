@@ -383,7 +383,7 @@ internal static partial class DefaultRasterizer
                 bandTop,
                 options.IntersectionRule,
                 options.RasterizationMode,
-                coverageBoost: 0F,
+                options.CoverageBoost,
                 hasStartCovers,
                 options.Interest);
         }
@@ -454,7 +454,7 @@ internal static partial class DefaultRasterizer
                 bandTop,
                 options.IntersectionRule,
                 options.RasterizationMode,
-                coverageBoost: 0F,
+                options.CoverageBoost,
                 hasStartCovers,
                 options.Interest);
         }
