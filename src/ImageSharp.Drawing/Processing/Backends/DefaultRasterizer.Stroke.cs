@@ -14,7 +14,7 @@ internal static partial class DefaultRasterizer
     /// The length threshold below which a segment direction, arc radius, or edge extent is treated as degenerate.
     /// Mirrored on the GPU as <c>TANGENT_THRESH</c> in <c>path_lowering.wgsl</c>; the two must stay in lockstep.
     /// </summary>
-    internal const float StrokeDirectionEpsilon = 1e-6F;
+    public const float StrokeDirectionEpsilon = 1e-6F;
 
     /// <summary>
     /// The cross-product magnitude below which two offset support lines are treated as parallel

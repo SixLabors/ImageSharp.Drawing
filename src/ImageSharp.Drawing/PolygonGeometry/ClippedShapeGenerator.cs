@@ -210,7 +210,7 @@ internal static class ClippedShapeGenerator
     /// </summary>
     /// <param name="result">The polygon produced by the clipper.</param>
     /// <returns>The converted <see cref="ComplexPolygon"/>.</returns>
-    internal static ComplexPolygon ToComplexPolygon(PCPolygon result)
+    public static ComplexPolygon ToComplexPolygon(PCPolygon result)
     {
         IPath[] shapes = new IPath[result.Count];
 
