@@ -51,6 +51,26 @@ public sealed class LinearLineSegment : ILineSegment
     }
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="LinearLineSegment"/> class for an isolated point.
+    /// </summary>
+    /// <param name="point">The location of the point.</param>
+    internal LinearLineSegment(PointF point)
+        : this([point], new RectangleF(point.X, point.Y, 0, 0))
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LinearLineSegment"/> class with known bounds.
+    /// </summary>
+    /// <param name="points">The vertices owned by this segment.</param>
+    /// <param name="bounds">The bounds of the vertices.</param>
+    private LinearLineSegment(PointF[] points, RectangleF bounds)
+    {
+        this.points = points;
+        this.Bounds = bounds;
+    }
+
+    /// <summary>
     /// Gets the start point.
     /// </summary>
     public PointF StartPoint => this.points[0];
@@ -109,7 +129,7 @@ public sealed class LinearLineSegment : ILineSegment
             transformedPoints[i] = PointF.Transform(this.points[i], matrix);
         }
 
-        return new LinearLineSegment(transformedPoints);
+        return new LinearLineSegment(transformedPoints, CalculateBounds(transformedPoints));
     }
 
     /// <summary>

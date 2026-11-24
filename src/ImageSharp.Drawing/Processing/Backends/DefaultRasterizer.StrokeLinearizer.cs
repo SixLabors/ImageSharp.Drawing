@@ -24,13 +24,6 @@ internal static partial class DefaultRasterizer
     private abstract class StrokeLinearizer<TL> : Linearizer<TL>
         where TL : class
     {
-        /// <summary>
-        /// The 1/64 px length below which a contour segment is collapsed forward onto the last
-        /// kept point so every surviving segment carries a well conditioned tangent. Mirrored by
-        /// the GPU encoder's <c>WebGPUSceneEncoder.StrokeMicroSegmentEpsilon</c>.
-        /// </summary>
-        private const float StrokeMicroSegmentEpsilon = 1F / 64F;
-
         private readonly StrokeStyle stroke;
 
         /// <summary>
@@ -94,7 +87,7 @@ internal static partial class DefaultRasterizer
             for (int contourIndex = 0; contourIndex < contours.Length; contourIndex++)
             {
                 LinearContour contour = contours[contourIndex];
-                if (contour.PointCount == 0)
+                if (contour.PointCount < 2)
                 {
                     continue;
                 }
@@ -106,9 +99,7 @@ internal static partial class DefaultRasterizer
                     continue;
                 }
 
-                bool isClosed = this.IsContourClosedForEmission(contourPoints, contour.IsClosed);
-
-                this.ProcessContour(contourPoints, isClosed, contourInterest == ContourInterest.Contained);
+                this.ProcessContour(contourPoints, contour.IsClosed, contourInterest == ContourInterest.Contained);
             }
 
             if (!this.HasAnyCoverage)
@@ -148,47 +139,6 @@ internal static partial class DefaultRasterizer
 
             return ContourInterest.Clipped;
         }
-
-        /// <summary>
-        /// Returns whether a contour should be treated as closed when emitting stroke geometry.
-        /// A contour is closed when it is declared closed, its first and last points coincide, or
-        /// the endpoint gap is at most max(strokeWidth, 1e-3). Mirrored at encode time by
-        /// <c>WebGPUSceneEncoder.EncodeStrokePath</c>; both must stay in lockstep.
-        /// </summary>
-        /// <param name="contourPoints">The contour points.</param>
-        /// <param name="isDeclaredClosed">Indicates whether the contour is explicitly closed.</param>
-        /// <returns><see langword="true"/> when the contour should be stroked as closed; otherwise <see langword="false"/>.</returns>
-        private bool IsContourClosedForEmission(ReadOnlySpan<PointF> contourPoints, bool isDeclaredClosed)
-        {
-            // Fewer than three points cannot enclose area, so such contours always stroke open.
-            if (contourPoints.Length < 3)
-            {
-                return false;
-            }
-
-            PointF first = this.TransformPoint(contourPoints[0]);
-            PointF last = this.TransformPoint(contourPoints[^1]);
-
-            if (isDeclaredClosed || first == last)
-            {
-                return true;
-            }
-
-            // Near-closure: a gap no wider than the stroke itself is visually sealed by the
-            // stroke body, so emit a wrap join instead of two caps facing across a slit.
-            Vector2 delta = first - last;
-            float closeThreshold = MathF.Max(this.stroke.Width, 1E-3F);
-            return delta.LengthSquared() <= closeThreshold * closeThreshold;
-        }
-
-        /// <summary>
-        /// Applies the residual transform to one source point when one is present.
-        /// </summary>
-        /// <param name="point">The source point.</param>
-        /// <returns>The transformed point.</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private PointF TransformPoint(PointF point)
-            => this.HasResidual ? PointF.Transform(point, this.Residual) : point;
 
         /// <summary>
         /// Processes one centerline contour.
@@ -233,10 +183,8 @@ internal static partial class DefaultRasterizer
         /// Builds one contour-local stroke segment array while collapsing immediate duplicate points.
         /// </summary>
         /// <remarks>
-        /// Exact duplicates are skipped outright and sub-1/64 px micro-segments are collapsed
-        /// forward onto the last kept point so every surviving segment carries a well conditioned
-        /// tangent for join math. Ported to encode time on the GPU path by
-        /// <c>WebGPUSceneEncoder.EncodeStrokePath</c>; both must stay in lockstep.
+        /// Segments without a usable direction collapse onto the last retained point.
+        /// The GPU encoder applies the same rule.
         /// </remarks>
         /// <param name="contourPoints">The contiguous contour points.</param>
         /// <param name="isClosed">Indicates whether the contour is closed.</param>
@@ -274,9 +222,7 @@ internal static partial class DefaultRasterizer
                     continue;
                 }
 
-                // When the candidate segment is rejected as a micro-segment, previousPoint stays
-                // anchored on the last kept point so the run collapses forward; pointLike still
-                // tracks the newest source point so a fully degenerate contour falls back to it.
+                // Keep the previous point until a segment has a usable direction.
                 if (TryCreateStrokeContourSegment(previousPoint, point, out StrokeContourSegment segment))
                 {
                     distinctPointCount++;
@@ -296,9 +242,7 @@ internal static partial class DefaultRasterizer
                 distinctPointCount--;
             }
 
-            // Bridge back to the first point when a closed contour does not already end on it.
-            // A sub-1/64 px gap fails TryCreateStrokeContourSegment and is bridged by the wrap
-            // join instead, matching the GPU encoder.
+            // Add the closing segment when the path has a usable direction at the seam.
             if (isClosed &&
                 segmentCount > 1 &&
                 previousPoint != firstPoint &&
@@ -319,14 +263,6 @@ internal static partial class DefaultRasterizer
         /// <returns><see langword="true"/> when a non-degenerate segment exists.</returns>
         private static bool TryCreateStrokeContourSegment(PointF start, PointF end, out StrokeContourSegment segment)
         {
-            // Segments shorter than 1/64 px cannot produce a numerically stable tangent, so
-            // they are rejected here and collapsed forward by the caller.
-            if (Vector2.DistanceSquared(start, end) <= StrokeMicroSegmentEpsilon * StrokeMicroSegmentEpsilon)
-            {
-                segment = default;
-                return false;
-            }
-
             if (!TryGetDirection(start, end, out Vector2 tangent, out float length))
             {
                 segment = default;
@@ -551,10 +487,21 @@ internal static partial class DefaultRasterizer
             float halfWidth = this.stroke.HalfWidth;
             if (this.stroke.LineCap == LineCap.Round)
             {
-                // A round-capped point is a full circle emitted as two half arcs.
-                Vector2 startOffset = new(halfWidth, 0F);
-                this.EmitDirectedArcContour(center, startOffset, -startOffset, contained);
-                this.EmitDirectedArcContour(center, -startOffset, startOffset, contained);
+                // PolygonClipper divides the full turn into equal steps from the positive X axis.
+                // Two semicircles can give a different vertex count and different edges.
+                int count = Math.Max(4, GetArcSubdivisionCount(halfWidth, Math.Tau, this.stroke.ArcDetailScale));
+                double step = Math.Tau / count;
+                PointF first = new(center.X + halfWidth, center.Y);
+                PointF previous = first;
+                for (int i = 1; i < count; i++)
+                {
+                    (double sin, double cos) = Math.SinCos(step * i);
+                    PointF next = new((float)(center.X + (cos * halfWidth)), (float)(center.Y + (sin * halfWidth)));
+                    this.EmitLine(previous, next, contained);
+                    previous = next;
+                }
+
+                this.EmitLine(previous, first, contained);
                 return;
             }
 

@@ -15,12 +15,16 @@ public class NormalizePathExtensionsTests
         Assert.Equal(path.Bounds, normalized.Bounds);
     }
 
-    [Fact]
-    public void Normalize_SelfIntersectingBowtie_KeepsOnlyThePositiveWindingLobe()
+    /// <summary>
+    /// Checks that normalization keeps both lobes in either vertex order.
+    /// </summary>
+    /// <param name="reverse">Whether to reverse the contour before normalization.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Normalize_SelfIntersectingBowtie_KeepsBothLobes(bool reverse)
     {
-        // The bowtie crosses itself at (50, 50), giving its two lobes opposite winding.
-        // Normalization fills using positive winding, so only the positively wound lobe
-        // survives; reversing the point order keeps the opposite lobe.
+        // The lobes meet at (50, 50). Their winding counts are +1 and -1.
         PointF[] points =
         [
             new PointF(0, 0),
@@ -29,12 +33,18 @@ public class NormalizePathExtensionsTests
             new PointF(0, 100),
         ];
 
-        IPath normalized = new Polygon(points).Normalize();
-        Assert.Equal(RectangleF.FromLTRB(0, 0, 50, 100), normalized.Bounds);
+        if (reverse)
+        {
+            // Reversing the vertices swaps the winding signs of the two lobes.
+            // Both counts remain nonzero, so both lobes must remain filled.
+            Array.Reverse(points);
+        }
 
-        Array.Reverse(points);
-        IPath reversed = new Polygon(points).Normalize();
-        Assert.Equal(RectangleF.FromLTRB(50, 0, 100, 100), reversed.Bounds);
+        ComplexPolygon normalized = Assert.IsType<ComplexPolygon>(new Polygon(points).Normalize());
+        Assert.Collection(
+            normalized.Paths.OrderBy(x => x.Bounds.Left),
+            left => Assert.Equal(RectangleF.FromLTRB(0, 0, 50, 100), left.Bounds),
+            right => Assert.Equal(RectangleF.FromLTRB(50, 0, 100, 100), right.Bounds));
     }
 
     [Fact]

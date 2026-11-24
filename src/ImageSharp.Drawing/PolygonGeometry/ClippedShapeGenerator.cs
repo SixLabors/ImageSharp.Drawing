@@ -15,7 +15,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonGeometry;
 /// It converts subject and clip paths to clipper polygons, applies the specified
 /// <see cref="BooleanOperation"/>, and converts the resulting polygon contours back into
 /// <see cref="ComplexPolygon"/> instances suitable for rendering or further processing.
-/// <see cref="IRegionPath"/> clip operands are handled as rect-sets on dedicated fast paths.
+/// Rectangle intersection with an integer region uses the region's rectangle set directly.
 /// </remarks>
 internal static class ClippedShapeGenerator
 {
@@ -86,16 +86,11 @@ internal static class ClippedShapeGenerator
             return clippedRectangle;
         }
 
-        PCPolygon s = PolygonClipperFactory.FromClosedPath(subject, intersectionRule);
+        PCPolygon s = PolygonClipperFactory.FromPath(subject);
+        PCPolygon c = PolygonClipperFactory.FromPaths(clip);
+        FillRule subjectRule = ToFillRule(intersectionRule);
 
-        if (singleRegionPath is not null)
-        {
-            return GenerateRegionClippedShapes(operation, s, singleRegionPath);
-        }
-
-        PCPolygon c = PolygonClipperFactory.FromClosedPaths(clip, clipIntersectionRule);
-
-        return GenerateClippedShapes(operation, s, c);
+        return ToComplexPolygon(Clip(operation, s, c, subjectRule, ToFillRule(clipIntersectionRule)));
     }
 
     /// <summary>
@@ -125,17 +120,20 @@ internal static class ClippedShapeGenerator
             return clippedRectangle;
         }
 
-        PCPolygon s = PolygonClipperFactory.FromClosedPath(subject, intersectionRule);
+        PCPolygon s = PolygonClipperFactory.FromPath(subject);
+        PCPolygon c = PolygonClipperFactory.FromPath(clip);
+        FillRule subjectRule = ToFillRule(intersectionRule);
 
-        if (clip is IRegionPath regionPathAfterFastPath)
-        {
-            return GenerateRegionClippedShapes(operation, s, regionPathAfterFastPath);
-        }
-
-        PCPolygon c = PolygonClipperFactory.FromClosedPath(clip, clipIntersectionRule);
-
-        return GenerateClippedShapes(operation, s, c);
+        return ToComplexPolygon(Clip(operation, s, c, subjectRule, ToFillRule(clipIntersectionRule)));
     }
+
+    /// <summary>
+    /// Maps the path fill rule to the equivalent clipping fill rule.
+    /// </summary>
+    /// <param name="rule">The rule used to fill the source path.</param>
+    /// <returns>The rule used to fill the source polygon.</returns>
+    private static FillRule ToFillRule(IntersectionRule rule)
+        => rule == IntersectionRule.NonZero ? FillRule.NonZero : FillRule.EvenOdd;
 
     /// <summary>
     /// Attempts the rectangle-by-region fast path: intersecting an axis-aligned rectangle
@@ -185,134 +183,58 @@ internal static class ClippedShapeGenerator
         => new(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height);
 
     /// <summary>
-    /// Applies a boolean operation between a subject polygon and a rect-set region operand.
-    /// </summary>
-    /// <param name="operation">The boolean operation to perform.</param>
-    /// <param name="subject">The converted subject polygon.</param>
-    /// <param name="regionPath">The rect-set clip operand.</param>
-    /// <returns>The <see cref="ComplexPolygon"/> representing the result of the boolean operation.</returns>
-    private static ComplexPolygon GenerateRegionClippedShapes(BooleanOperation operation, PCPolygon subject, IRegionPath regionPath)
-    {
-        IReadOnlyList<Rectangle> rectangles = regionPath.Rectangles;
-        if (operation == BooleanOperation.Intersection)
-        {
-            PCPolygon result = [];
-
-            // RegionPath is a rect-set operand: S & (r0 | r1 | ...) is the union of
-            // each per-rectangle intersection. Keeping that algebra explicit avoids
-            // asking the generic polygon clipper to infer region union semantics from
-            // adjacent/disjoint rectangle contours.
-            for (int i = 0; i < rectangles.Count; i++)
-            {
-                PCPolygon clip = PolygonClipperFactory.FromRectangle(rectangles[i]);
-                result.Join(PolygonClipperAction.Intersection(subject, clip));
-            }
-
-            return ToComplexPolygon(result);
-        }
-
-        PCPolygon current = subject;
-        for (int i = 0; i < rectangles.Count; i++)
-        {
-            PCPolygon clip = PolygonClipperFactory.FromRectangle(rectangles[i]);
-            current = operation switch
-            {
-                BooleanOperation.Xor => PolygonClipperAction.Xor(current, clip),
-                BooleanOperation.Difference => PolygonClipperAction.Difference(current, clip),
-                BooleanOperation.Union => PolygonClipperAction.Union(current, clip),
-                _ => PolygonClipperAction.Intersection(current, clip),
-            };
-        }
-
-        return ToComplexPolygon(current);
-    }
-
-    /// <summary>
     /// Applies a boolean operation between two converted polygons.
     /// </summary>
     /// <param name="operation">The boolean operation to perform.</param>
     /// <param name="subject">The converted subject polygon.</param>
     /// <param name="clip">The converted clip polygon.</param>
-    /// <returns>The <see cref="ComplexPolygon"/> representing the result of the boolean operation.</returns>
-    private static ComplexPolygon GenerateClippedShapes(BooleanOperation operation, PCPolygon subject, PCPolygon clip)
-    {
-        PCPolygon result = operation switch
+    /// <param name="subjectRule">The rule used to fill the subject.</param>
+    /// <param name="clipRule">The rule used to fill the clip polygon.</param>
+    /// <returns>The selected boundaries, open lines, and isolated points.</returns>
+    private static PCPolygon Clip(
+        BooleanOperation operation,
+        PCPolygon subject,
+        PCPolygon clip,
+        FillRule subjectRule,
+        FillRule clipRule)
+        => operation switch
         {
-            BooleanOperation.Xor => PolygonClipperAction.Xor(subject, clip),
-            BooleanOperation.Difference => PolygonClipperAction.Difference(subject, clip),
-            BooleanOperation.Union => PolygonClipperAction.Union(subject, clip),
-            _ => PolygonClipperAction.Intersection(subject, clip),
+            BooleanOperation.Xor => PolygonClipperAction.Xor(subject, clip, subjectRule, clipRule),
+            BooleanOperation.Difference => PolygonClipperAction.Difference(subject, clip, subjectRule, clipRule),
+            BooleanOperation.Union => PolygonClipperAction.Union(subject, clip, subjectRule, clipRule),
+            _ => PolygonClipperAction.Intersection(subject, clip, subjectRule, clipRule),
         };
 
-        return ToComplexPolygon(result);
-    }
-
     /// <summary>
-    /// Converts a PolygonClipper result polygon into a <see cref="ComplexPolygon"/>.
+    /// Converts a PolygonClipper result into a path with the same figure closure.
     /// </summary>
     /// <param name="result">The polygon produced by the clipper.</param>
     /// <returns>The converted <see cref="ComplexPolygon"/>.</returns>
-    private static ComplexPolygon ToComplexPolygon(PCPolygon result)
+    public static ComplexPolygon ToComplexPolygon(PCPolygon result)
     {
         IPath[] shapes = new IPath[result.Count];
 
-        int index = 0;
         for (int i = 0; i < result.Count; i++)
         {
-            shapes[index++] = new Polygon(CreateContourPoints(result, i));
+            Contour contour = result[i];
+            if (contour.Count == 1)
+            {
+                Vertex vertex = contour[0];
+                PointF point = new((float)vertex.X, (float)vertex.Y);
+                shapes[i] = new Path(new LinearLineSegment(point));
+                continue;
+            }
+
+            PointF[] points = new PointF[contour.Count];
+            for (int j = 0; j < contour.Count; j++)
+            {
+                Vertex vertex = contour[j];
+                points[j] = new PointF((float)vertex.X, (float)vertex.Y);
+            }
+
+            shapes[i] = contour.IsClosed ? new Polygon(points) : new Path(points);
         }
 
         return new(shapes);
-    }
-
-    /// <summary>
-    /// Converts a PolygonClipper contour to ImageSharp points and normalizes winding for parent/child rings.
-    /// </summary>
-    /// <param name="polygon">The polygon containing the contour hierarchy.</param>
-    /// <param name="contourIndex">The contour index to convert.</param>
-    /// <returns>The converted point array.</returns>
-    public static PointF[] CreateContourPoints(PCPolygon polygon, int contourIndex)
-    {
-        Contour contour = polygon[contourIndex];
-        PointF[] points = new PointF[contour.Count];
-        bool reverse = ShouldReverseForNonZeroWinding(polygon, contourIndex);
-
-        if (!reverse)
-        {
-            for (int i = 0; i < contour.Count; i++)
-            {
-                Vertex vertex = contour[i];
-                points[i] = new PointF((float)vertex.X, (float)vertex.Y);
-            }
-
-            return points;
-        }
-
-        for (int sourceIndex = contour.Count - 1, targetIndex = 0; sourceIndex >= 0; sourceIndex--, targetIndex++)
-        {
-            Vertex vertex = contour[sourceIndex];
-            points[targetIndex] = new PointF((float)vertex.X, (float)vertex.Y);
-        }
-
-        return points;
-    }
-
-    /// <summary>
-    /// Ensures child contours (holes/islands) use opposite winding to their direct parent.
-    /// This keeps clipped output deterministic when consumed with the NonZero fill rule.
-    /// </summary>
-    /// <param name="polygon">The polygon containing contour hierarchy information.</param>
-    /// <param name="contourIndex">The contour index to inspect.</param>
-    /// <returns><see langword="true"/> when the contour should be reversed.</returns>
-    private static bool ShouldReverseForNonZeroWinding(PCPolygon polygon, int contourIndex)
-    {
-        Contour contour = polygon[contourIndex];
-        if (contour.ParentIndex is not int parentIndex || (uint)parentIndex >= (uint)polygon.Count)
-        {
-            return false;
-        }
-
-        Contour parentContour = polygon[parentIndex];
-        return contour.IsCounterClockwise() == parentContour.IsCounterClockwise();
     }
 }

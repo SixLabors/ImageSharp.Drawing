@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Numerics;
 using SixLabors.PolygonClipper;
 
 using PCPolygon = SixLabors.PolygonClipper.Polygon;
@@ -24,30 +25,28 @@ internal static class StrokedShapeGenerator
     /// </returns>
     public static ComplexPolygon GenerateStrokedShapes(IPath path, float width, StrokeOptions options)
     {
-        // Convert the flattened contours to clipper rings first; the stroker handles
-        // open and closed contours differently, so closedness must be preserved.
+        // Use the same vertices as Draw. Path.Flatten can drop short segments
+        // before PolygonClipper has a chance to use their direction.
+        LinearGeometry geometry = path.ToLinearGeometry(Vector2.One);
         PCPolygon rings = [];
 
-        foreach (ISimplePath sp in path.Flatten())
+        foreach (LinearContour contour in geometry.GetContours())
         {
-            ReadOnlySpan<PointF> span = sp.Points.Span;
-
+            ReadOnlySpan<PointF> span = geometry.GetContourPoints(contour);
             if (span.Length < 2)
             {
                 continue;
             }
 
-            Contour ring = new(span.Length);
+            Contour ring = new(span.Length)
+            {
+                IsClosed = contour.IsClosed
+            };
+
             for (int i = 0; i < span.Length; i++)
             {
                 PointF p = span[i];
                 ring.Add(new Vertex(p.X, p.Y));
-            }
-
-            // PolygonClipper expects closed rings to repeat their start point.
-            if (sp.IsClosed)
-            {
-                ring.Add(ring[0]);
             }
 
             rings.Add(ring);
@@ -61,14 +60,7 @@ internal static class StrokedShapeGenerator
 
         PCPolygon result = PolygonStroker.Stroke(rings, width, CreateStrokeOptions(options));
 
-        IPath[] shapes = new IPath[result.Count];
-        int index = 0;
-        for (int i = 0; i < result.Count; i++)
-        {
-            shapes[index++] = new Polygon(ClippedShapeGenerator.CreateContourPoints(result, i));
-        }
-
-        return new(shapes);
+        return ClippedShapeGenerator.ToComplexPolygon(result);
     }
 
     /// <summary>

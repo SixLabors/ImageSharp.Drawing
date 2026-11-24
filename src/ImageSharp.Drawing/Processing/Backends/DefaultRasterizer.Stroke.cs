@@ -14,7 +14,7 @@ internal static partial class DefaultRasterizer
     /// The length threshold below which a segment direction, arc radius, or edge extent is treated as degenerate.
     /// Mirrored on the GPU as <c>TANGENT_THRESH</c> in <c>path_lowering.wgsl</c>; the two must stay in lockstep.
     /// </summary>
-    private const float StrokeDirectionEpsilon = 1e-6F;
+    public const float StrokeDirectionEpsilon = 1e-6F;
 
     /// <summary>
     /// The cross-product magnitude below which two offset support lines are treated as parallel
@@ -383,7 +383,7 @@ internal static partial class DefaultRasterizer
                 bandTop,
                 options.IntersectionRule,
                 options.RasterizationMode,
-                coverageBoost: 0F,
+                options.CoverageBoost,
                 hasStartCovers,
                 options.Interest);
         }
@@ -454,7 +454,7 @@ internal static partial class DefaultRasterizer
                 bandTop,
                 options.IntersectionRule,
                 options.RasterizationMode,
-                coverageBoost: 0F,
+                options.CoverageBoost,
                 hasStartCovers,
                 options.Interest);
         }
@@ -833,7 +833,6 @@ internal static partial class DefaultRasterizer
     {
         private readonly Vector2 start;
         private readonly Vector2 end;
-        private readonly Vector2 translation;
         private readonly StrokeStyle stroke;
         private readonly int width;
         private readonly int height;
@@ -857,12 +856,13 @@ internal static partial class DefaultRasterizer
             int translateY,
             in RasterizableBandInfo bandInfo)
         {
-            this.translation = new(
+            Vector2 translation = new(
                 translateX - bandInfo.DestinationLeft,
                 translateY - bandInfo.DestinationTop);
 
-            this.start = start;
-            this.end = end;
+            // The body and the round caps use the same band-local coordinates.
+            this.start = (Vector2)start + translation;
+            this.end = (Vector2)end + translation;
             this.stroke = stroke;
             this.width = bandInfo.Width;
             this.height = bandInfo.BandHeight;
@@ -914,11 +914,9 @@ internal static partial class DefaultRasterizer
                 return;
             }
 
-            Vector2 translatedStart = this.start + this.translation;
-            Vector2 translatedEnd = this.end + this.translation;
-            if (!TryGetDirection(translatedStart, translatedEnd, out Vector2 tangent, out _))
+            if (!TryGetDirection(this.start, this.end, out Vector2 tangent, out _))
             {
-                this.RasterizePointLike(translatedStart, scanline, ref rowHandler);
+                this.RasterizePointLike(this.start, scanline, ref rowHandler);
                 return;
             }
 
@@ -928,10 +926,10 @@ internal static partial class DefaultRasterizer
             float halfWidth = this.stroke.HalfWidth;
             Vector2 normal = GetStrokeOffsetNormal(tangent) * halfWidth;
             Vector2 extension = this.stroke.LineCap == LineCap.Square ? tangent * halfWidth : Vector2.Zero;
-            Vector2 p0 = translatedStart + normal - extension;
-            Vector2 p1 = translatedEnd + normal + extension;
-            Vector2 p2 = translatedEnd - normal + extension;
-            Vector2 p3 = translatedStart - normal - extension;
+            Vector2 p0 = this.start + normal - extension;
+            Vector2 p1 = this.end + normal + extension;
+            Vector2 p2 = this.end - normal + extension;
+            Vector2 p3 = this.start - normal - extension;
 
             for (int row = 0; row < this.height; row++)
             {

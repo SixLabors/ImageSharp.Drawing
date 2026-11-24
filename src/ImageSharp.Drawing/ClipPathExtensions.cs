@@ -8,6 +8,10 @@ namespace SixLabors.ImageSharp.Drawing;
 /// <summary>
 /// Provides extension methods to <see cref="IPath"/> that allow the clipping of shapes.
 /// </summary>
+/// <remarks>
+/// Closed figures define filled areas. Open figures retain their line segments and points.
+/// Results can contain closed figures, open lines, and isolated points.
+/// </remarks>
 public static class ClipPathExtensions
 {
     /// <summary>
@@ -57,7 +61,7 @@ public static class ClipPathExtensions
     /// </summary>
     /// <param name="subjectPath">The subject path.</param>
     /// <param name="operation">The boolean operation to perform.</param>
-    /// <param name="intersectionRule">The fill rule used to interpret the subject and clipping paths.</param>
+    /// <param name="intersectionRule">The fill rule for closed figures in both operands.</param>
     /// <param name="clipPaths">The clipping paths.</param>
     /// <returns>The clipped <see cref="IPath"/>.</returns>
     public static IPath Clip(
@@ -72,7 +76,7 @@ public static class ClipPathExtensions
     /// </summary>
     /// <param name="subjectPath">The subject path.</param>
     /// <param name="operation">The boolean operation to perform.</param>
-    /// <param name="intersectionRule">The fill rule used to interpret the subject and clipping paths.</param>
+    /// <param name="intersectionRule">The fill rule for closed figures in both operands.</param>
     /// <param name="clipPaths">The clipping paths.</param>
     /// <returns>The clipped <see cref="IPath"/>.</returns>
     public static IPath Clip(
