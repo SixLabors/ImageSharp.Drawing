@@ -1,0 +1,25 @@
+<ContentPage Theme="{StaticResource ScrollPage}" xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:ControlCatalog.ViewModels"
+             xmlns:system="clr-namespace:System;assembly=System.Runtime"
+             x:Class="ControlCatalog.Pages.NotificationsPage"
+             Header="Notifications"
+             x:DataType="viewModels:NotificationViewModel">
+  <DockPanel>
+    <TextBlock DockPanel.Dock="Top"
+               Margin="2" Classes="h2" TextWrapping="Wrap">TopLevel bound notification manager.</TextBlock>
+    <StackPanel DockPanel.Dock="Top"
+                Orientation="Vertical" Spacing="4" HorizontalAlignment="Left">
+      <Button Content="Show Standard Managed Notification" Command="{Binding ShowManagedNotificationCommand}" />
+      <Button Content="Show Custom Managed Notification" Command="{Binding ShowCustomManagedNotificationCommand}" />
+    </StackPanel>
+    
+    <TextBlock DockPanel.Dock="Top"
+               Margin="2" Classes="h2" TextWrapping="Wrap">XAML only notification manager.</TextBlock>
+    <Button DockPanel.Dock="Top"
+            Content="Show XAML only Notification" Click="ShowNotification" />
+    <Border Padding="10" BorderBrush="{DynamicResource SystemAccentColor}">
+      <WindowNotificationManager x:Name="ControlNotifications" />
+    </Border>
+  </DockPanel>
+</ContentPage>

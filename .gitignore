@@ -233,8 +233,6 @@ SixLabors.Shapes.Coverage.xml
 .claude
 /plans/
 
-samples/Avalonia**
-
 # Specifications are licensed documents and stay on the local machine only.
 /src/ImageSharp.Drawing/Barcodes/specs/
 /src/ImageSharp.Drawing.FontGenerator/specs/
