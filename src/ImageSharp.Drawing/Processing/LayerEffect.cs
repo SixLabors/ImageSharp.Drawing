@@ -172,7 +172,7 @@ public sealed class DropShadowLayerEffect : LayerEffect
         // alpha. The colour filter operates on straight alpha, so with the RGB rows zeroed the
         // constant row sets the colour outright; because the colour is then constant across the
         // snapshot, the blur only spreads alpha and cannot bleed foreign colours into the shadow.
-        Vector4 vector = color.ToPixel<Rgba32>().ToScaledVector4();
+        Vector4 vector = color.ToScaledVector4(PixelAlphaRepresentation.Unassociated);
         ColorMatrix tint = default;
         tint.M44 = vector.W;
         tint.M51 = vector.X;
@@ -244,7 +244,7 @@ public sealed class GlowLayerEffect : LayerEffect
         // alpha. The colour filter operates on straight alpha, so with the RGB rows zeroed the
         // constant row sets the colour outright; because the colour is then constant across the
         // snapshot, the blur only spreads alpha and cannot bleed foreign colours into the glow.
-        Vector4 vector = color.ToPixel<Rgba32>().ToScaledVector4();
+        Vector4 vector = color.ToScaledVector4(PixelAlphaRepresentation.Unassociated);
         ColorMatrix tint = default;
         tint.M44 = vector.W;
         tint.M51 = vector.X;
@@ -326,7 +326,7 @@ public sealed class InnerShadowLayerEffect : LayerEffect
         // with the constant RGB rows carrying the shadow colour, the blur feathers the boundary,
         // and the SrcAtop write-back clips the result onto the content so only the parts that
         // reach inside its edges remain.
-        Vector4 vector = color.ToPixel<Rgba32>().ToScaledVector4();
+        Vector4 vector = color.ToScaledVector4(PixelAlphaRepresentation.Unassociated);
         ColorMatrix invertedTint = default;
         invertedTint.M44 = -vector.W;
         invertedTint.M54 = vector.W;
