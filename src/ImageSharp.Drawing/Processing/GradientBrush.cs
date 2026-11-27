@@ -30,9 +30,26 @@ public abstract class GradientBrush : Brush
     /// <param name="gradientTransform">The transform from the gradient's coordinate space to the drawing.</param>
     /// <param name="colorStops">The gradient colors.</param>
     protected GradientBrush(GradientRepetitionMode repetitionMode, Matrix4x4 gradientTransform, params ColorStop[] colorStops)
+        : this(repetitionMode, gradientTransform, PixelAlphaRepresentation.Associated, colorStops)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GradientBrush"/> class.
+    /// </summary>
+    /// <param name="repetitionMode">Defines how the colors are repeated beyond the interval [0..1].</param>
+    /// <param name="gradientTransform">The transform from the gradient's coordinate space to the drawing.</param>
+    /// <param name="alphaRepresentation">The alpha representation of the stop colors during interpolation.</param>
+    /// <param name="colorStops">The gradient colors.</param>
+    protected GradientBrush(
+        GradientRepetitionMode repetitionMode,
+        Matrix4x4 gradientTransform,
+        PixelAlphaRepresentation alphaRepresentation,
+        params ColorStop[] colorStops)
     {
         this.RepetitionMode = repetitionMode;
         this.GradientTransform = gradientTransform;
+        this.AlphaRepresentation = alphaRepresentation;
 
         InsertionSort(colorStops, (a, b) => a.Ratio.CompareTo(b.Ratio));
         this.ColorStopsArray = colorStops;
@@ -54,6 +71,13 @@ public abstract class GradientBrush : Brush
     public Matrix4x4 GradientTransform { get; }
 
     /// <summary>
+    /// Gets the alpha representation of the stop colors during interpolation.
+    /// <see cref="PixelAlphaRepresentation.Associated"/> is the default.
+    /// All other values interpolate unassociated colors.
+    /// </summary>
+    public PixelAlphaRepresentation AlphaRepresentation { get; }
+
+    /// <summary>
     /// Gets the color stops for this gradient.
     /// </summary>
     public ReadOnlySpan<ColorStop> ColorStops => this.ColorStopsArray;
@@ -70,6 +94,7 @@ public abstract class GradientBrush : Brush
         {
             return this.RepetitionMode == brush.RepetitionMode
                 && this.GradientTransform.Equals(brush.GradientTransform)
+                && this.AlphaRepresentation == brush.AlphaRepresentation
                 && this.ColorStopsArray?.SequenceEqual(brush.ColorStopsArray) == true;
         }
 
@@ -78,7 +103,7 @@ public abstract class GradientBrush : Brush
 
     /// <inheritdoc/>
     public override int GetHashCode()
-        => HashCode.Combine(this.RepetitionMode, this.GradientTransform, this.ColorStopsArray);
+        => HashCode.Combine(this.RepetitionMode, this.GradientTransform, this.AlphaRepresentation, this.ColorStopsArray);
 
     /// <summary>
     /// Inverts the affine part of <see cref="GradientTransform"/>, which maps drawing
@@ -124,7 +149,7 @@ public abstract class GradientBrush : Brush
     /// Base class for gradient brush applicators.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
-    /// <typeparam name="TEncoder">The destination representation encoder.</typeparam>
+    /// <typeparam name="TEncoder">The encoder for the alpha representation of the brush.</typeparam>
     internal abstract class GradientBrushRenderer<TPixel, TEncoder> : BrushRenderer<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
         where TEncoder : struct, IGradientPixelEncoder<TPixel>
@@ -152,14 +177,17 @@ public abstract class GradientBrush : Brush
             ColorStop[] colorStops = brush.ColorStopsArray;
             this.colorStops = new GradientColorStop[colorStops.Length];
 
-            // CSS Color 4 requires alpha to be premultiplied before color interpolation.
-            // Cache associated stop vectors once so the result is independent of TPixel storage
-            // and the per-pixel interpolation loop does not repeat the conversion.
+            // CSS Color 4 interpolates associated colors. SVG 2 interpolates unassociated colors.
+            // The renderer stores the stops in the representation of the brush, without a TPixel
+            // conversion. The TPixel format cannot change the gradient, and the per-pixel loop
+            // does not convert the stops.
             // https://www.w3.org/TR/css-color-4/#interpolation-alpha
+            // https://www.w3.org/TR/SVG2/pservers.html#StopColorProperties
+            PixelAlphaRepresentation alphaRepresentation = brush.AlphaRepresentation;
             for (int i = 0; i < colorStops.Length; i++)
             {
                 ColorStop stop = colorStops[i];
-                this.colorStops[i] = new GradientColorStop(stop.Ratio, stop.Color.ToScaledVector4(PixelAlphaRepresentation.Associated));
+                this.colorStops[i] = new GradientColorStop(stop.Ratio, stop.Color.ToScaledVector4(alphaRepresentation));
             }
 
             this.repetitionMode = brush.RepetitionMode;
@@ -331,10 +359,10 @@ public abstract class GradientBrush : Brush
         }
 
         /// <summary>
-        /// Stores one gradient stop in the associated representation used for interpolation.
+        /// Stores one gradient stop in the representation used for interpolation.
         /// </summary>
         /// <param name="ratio">The stop position.</param>
-        /// <param name="color">The associated stop color.</param>
+        /// <param name="color">The stop color in the alpha representation of the brush.</param>
         private readonly struct GradientColorStop(float ratio, Vector4 color)
         {
             /// <summary>
@@ -343,7 +371,7 @@ public abstract class GradientBrush : Brush
             public float Ratio { get; } = ratio;
 
             /// <summary>
-            /// Gets the associated stop color.
+            /// Gets the stop color in the alpha representation of the brush.
             /// </summary>
             public Vector4 Color { get; } = color;
         }

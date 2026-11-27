@@ -430,6 +430,9 @@ fn image_extend_mode_i32(t: f32, mode: u32, max: i32) -> i32 {
 // Flag bit indicating the gradient carries an explicit center color, which
 // disables the single-triangle barycentric shortcut.
 const PATH_GRAD_HAS_EXPLICIT_CENTER_COLOR = 1u;
+// This flag bit shows that the payload colors are unassociated. The shader interpolates
+// these colors, and then it premultiplies the result.
+const PATH_GRAD_UNASSOCIATED_INTERPOLATION = 2u;
 // Info-stream layout: a 7-word header (center point, max ray distance, and four
 // center-color components) followed by 12-word edge records (start point, end
 // point, and four components for each endpoint color).
@@ -447,7 +450,8 @@ fn path_grad_load_point(offset: u32) -> vec2<f32> {
     return vec2<f32>(bitcast<f32>(info[offset]), bitcast<f32>(info[offset + 1u]));
 }
 
-// Loads an associated color stored as four f32 words in the info stream.
+// Loads a color stored as four f32 words in the info stream. The flags of the
+// gradient give the alpha representation of the color.
 fn path_grad_load_color(offset: u32) -> vec4<f32> {
     return vec4<f32>(
         bitcast<f32>(info[offset]),
@@ -509,15 +513,28 @@ fn path_grad_point_on_triangle(v1: vec2<f32>, v2: vec2<f32>, v3: vec2<f32>, poin
 }
 
 // Evaluates the path gradient brush at a point, returning an associated color.
-// Payload colors are associated before interpolation as required by CSS Color 4:
+// CSS Color 4 interpolates associated colors. SVG 2 interpolates unassociated colors,
+// so the shader premultiplies the result of an unassociated gradient.
 // https://www.w3.org/TR/css-color-4/#interpolation-alpha
+// https://www.w3.org/TR/SVG2/pservers.html#StopColorProperties
+fn evaluate_path_gradient(path_grad: CmdPathGrad, point: vec2<f32>) -> vec4<f32> {
+    let color = interpolate_path_gradient(path_grad, point);
+    if (path_grad.flags & PATH_GRAD_UNASSOCIATED_INTERPOLATION) != 0u {
+        return premul_alpha(color);
+    }
+
+    return color;
+}
+
+// Interpolates the path gradient brush at a point. The result has the alpha
+// representation of the payload colors.
 // A three-edge gradient without an explicit center color interpolates
 // its vertex colors barycentrically. Otherwise a ray is cast from the point
 // away from the gradient center to find the nearest edge intersection; the
 // interpolated edge color is then mixed toward the center color by the ratio
 // of the point's distance from the edge to the center's distance from the
 // edge. Returns transparent when the point is not covered by any edge.
-fn evaluate_path_gradient(path_grad: CmdPathGrad, point: vec2<f32>) -> vec4<f32> {
+fn interpolate_path_gradient(path_grad: CmdPathGrad, point: vec2<f32>) -> vec4<f32> {
     let center = path_grad_load_point(path_grad.data_offset);
     let center_color = path_grad_load_color(path_grad.data_offset + 3u);
 

@@ -193,6 +193,19 @@ public abstract partial class DrawingCanvas : IDisposable
     public abstract void Fill(Brush brush, IPath path);
 
     /// <summary>
+    /// Fills the stroke of the path with the brush of the pen.
+    /// </summary>
+    /// <remarks>
+    /// The stroke is the path that <see cref="Pen.GeneratePath(IPath)"/> returns. For a circle, the stroke is a ring.
+    /// The stroke always uses the non-zero fill rule. The intersection rule of the drawing options does not apply.
+    /// The drawing transform changes the stroke in the same way as all filled shapes. A non-uniform scale or a skew
+    /// changes the stroke width. <see cref="Draw(Pen, IPath)"/> keeps an even stroke width under such a transform.
+    /// </remarks>
+    /// <param name="pen">The pen that generates the stroke and supplies the brush.</param>
+    /// <param name="path">The path in local coordinates.</param>
+    public abstract void Fill(Pen pen, IPath path);
+
+    /// <summary>
     /// Narrows the current clip region by intersecting it with the supplied clip paths.
     /// </summary>
     /// <remarks>

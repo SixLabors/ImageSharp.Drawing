@@ -48,7 +48,7 @@ public sealed class WebGPUBackdropAcrylicLayerEffect : WebGPUBackdropShaderLayer
     /// <param name="color">The acrylic tint.</param>
     private void AddPasses(float sigma, Color color)
     {
-        Vector4 vector = color.ToScaledVector4(PixelAlphaRepresentation.Unassociated);
+        Vector4 vector = color.ToScaledVector4(PixelAlphaRepresentation.Associated);
 
         // Source RGB is retained by (1 - tint alpha), while the constant row contributes the
         // premultiplied tint. Alpha is preserved so the backdrop keeps its existing coverage.
@@ -58,9 +58,9 @@ public sealed class WebGPUBackdropAcrylicLayerEffect : WebGPUBackdropShaderLayer
         tint.M22 = keep;
         tint.M33 = keep;
         tint.M44 = 1F;
-        tint.M51 = vector.X * vector.W;
-        tint.M52 = vector.Y * vector.W;
-        tint.M53 = vector.Z * vector.W;
+        tint.M51 = vector.X;
+        tint.M52 = vector.Y;
+        tint.M53 = vector.Z;
 
         WebGPUColorMatrixLayerEffect tintEffect = new(tint);
         ReadOnlySpan<WebGPUShaderPass> tintPasses = tintEffect.GetShaderPasses();

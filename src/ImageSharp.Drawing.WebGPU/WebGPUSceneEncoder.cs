@@ -6398,6 +6398,7 @@ internal static class WebGPUSceneEncoder
 
                         gradientRamps.Add(new GpuGradientRampDescriptor(
                             gradientRamp.ColorStops,
+                            gradientRamp.AlphaRepresentation,
                             gradientRowOffset + gradientRamp.RowIndex));
                     }
 
@@ -9229,7 +9230,7 @@ internal static class WebGPUSceneEncoder
     {
         uint indexMode = ((uint)gradientRowCount << 2) | MapExtendMode(brush.RepetitionMode);
         AppendGradientRamp(ref gradientPixels);
-        gradientRamps.Add(new GpuGradientRampDescriptor(brush.ColorStops.ToArray(), gradientRowCount));
+        gradientRamps.Add(new GpuGradientRampDescriptor(brush.ColorStops.ToArray(), brush.AlphaRepresentation, gradientRowCount));
         gradientRowCount++;
 
         drawData.Add(indexMode);
@@ -9280,7 +9281,7 @@ internal static class WebGPUSceneEncoder
     {
         uint indexMode = ((uint)gradientRowCount << 2) | MapExtendMode(brush.RepetitionMode);
         AppendGradientRamp(ref gradientPixels);
-        gradientRamps.Add(new GpuGradientRampDescriptor(brush.ColorStops.ToArray(), gradientRowCount));
+        gradientRamps.Add(new GpuGradientRampDescriptor(brush.ColorStops.ToArray(), brush.AlphaRepresentation, gradientRowCount));
         gradientRowCount++;
 
         PointF center0;
@@ -9330,7 +9331,7 @@ internal static class WebGPUSceneEncoder
     {
         uint indexMode = ((uint)gradientRowCount << 2) | MapExtendMode(brush.RepetitionMode);
         AppendGradientRamp(ref gradientPixels);
-        gradientRamps.Add(new GpuGradientRampDescriptor(brush.ColorStops.ToArray(), gradientRowCount));
+        gradientRamps.Add(new GpuGradientRampDescriptor(brush.ColorStops.ToArray(), brush.AlphaRepresentation, gradientRowCount));
         gradientRowCount++;
 
         // Brushes reach the encoder after batcher normalization, so gradient payload points are
@@ -9369,7 +9370,7 @@ internal static class WebGPUSceneEncoder
     {
         uint indexMode = ((uint)gradientRowCount << 2) | MapExtendMode(brush.RepetitionMode);
         AppendGradientRamp(ref gradientPixels);
-        gradientRamps.Add(new GpuGradientRampDescriptor(brush.ColorStops.ToArray(), gradientRowCount));
+        gradientRamps.Add(new GpuGradientRampDescriptor(brush.ColorStops.ToArray(), brush.AlphaRepresentation, gradientRowCount));
         gradientRowCount++;
 
         float sweepDegrees = brush.EndAngleDegrees - brush.StartAngleDegrees;
@@ -9407,6 +9408,7 @@ internal static class WebGPUSceneEncoder
     {
         ReadOnlySpan<PointF> points = brush.Points;
         ReadOnlySpan<Color> colors = brush.Colors;
+        PixelAlphaRepresentation alphaRepresentation = brush.AlphaRepresentation;
         int edgeCount = points.Length;
         PointF center = default;
 
@@ -9432,7 +9434,7 @@ internal static class WebGPUSceneEncoder
         payload[0] = BitcastSingle(center.X);
         payload[1] = BitcastSingle(center.Y);
         payload[2] = BitcastSingle(maxDistance);
-        WriteAssociatedColor(payload, 3, brush.CenterColor);
+        WritePathGradientColor(payload, 3, brush.CenterColor, alphaRepresentation);
 
         for (int i = 0; i < edgeCount; i++)
         {
@@ -9446,14 +9448,22 @@ internal static class WebGPUSceneEncoder
             payload[payloadOffset + 1] = BitcastSingle(start.Y);
             payload[payloadOffset + 2] = BitcastSingle(end.X);
             payload[payloadOffset + 3] = BitcastSingle(end.Y);
-            WriteAssociatedColor(payload, payloadOffset + 4, colors[i % colors.Length]);
-            WriteAssociatedColor(payload, payloadOffset + 8, colors[(i + 1) % colors.Length]);
+            WritePathGradientColor(payload, payloadOffset + 4, colors[i % colors.Length], alphaRepresentation);
+            WritePathGradientColor(payload, payloadOffset + 8, colors[(i + 1) % colors.Length], alphaRepresentation);
+        }
+
+        // These bits match PATH_GRAD_HAS_EXPLICIT_CENTER_COLOR and PATH_GRAD_UNASSOCIATED_INTERPOLATION
+        // in fine.wgsl.
+        uint flags = brush.HasExplicitCenterColor ? 1U : 0U;
+        if (alphaRepresentation != PixelAlphaRepresentation.Associated)
+        {
+            flags |= 2U;
         }
 
         pathGradientData.Advance(payload.Length);
         drawData.Add((uint)dataOffset);
         drawData.Add((uint)edgeCount);
-        drawData.Add(brush.HasExplicitCenterColor ? 1U : 0U);
+        drawData.Add(flags);
         drawData.Add(0U);
     }
 
@@ -9475,12 +9485,13 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
-    /// Evaluates the premultiplied gradient color at the normalized parameter.
+    /// Evaluates the gradient color at the normalized parameter.
     /// </summary>
     /// <param name="colorStops">The gradient color stops, ordered by ratio.</param>
+    /// <param name="alphaRepresentation">The alpha representation of the stop colors during interpolation.</param>
     /// <param name="t">The normalized sample position in the range [0, 1].</param>
-    /// <returns>The associated floating-point sample.</returns>
-    public static Vector4 EvaluateGradientColor(ReadOnlySpan<ColorStop> colorStops, float t)
+    /// <returns>The floating-point sample in <paramref name="alphaRepresentation"/>.</returns>
+    public static Vector4 EvaluateGradientColor(ReadOnlySpan<ColorStop> colorStops, PixelAlphaRepresentation alphaRepresentation, float t)
     {
         // Walk the stop list once to find the enclosing interval, then interpolate within it.
         ColorStop from = colorStops[0];
@@ -9498,16 +9509,16 @@ internal static class WebGPUSceneEncoder
 
         if (from.Color.Equals(to.Color) || to.Ratio == from.Ratio)
         {
-            return from.Color.ToScaledVector4(PixelAlphaRepresentation.Associated);
+            return from.Color.ToScaledVector4(alphaRepresentation);
         }
 
         float localT = (t - from.Ratio) / (to.Ratio - from.Ratio);
 
-        // CSS Color 4 requires alpha premultiplication before interpolation. The ramp stores
-        // associated RGBA16Float directly, matching the fine shader's internal composition space.
+        // CSS Color 4 interpolates associated colors. SVG 2 interpolates unassociated colors.
+        // The stops use the alpha representation of the brush.
         return Vector4.Lerp(
-            from.Color.ToScaledVector4(PixelAlphaRepresentation.Associated),
-            to.Color.ToScaledVector4(PixelAlphaRepresentation.Associated),
+            from.Color.ToScaledVector4(alphaRepresentation),
+            to.Color.ToScaledVector4(alphaRepresentation),
             localT);
     }
 
@@ -9533,16 +9544,17 @@ internal static class WebGPUSceneEncoder
         => BitConverter.HalfToUInt16Bits((Half)x) | ((uint)BitConverter.HalfToUInt16Bits((Half)y) << 16);
 
     /// <summary>
-    /// Writes one associated color to the path-gradient payload without reducing it to RGBA8 first.
+    /// Writes one color to the path-gradient payload without reducing it to RGBA8 first.
     /// </summary>
     /// <param name="destination">The payload receiving four consecutive floating-point words.</param>
     /// <param name="offset">The destination word offset.</param>
-    /// <param name="color">The color to convert to associated components.</param>
-    private static void WriteAssociatedColor(Span<uint> destination, int offset, in Color color)
+    /// <param name="color">The color to write.</param>
+    /// <param name="alphaRepresentation">The alpha representation of the colors during interpolation.</param>
+    private static void WritePathGradientColor(Span<uint> destination, int offset, in Color color, PixelAlphaRepresentation alphaRepresentation)
     {
         // Path gradients interpolate endpoint colors directly in the shader. Keeping the source
         // precision here matches the CPU renderer and defers quantization until target encoding.
-        Vector4 vector = color.ToScaledVector4(PixelAlphaRepresentation.Associated);
+        Vector4 vector = color.ToScaledVector4(alphaRepresentation);
         destination[offset] = BitcastSingle(vector.X);
         destination[offset + 1] = BitcastSingle(vector.Y);
         destination[offset + 2] = BitcastSingle(vector.Z);
@@ -10430,9 +10442,8 @@ internal sealed class WebGPUEncodedScene : IDisposable
             return;
         }
 
-        PixelAlphaRepresentation alphaRepresentation = TPixel.GetPixelTypeInfo().AlphaRepresentation;
-        this.SpecializeSolidColors<TPixel>(alphaRepresentation);
-        this.SpecializeGradientRamps<TPixel>(alphaRepresentation);
+        this.SpecializeSolidColors<TPixel>();
+        this.SpecializeGradientRamps<TPixel>();
         this.specializedPixelType = typeof(TPixel);
     }
 
@@ -10442,22 +10453,16 @@ internal sealed class WebGPUEncodedScene : IDisposable
     /// it creates its CPU renderer.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format of the target.</typeparam>
-    /// <param name="alphaRepresentation">The alpha representation of <typeparamref name="TPixel"/>.</param>
-    private void SpecializeSolidColors<TPixel>(PixelAlphaRepresentation alphaRepresentation)
+    private void SpecializeSolidColors<TPixel>()
         where TPixel : unmanaged, IPixel<TPixel>
     {
         for (int i = 0; i < this.solidColors.Count; i++)
         {
             GpuSolidColorDescriptor descriptor = this.solidColors[i];
-            Vector4 color = descriptor.Color.ToPixel<TPixel>().ToScaledVector4();
-            if (alphaRepresentation != PixelAlphaRepresentation.Associated)
-            {
-                // Associating rounds the product into binary16; see the precision contract on
-                // SpecializeBrushColors.
-                float alpha = color.W;
-                color *= alpha;
-                color.W = alpha;
-            }
+
+            // For a TPixel with unassociated alpha, the associated product rounds to binary16.
+            // The precision contract on SpecializeBrushColors gives the effect.
+            Vector4 color = descriptor.Color.ToPixel<TPixel>().ToAssociatedScaledVector4();
 
             int wordIndex = checked((int)this.Layout.DrawDataBase + descriptor.DrawDataWordOffset);
             this.SetSceneWord(wordIndex, WebGPUSceneEncoder.PackHalf2(color.X, color.Y));
@@ -10471,8 +10476,7 @@ internal sealed class WebGPUEncodedScene : IDisposable
     /// encoders perform before blending.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format of the target.</typeparam>
-    /// <param name="alphaRepresentation">The alpha representation of <typeparamref name="TPixel"/>.</param>
-    private void SpecializeGradientRamps<TPixel>(PixelAlphaRepresentation alphaRepresentation)
+    private void SpecializeGradientRamps<TPixel>()
         where TPixel : unmanaged, IPixel<TPixel>
     {
         if (this.gradientPixelsOwner is null)
@@ -10484,37 +10488,22 @@ internal sealed class WebGPUEncodedScene : IDisposable
         for (int i = 0; i < this.gradientRamps.Count; i++)
         {
             GpuGradientRampDescriptor descriptor = this.gradientRamps[i];
+            bool associated = descriptor.AlphaRepresentation == PixelAlphaRepresentation.Associated;
             int rowBase = descriptor.RowIndex * WebGPUSceneEncoder.GradientRowWordCount;
             for (int x = 0; x < WebGPUSceneEncoder.GradientWidth; x++)
             {
                 float t = x / (float)(WebGPUSceneEncoder.GradientWidth - 1);
-                Vector4 color = WebGPUSceneEncoder.EvaluateGradientColor(descriptor.ColorStops, t);
-                if (alphaRepresentation == PixelAlphaRepresentation.Associated)
-                {
-                    color = TPixel.FromScaledVector4(color).ToScaledVector4();
-                }
-                else
-                {
-                    // The CPU's straight-alpha encoder undoes the interpolation-time
-                    // premultiplication before converting to TPixel, so the same division
-                    // precedes the snap. Re-associating rounds the product into binary16;
-                    // see the precision contract on SpecializeBrushColors.
-                    float alpha = color.W;
-                    if (alpha > 0)
-                    {
-                        color /= alpha;
-                        color.W = alpha;
-                    }
-                    else
-                    {
-                        color = Vector4.Zero;
-                    }
+                Vector4 color = WebGPUSceneEncoder.EvaluateGradientColor(descriptor.ColorStops, descriptor.AlphaRepresentation, t);
 
-                    color = TPixel.FromScaledVector4(color).ToScaledVector4();
-                    float snappedAlpha = color.W;
-                    color *= snappedAlpha;
-                    color.W = snappedAlpha;
-                }
+                // The texel snaps through TPixel, as in the CPU gradient encoders. The ramp stores
+                // associated RGBA16Float, which is the composition space of the fine shader.
+                // For a TPixel with unassociated alpha, the associated product rounds to binary16.
+                // The precision contract on SpecializeBrushColors gives the effect.
+                TPixel pixel = associated
+                    ? TPixel.FromAssociatedScaledVector4(color)
+                    : TPixel.FromUnassociatedScaledVector4(color);
+
+                color = pixel.ToAssociatedScaledVector4();
 
                 gradientPixels[rowBase + (x * 2)] = WebGPUSceneEncoder.PackHalf2(color.X, color.Y);
                 gradientPixels[rowBase + (x * 2) + 1] = WebGPUSceneEncoder.PackHalf2(color.Z, color.W);
@@ -10749,10 +10738,12 @@ internal readonly struct GpuGradientRampDescriptor
     /// Initializes a new instance of the <see cref="GpuGradientRampDescriptor"/> struct.
     /// </summary>
     /// <param name="colorStops">The gradient color stops, ordered by ratio.</param>
+    /// <param name="alphaRepresentation">The alpha representation of the stop colors during interpolation.</param>
     /// <param name="rowIndex">The ramp texture row the gradient occupies.</param>
-    public GpuGradientRampDescriptor(ColorStop[] colorStops, int rowIndex)
+    public GpuGradientRampDescriptor(ColorStop[] colorStops, PixelAlphaRepresentation alphaRepresentation, int rowIndex)
     {
         this.ColorStops = colorStops;
+        this.AlphaRepresentation = alphaRepresentation;
         this.RowIndex = rowIndex;
     }
 
@@ -10760,6 +10751,11 @@ internal readonly struct GpuGradientRampDescriptor
     /// Gets the gradient color stops, ordered by ratio.
     /// </summary>
     public ColorStop[] ColorStops { get; }
+
+    /// <summary>
+    /// Gets the alpha representation of the stop colors during interpolation.
+    /// </summary>
+    public PixelAlphaRepresentation AlphaRepresentation { get; }
 
     /// <summary>
     /// Gets the ramp texture row the gradient occupies.

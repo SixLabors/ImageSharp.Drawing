@@ -88,10 +88,10 @@ public abstract partial class TestImageProvider<TPixel> : ITestImageProvider, IX
     public abstract Image<TPixel> GetImage();
 
     public Image<TPixel> GetImage(IImageDecoder decoder)
-        => this.GetImage(decoder, new DecoderOptions());
+        => this.GetImage(decoder, new DecoderOptions(Configuration.Default));
 
     public Task<Image<TPixel>> GetImageAsync(IImageDecoder decoder)
-         => this.GetImageAsync(decoder, new DecoderOptions());
+         => this.GetImageAsync(decoder, new DecoderOptions(Configuration.Default));
 
     public virtual Image<TPixel> GetImage(IImageDecoder decoder, DecoderOptions options)
         => throw new NotSupportedException($"Decoder specific GetImage() is not supported with {this.GetType().Name}!");

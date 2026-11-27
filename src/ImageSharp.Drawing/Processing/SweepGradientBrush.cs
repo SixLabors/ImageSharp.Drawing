@@ -54,7 +54,30 @@ public sealed class SweepGradientBrush : GradientBrush
         GradientRepetitionMode repetitionMode,
         Matrix4x4 gradientTransform,
         params ColorStop[] colorStops)
-        : base(repetitionMode, gradientTransform, colorStops)
+        : this(center, startAngleDegrees, endAngleDegrees, repetitionMode, gradientTransform, PixelAlphaRepresentation.Associated, colorStops)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SweepGradientBrush"/> class with the center and
+    /// angles defined in the gradient's own coordinate space.
+    /// </summary>
+    /// <param name="center">The center point of the sweep gradient.</param>
+    /// <param name="startAngleDegrees">The starting angle, in degrees, measured counter-clockwise from +X on the design grid.</param>
+    /// <param name="endAngleDegrees">The ending angle, in degrees, measured counter-clockwise from +X on the design grid.</param>
+    /// <param name="repetitionMode">Defines how the gradient colors are repeated beyond the interval [0..1].</param>
+    /// <param name="gradientTransform">The transform from the gradient's coordinate space to the drawing.</param>
+    /// <param name="alphaRepresentation">The alpha representation of the stop colors during interpolation.</param>
+    /// <param name="colorStops">The gradient color stops. Ratios must be in [0..1] and are interpreted along the angular sweep.</param>
+    public SweepGradientBrush(
+        PointF center,
+        float startAngleDegrees,
+        float endAngleDegrees,
+        GradientRepetitionMode repetitionMode,
+        Matrix4x4 gradientTransform,
+        PixelAlphaRepresentation alphaRepresentation,
+        params ColorStop[] colorStops)
+        : base(repetitionMode, gradientTransform, alphaRepresentation, colorStops)
     {
         this.Center = center;
         this.StartAngleDegrees = startAngleDegrees;
@@ -126,10 +149,19 @@ public sealed class SweepGradientBrush : GradientBrush
                 newStart,
                 UnwrapSweepEndDegrees(newStart, newEnd, directionHint, MathF.Abs(sweepDegrees)),
                 this.RepetitionMode,
+                Matrix4x4.Identity,
+                this.AlphaRepresentation,
                 this.ColorStopsArray);
         }
 
-        return new SweepGradientBrush(this.Center, this.StartAngleDegrees, this.EndAngleDegrees, this.RepetitionMode, gradientTransform, this.ColorStopsArray);
+        return new SweepGradientBrush(
+            this.Center,
+            this.StartAngleDegrees,
+            this.EndAngleDegrees,
+            this.RepetitionMode,
+            gradientTransform,
+            this.AlphaRepresentation,
+            this.ColorStopsArray);
     }
 
     /// <inheritdoc/>
@@ -249,7 +281,7 @@ public sealed class SweepGradientBrush : GradientBrush
         int canvasWidth,
         RectangleF region)
     {
-        if (TPixel.GetPixelTypeInfo().AlphaRepresentation == PixelAlphaRepresentation.Associated)
+        if (this.AlphaRepresentation == PixelAlphaRepresentation.Associated)
         {
             return new SweepGradientBrushRenderer<TPixel, AssociatedGradientPixelEncoder<TPixel>>(configuration, options, canvasWidth, this);
         }

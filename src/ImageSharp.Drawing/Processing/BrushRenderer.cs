@@ -24,7 +24,7 @@ public abstract class BrushRenderer<TPixel>
         this.Configuration = configuration;
         this.Options = options;
         this.CanvasWidth = canvasWidth;
-        this.Blender = PixelOperations<TPixel>.Instance.GetPixelBlender(options);
+        this.Blender = PixelBlenders<TPixel>.GetPixelBlender(options);
     }
 
     /// <summary>

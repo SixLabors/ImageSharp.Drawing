@@ -25,6 +25,17 @@ public sealed class PathGradientBrush : Brush
     /// <param name="points">Points that constitute a polygon that represents the gradient area.</param>
     /// <param name="colors">Array of colors that correspond to each point in the polygon.</param>
     public PathGradientBrush(PointF[] points, Color[] colors)
+        : this(points, colors, PixelAlphaRepresentation.Associated)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PathGradientBrush"/> class.
+    /// </summary>
+    /// <param name="points">Points that constitute a polygon that represents the gradient area.</param>
+    /// <param name="colors">Array of colors that correspond to each point in the polygon.</param>
+    /// <param name="alphaRepresentation">The alpha representation of the colors during interpolation.</param>
+    public PathGradientBrush(PointF[] points, Color[] colors, PixelAlphaRepresentation alphaRepresentation)
     {
         Guard.NotNull(points, nameof(points));
         Guard.MustBeGreaterThanOrEqualTo(points.Length, 3, nameof(points));
@@ -42,7 +53,8 @@ public sealed class PathGradientBrush : Brush
             this.edges[i] = new Edge(this.points[i % size], this.points[(i + 1) % size], ColorAt(i), ColorAt(i + 1));
         }
 
-        this.CenterColor = CalculateCenterColor(this.colors);
+        this.AlphaRepresentation = alphaRepresentation;
+        this.CenterColor = CalculateCenterColor(this.colors, alphaRepresentation);
 
         Color ColorAt(int index) => this.colors[index % this.colors.Length];
     }
@@ -54,7 +66,19 @@ public sealed class PathGradientBrush : Brush
     /// <param name="colors">Array of colors that correspond to each point in the polygon.</param>
     /// <param name="centerColor">Color at the center of the gradient area to which the other colors converge.</param>
     public PathGradientBrush(PointF[] points, Color[] colors, Color centerColor)
-        : this(points, colors)
+        : this(points, colors, centerColor, PixelAlphaRepresentation.Associated)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PathGradientBrush"/> class.
+    /// </summary>
+    /// <param name="points">Points that constitute a polygon that represents the gradient area.</param>
+    /// <param name="colors">Array of colors that correspond to each point in the polygon.</param>
+    /// <param name="centerColor">Color at the center of the gradient area to which the other colors converge.</param>
+    /// <param name="alphaRepresentation">The alpha representation of the colors during interpolation.</param>
+    public PathGradientBrush(PointF[] points, Color[] colors, Color centerColor, PixelAlphaRepresentation alphaRepresentation)
+        : this(points, colors, alphaRepresentation)
     {
         this.CenterColor = centerColor;
         this.HasExplicitCenterColor = true;
@@ -80,6 +104,13 @@ public sealed class PathGradientBrush : Brush
     /// </summary>
     public bool HasExplicitCenterColor { get; }
 
+    /// <summary>
+    /// Gets the alpha representation of the colors during interpolation.
+    /// <see cref="PixelAlphaRepresentation.Associated"/> is the default.
+    /// All other values interpolate unassociated colors.
+    /// </summary>
+    public PixelAlphaRepresentation AlphaRepresentation { get; }
+
     /// <inheritdoc/>
     public override Brush Transform(Matrix4x4 matrix, Rectangle sourceInterest, Rectangle preparedInterest)
     {
@@ -95,8 +126,8 @@ public sealed class PathGradientBrush : Brush
         }
 
         return this.HasExplicitCenterColor
-            ? new PathGradientBrush(transformedPoints, this.colors, this.CenterColor)
-            : new PathGradientBrush(transformedPoints, this.colors);
+            ? new PathGradientBrush(transformedPoints, this.colors, this.CenterColor, this.AlphaRepresentation)
+            : new PathGradientBrush(transformedPoints, this.colors, this.AlphaRepresentation);
     }
 
     /// <inheritdoc />
@@ -106,6 +137,7 @@ public sealed class PathGradientBrush : Brush
         {
             return this.CenterColor.Equals(brush.CenterColor)
                 && this.HasExplicitCenterColor.Equals(brush.HasExplicitCenterColor)
+                && this.AlphaRepresentation == brush.AlphaRepresentation
                 && this.edges?.SequenceEqual(brush.edges) == true;
         }
 
@@ -114,7 +146,7 @@ public sealed class PathGradientBrush : Brush
 
     /// <inheritdoc/>
     public override int GetHashCode()
-        => HashCode.Combine(this.edges, this.CenterColor, this.HasExplicitCenterColor);
+        => HashCode.Combine(this.edges, this.CenterColor, this.HasExplicitCenterColor, this.AlphaRepresentation);
 
     /// <inheritdoc />
     public override BrushRenderer<TPixel> CreateRenderer<TPixel>(
@@ -123,7 +155,7 @@ public sealed class PathGradientBrush : Brush
         int canvasWidth,
         RectangleF region)
     {
-        if (TPixel.GetPixelTypeInfo().AlphaRepresentation == PixelAlphaRepresentation.Associated)
+        if (this.AlphaRepresentation == PixelAlphaRepresentation.Associated)
         {
             return new PathGradientBrushRenderer<TPixel, AssociatedGradientPixelEncoder<TPixel>>(
                 configuration,
@@ -131,7 +163,8 @@ public sealed class PathGradientBrush : Brush
                 canvasWidth,
                 this.edges,
                 this.CenterColor,
-                this.HasExplicitCenterColor);
+                this.HasExplicitCenterColor,
+                this.AlphaRepresentation);
         }
 
         return new PathGradientBrushRenderer<TPixel, UnassociatedGradientPixelEncoder<TPixel>>(
@@ -140,7 +173,8 @@ public sealed class PathGradientBrush : Brush
             canvasWidth,
             this.edges,
             this.CenterColor,
-            this.HasExplicitCenterColor);
+            this.HasExplicitCenterColor,
+            this.AlphaRepresentation);
     }
 
     /// <summary>
@@ -148,8 +182,9 @@ public sealed class PathGradientBrush : Brush
     /// in scaled vector space.
     /// </summary>
     /// <param name="colors">The point colors to average.</param>
+    /// <param name="alphaRepresentation">The alpha representation of the colors during interpolation.</param>
     /// <returns>The averaged color.</returns>
-    private static Color CalculateCenterColor(Color[] colors)
+    private static Color CalculateCenterColor(Color[] colors, PixelAlphaRepresentation alphaRepresentation)
     {
         Guard.NotNull(colors, nameof(colors));
         Guard.MustBeGreaterThan(colors.Length, 0, nameof(colors));
@@ -157,13 +192,11 @@ public sealed class PathGradientBrush : Brush
         Vector4 sum = Vector4.Zero;
         foreach (Color color in colors)
         {
-            // CSS Color 4 requires alpha to be premultiplied before color interpolation. The
-            // implicit center therefore averages associated values just like the rendered gradient.
-            // https://www.w3.org/TR/css-color-4/#interpolation-alpha
-            sum += color.ToScaledVector4(PixelAlphaRepresentation.Associated);
+            // The implicit center averages the colors in the alpha representation of the rendered gradient.
+            sum += color.ToScaledVector4(alphaRepresentation);
         }
 
-        return Color.FromScaledVector(sum / colors.Length, PixelAlphaRepresentation.Associated);
+        return Color.FromScaledVector(sum / colors.Length, alphaRepresentation);
     }
 
     /// <summary>
@@ -262,7 +295,7 @@ public sealed class PathGradientBrush : Brush
     /// The path gradient brush applicator.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
-    /// <typeparam name="TEncoder">The destination representation encoder.</typeparam>
+    /// <typeparam name="TEncoder">The encoder for the alpha representation of the interpolated colors.</typeparam>
     private sealed class PathGradientBrushRenderer<TPixel, TEncoder> : BrushRenderer<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
         where TEncoder : struct, IGradientPixelEncoder<TPixel>
@@ -292,33 +325,37 @@ public sealed class PathGradientBrush : Brush
         /// <param name="edges">Edges of the polygon.</param>
         /// <param name="centerColor">Color at the center of the gradient area to which the other colors converge.</param>
         /// <param name="hasSpecialCenterColor">Whether the center color is different from a smooth gradient between the edges.</param>
+        /// <param name="alphaRepresentation">The alpha representation of the colors during interpolation.</param>
         public PathGradientBrushRenderer(
             Configuration configuration,
             GraphicsOptions options,
             int canvasWidth,
             IList<Edge> edges,
             Color centerColor,
-            bool hasSpecialCenterColor)
+            bool hasSpecialCenterColor,
+            PixelAlphaRepresentation alphaRepresentation)
             : base(configuration, options, canvasWidth)
         {
             this.edges = edges;
             this.edgeColors = new (Vector4 StartColor, Vector4 EndColor)[edges.Count];
             Vector2[] points = [.. edges.Select(s => s.Start)];
 
-            // CSS Color 4 requires alpha to be premultiplied before color interpolation. Cache
-            // associated inputs without packing through TPixel so destination storage cannot
-            // change the gradient and conversion remains outside the hot loop.
+            // CSS Color 4 interpolates associated colors. SVG 2 interpolates unassociated colors.
+            // The renderer stores the colors in the representation of the brush, without a TPixel
+            // conversion. The TPixel format cannot change the gradient, and the per-pixel loop
+            // does not convert the colors.
             // https://www.w3.org/TR/css-color-4/#interpolation-alpha
+            // https://www.w3.org/TR/SVG2/pservers.html#StopColorProperties
             for (int i = 0; i < edges.Count; i++)
             {
                 this.edgeColors[i] = (
-                    edges[i].StartColor.ToScaledVector4(PixelAlphaRepresentation.Associated),
-                    edges[i].EndColor.ToScaledVector4(PixelAlphaRepresentation.Associated));
+                    edges[i].StartColor.ToScaledVector4(alphaRepresentation),
+                    edges[i].EndColor.ToScaledVector4(alphaRepresentation));
             }
 
             this.center = points.Aggregate((p1, p2) => p1 + p2) / edges.Count;
             this.hasSpecialCenterColor = hasSpecialCenterColor;
-            this.centerColor = centerColor.ToScaledVector4(PixelAlphaRepresentation.Associated);
+            this.centerColor = centerColor.ToScaledVector4(alphaRepresentation);
             this.centerPixel = TEncoder.Encode(this.centerColor);
             this.maxDistance = points.Select(p => p - this.center).Max(d => d.Length());
             this.transparentPixel = Color.Transparent.ToPixel<TPixel>();

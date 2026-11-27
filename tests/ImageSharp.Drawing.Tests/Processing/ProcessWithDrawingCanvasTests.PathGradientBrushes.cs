@@ -69,20 +69,21 @@ public partial class ProcessWithDrawingCanvasTests
     }
 
     [Theory]
-    [WithBlankImage(20, 20, PixelTypes.HalfSingle)]
+    [WithBlankImage(200, 200, PixelTypes.HalfSingle)]
     public void FillPathGradientBrushFillTriangleWithHalfSingleRedChannel<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => provider.VerifyOperation(
             ImageComparer.TolerantPercentage(0.02f),
             image =>
             {
-                PointF[] points = [new(10, 0), new(20, 20), new(0, 20)];
+                PointF[] points = [new(100, 0), new(200, 200), new(0, 200)];
 
                 // HalfSingle represents DXGI_FORMAT_R16_FLOAT, so its single component is red.
-                // Use the finite binary16 endpoints to cover the complete scaled [0, 1] range.
-                Color c1 = Color.FromPixel(new HalfSingle((float)Half.MinValue));
-                Color c2 = Color.FromPixel(new HalfSingle(0));
-                Color c3 = Color.FromPixel(new HalfSingle((float)Half.MaxValue));
+                // HalfSingle stores HDR values, and the PNG reference clamps them to [0, 1].
+                // The values 0, 0.5 and 1 keep the gradient visible in the reference image.
+                Color c1 = Color.FromPixel(new HalfSingle(0F));
+                Color c2 = Color.FromPixel(new HalfSingle(0.5F));
+                Color c3 = Color.FromPixel(new HalfSingle(1F));
 
                 Color[] colors = [c1, c2, c3];
 
