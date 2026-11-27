@@ -93,6 +93,41 @@ public abstract partial class DrawingCanvas
     }
 
     /// <summary>
+    /// Fills the stroke of the rectangle with the brush of the pen.
+    /// </summary>
+    /// <param name="pen">The pen that generates the stroke and supplies the brush.</param>
+    /// <param name="region">The rectangle in local coordinates.</param>
+    public void Fill(Pen pen, Rectangle region)
+        => this.Fill(pen, new RectanglePolygon(region));
+
+    /// <summary>
+    /// Fills the stroke of each path in the collection with the brush of the pen.
+    /// </summary>
+    /// <param name="pen">The pen that generates the strokes and supplies the brush.</param>
+    /// <param name="paths">The paths in local coordinates.</param>
+    public void Fill(Pen pen, IPathCollection paths)
+    {
+        Guard.NotNull(paths, nameof(paths));
+
+        foreach (IPath path in paths)
+        {
+            this.Fill(pen, path);
+        }
+    }
+
+    /// <summary>
+    /// Fills the stroke of the path from the path builder with the brush of the pen.
+    /// </summary>
+    /// <param name="pen">The pen that generates the stroke and supplies the brush.</param>
+    /// <param name="pathBuilder">The path builder that defines the path in local coordinates.</param>
+    public void Fill(Pen pen, PathBuilder pathBuilder)
+    {
+        Guard.NotNull(pathBuilder, nameof(pathBuilder));
+
+        this.Fill(pen, pathBuilder.Build());
+    }
+
+    /// <summary>
     /// Fills an ellipse using the provided brush.
     /// </summary>
     /// <param name="brush">Brush used to shade covered pixels.</param>

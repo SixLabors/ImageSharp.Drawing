@@ -128,6 +128,61 @@ public partial class DrawingCanvasTests
         actual.CompareToReferenceOutput(provider, "actual-multiple-difference-clips", appendSourceFileOrDescription: false);
     }
 
+    [Theory]
+    [WithBlankImage(184, 220, PixelTypes.Rgba32)]
+    public void FillPen_SelfIntersectingStroke_UsesNonZeroUnderEvenOdd<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> expected = provider.GetImage();
+        using Image<TPixel> actual = provider.GetImage();
+        using Image<TPixel> evenOdd = provider.GetImage();
+        IPath path = CreateBowTiePath(new RectangleF(28, 34, 128, 152));
+
+        SolidPen pen = new(Color.CornflowerBlue, 24F);
+        pen.StrokeOptions.LineJoin = LineJoin.Round;
+        pen.StrokeOptions.LineCap = LineCap.Round;
+        IPath stroke = pen.GeneratePath(path);
+
+        DrawingOptions evenOddOptions = new()
+        {
+            IntersectionRule = IntersectionRule.EvenOdd
+        };
+
+        DrawingOptions nonZeroOptions = new()
+        {
+            IntersectionRule = IntersectionRule.NonZero
+        };
+
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, expected, nonZeroOptions))
+        {
+            canvas.Fill(pen.StrokeFill, stroke);
+        }
+
+        // The state uses the even-odd rule. Fill(Pen, IPath) must still fill the stroke with the non-zero rule.
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, actual, evenOddOptions))
+        {
+            canvas.Fill(pen, path);
+        }
+
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, evenOdd, evenOddOptions))
+        {
+            canvas.Fill(pen.StrokeFill, stroke);
+        }
+
+        expected.DebugSave(provider, "expected-nonzero-stroke", appendSourceFileOrDescription: false);
+        actual.DebugSave(provider, "actual-fill-pen", appendSourceFileOrDescription: false);
+        evenOdd.DebugSave(provider, "evenodd-stroke", appendSourceFileOrDescription: false);
+
+        ImageComparer.Exact.VerifySimilarity(expected, actual);
+
+        // The bow tie stroke overlaps itself, so the even-odd fill of the same stroke has holes.
+        // This proves that the scene can show a wrong fill rule.
+        Assert.Throws<ImageDifferenceIsOverThresholdException>(() => ImageComparer.Exact.VerifySimilarity(evenOdd, actual));
+
+        actual.CompareToReferenceOutput(provider, "actual-fill-pen", appendSourceFileOrDescription: false);
+        evenOdd.CompareToReferenceOutput(provider, "evenodd-stroke", appendSourceFileOrDescription: false);
+    }
+
     /// <summary>
     /// Creates a rectangle path that is equivalent to <see cref="RectanglePolygon"/> but intentionally
     /// has five vertices so the rectangle fast path does not recognize it.

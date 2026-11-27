@@ -577,6 +577,28 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     }
 
     /// <inheritdoc />
+    public override void Fill(Pen pen, IPath path)
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(pen, nameof(pen));
+        Guard.NotNull(path, nameof(path));
+
+        DrawingCanvasState state = this.ResolveState();
+
+        // The stroke is the raw output of the stroker, and its area obeys the non-zero rule.
+        // The even-odd rule makes holes at the joins and at the self-intersections of the stroke.
+        DrawingOptions options = state.Options.CloneOrReturnForRules(
+            IntersectionRule.NonZero,
+            state.Options.GraphicsOptions.AlphaCompositionMode,
+            state.Options.GraphicsOptions.ColorBlendingMode);
+
+        this.PrepareCompositionCore(
+            pen.GeneratePath(path).AsClosedPath(),
+            pen.StrokeFill,
+            options);
+    }
+
+    /// <inheritdoc />
     public override void Clip(params IPath[] clipPaths)
         => this.Clip(ClipOperation.Intersection, clipPaths);
 

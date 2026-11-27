@@ -183,7 +183,7 @@ public partial class ProcessWithDrawingCanvasTests
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
 
-        PixelBlender<TPixel> blender = PixelOperations<TPixel>.Instance.GetPixelBlender(
+        PixelBlender<TPixel> blender = PixelBlenders<TPixel>.GetPixelBlender(
             blenderMode,
             PixelAlphaCompositionMode.SrcOver);
         TPixel expectedPixel = blender.Blend(bgColor, fillColor.ToPixel<TPixel>(), blendPercentage);

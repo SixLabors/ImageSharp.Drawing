@@ -756,14 +756,14 @@ public static class TestImageExtensions
                 for (int y = rows.Min; y < rows.Max; y++)
                 {
                     Span<TPixel> rowSpan = this.source.DangerousGetRowSpan(y).Slice(this.bounds.Left, this.bounds.Width);
-                    PixelOperations<TPixel>.Instance.ToVector4(this.configuration, rowSpan, span, PixelConversionModifiers.Scale);
+                    PixelOperations<TPixel>.Instance.ToUnassociatedScaledVector4(this.configuration, rowSpan, span);
                     for (int i = 0; i < span.Length; i++)
                     {
                         ref Vector4 v = ref span[i];
                         v.W = 1F;
                     }
 
-                    PixelOperations<TPixel>.Instance.FromVector4Destructive(this.configuration, span, rowSpan, PixelConversionModifiers.Scale);
+                    PixelOperations<TPixel>.Instance.FromUnassociatedScaledVector4Destructive(this.configuration, span, rowSpan);
                 }
             }
         }

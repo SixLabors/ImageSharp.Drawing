@@ -1812,6 +1812,42 @@ public partial class WebGPUDrawingBackendTests
     }
 
     [WebGPUTheory]
+    [WithSolidFilledImages(360, 120, "White", PixelTypes.Rgba32)]
+    public void FillPen_NonUniformScale_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        // The transform scales x by 4, so the ring is 4 times wider at the sides than at the top.
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true },
+            Transform = Matrix4x4.CreateScale(4F, 1F, 1F) * Matrix4x4.CreateTranslation(180F, 60F, 0F)
+        };
+
+        EllipsePolygon circle = new(PointF.Empty, 40F);
+        Pen pen = Pens.Solid(Color.CornflowerBlue, 8F);
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(pen, circle);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+
+        // The measured difference between the two backends is 0.0009%.
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.001F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
     [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32)]
     public void DrawPath_Stroke_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -3882,6 +3918,75 @@ public partial class WebGPUDrawingBackendTests
         Rgba32 expected = Color.Blue.ToPixel<Rgba32>();
         Assert.Equal(expected, defaultImage[0, 0]);
         Assert.Equal(defaultImage[0, 0], actual[0, 0]);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(200, 200, "White", PixelTypes.Rgba32, ProcessWithDrawingCanvasTests.GradientKind.Linear, PixelAlphaRepresentation.Associated)]
+    [WithSolidFilledImages(200, 200, "White", PixelTypes.Rgba32, ProcessWithDrawingCanvasTests.GradientKind.Linear, PixelAlphaRepresentation.Unassociated)]
+    [WithSolidFilledImages(200, 200, "White", PixelTypes.Rgba32, ProcessWithDrawingCanvasTests.GradientKind.Radial, PixelAlphaRepresentation.Associated)]
+    [WithSolidFilledImages(200, 200, "White", PixelTypes.Rgba32, ProcessWithDrawingCanvasTests.GradientKind.Radial, PixelAlphaRepresentation.Unassociated)]
+    [WithSolidFilledImages(200, 200, "White", PixelTypes.Rgba32, ProcessWithDrawingCanvasTests.GradientKind.Elliptic, PixelAlphaRepresentation.Associated)]
+    [WithSolidFilledImages(200, 200, "White", PixelTypes.Rgba32, ProcessWithDrawingCanvasTests.GradientKind.Elliptic, PixelAlphaRepresentation.Unassociated)]
+    [WithSolidFilledImages(200, 200, "White", PixelTypes.Rgba32, ProcessWithDrawingCanvasTests.GradientKind.Sweep, PixelAlphaRepresentation.Associated)]
+    [WithSolidFilledImages(200, 200, "White", PixelTypes.Rgba32, ProcessWithDrawingCanvasTests.GradientKind.Sweep, PixelAlphaRepresentation.Unassociated)]
+    [WithSolidFilledImages(200, 200, "White", PixelTypes.Rgba32, ProcessWithDrawingCanvasTests.GradientKind.Path, PixelAlphaRepresentation.Associated)]
+    [WithSolidFilledImages(200, 200, "White", PixelTypes.Rgba32, ProcessWithDrawingCanvasTests.GradientKind.Path, PixelAlphaRepresentation.Unassociated)]
+    public void FillPath_WithGradientAlphaRepresentation_MatchesDefaultOutput<TPixel>(
+        TestImageProvider<TPixel> provider,
+        ProcessWithDrawingCanvasTests.GradientKind kind,
+        PixelAlphaRepresentation alphaRepresentation)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true }
+        };
+
+        // Opaque red to transparent blue. Associated interpolation fades the red to transparent.
+        // Unassociated interpolation shows purple between the two colors.
+        Color start = Color.Red;
+        Color end = Color.Blue.WithAlpha(0F);
+        ColorStop[] stops = [new(0, start), new(1, end)];
+        GradientRepetitionMode none = GradientRepetitionMode.None;
+        Matrix4x4 identity = Matrix4x4.Identity;
+        PointF center = new(100, 100);
+
+        Brush brush = kind switch
+        {
+            ProcessWithDrawingCanvasTests.GradientKind.Linear =>
+                new LinearGradientBrush(new PointF(0, 100), new PointF(200, 100), none, identity, alphaRepresentation, stops),
+            ProcessWithDrawingCanvasTests.GradientKind.Radial => new RadialGradientBrush(center, 100F, none, identity, alphaRepresentation, stops),
+            ProcessWithDrawingCanvasTests.GradientKind.Elliptic =>
+                new EllipticGradientBrush(center, new PointF(200, 100), 0.5F, none, identity, alphaRepresentation, stops),
+            ProcessWithDrawingCanvasTests.GradientKind.Sweep => new SweepGradientBrush(center, 0F, 360F, none, identity, alphaRepresentation, stops),
+            ProcessWithDrawingCanvasTests.GradientKind.Path => new PathGradientBrush(
+                [new(0, 0), new(200, 0), new(200, 200), new(0, 200)],
+                [start, start, end, end],
+                alphaRepresentation),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind))
+        };
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, new RectanglePolygon(0, 0, 200, 200));
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        string testName = $"{kind}_{alphaRepresentation}";
+        DebugSaveBackendPair(provider, testName, defaultImage, nativeSurfaceImage);
+
+        // The largest measured difference between the two backends is 0.0382%, for the unassociated path gradient.
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0383F);
+        AssertBackendPairReferenceOutputs(provider, testName, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUFact]

@@ -109,16 +109,16 @@ public sealed class BackdropAcrylicLayerEffect : BackdropLayerEffect
         // Blending a constant colour over the backdrop is linear, so it is expressed as a colour
         // matrix: the backdrop's channels scale by one minus the tint's alpha and the constant row
         // carries the pre-scaled tint. The backdrop's own alpha is preserved.
-        Vector4 vector = color.ToPixel<Rgba32>().ToScaledVector4();
+        Vector4 vector = color.ToScaledVector4(PixelAlphaRepresentation.Associated);
         float keep = 1F - vector.W;
         ColorMatrix tint = default;
         tint.M11 = keep;
         tint.M22 = keep;
         tint.M33 = keep;
         tint.M44 = 1F;
-        tint.M51 = vector.X * vector.W;
-        tint.M52 = vector.Y * vector.W;
-        tint.M53 = vector.Z * vector.W;
+        tint.M51 = vector.X;
+        tint.M52 = vector.Y;
+        tint.M53 = vector.Z;
 
         return context =>
         {
@@ -186,7 +186,7 @@ public sealed class BackdropDropShadowLayerEffect : BackdropLayerEffect
         // The tint replaces the backdrop's colour with the constant shadow colour and scales its
         // alpha; the DestOver write-back slots the blurred silhouette beneath the untouched
         // backdrop at the offset.
-        Vector4 vector = color.ToPixel<Rgba32>().ToScaledVector4();
+        Vector4 vector = color.ToScaledVector4(PixelAlphaRepresentation.Unassociated);
         ColorMatrix tint = default;
         tint.M44 = vector.W;
         tint.M51 = vector.X;
